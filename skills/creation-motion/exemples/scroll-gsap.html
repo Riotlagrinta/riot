@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="fr" class="js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Exemple GSAP — révélation et compteur au scroll</title>
+<!--
+PLAN DE MOUVEMENT
+Moment signature : un panneau de couleur s'ouvre (clip-path) au fil du scroll.
+Rôle            : marquer le passage d'une idée à la suivante, guider le regard.
+Personnalité    : précise, nette (expo.out, durées courtes à moyennes).
+Séquence :
+  scroll    panneau clip-path inset(40% 30% 40% 30%) -> inset(0)  (scrub)
+  entrée    chiffres: compteur 0 -> valeur, 1.4s, power4.out, une seule fois
+  entrée    libellés: opacité + 12px, stagger 0.08
+Repli reduced-motion : panneau déjà ouvert, chiffres déjà à leur valeur, aucun scrub.
+-->
+<style>
+:root { --fond:#f2f0ea; --encre:#1c1b19; --panneau:#2f5d50; --clair:#e8f0ea; }
+* { box-sizing: border-box; margin: 0; }
+body { background: var(--fond); color: var(--encre);
+  font-family: system-ui, "Helvetica Neue", Arial, sans-serif; }
+section { min-height: 100vh; display: grid; place-items: center; padding: 8vw 6vw; }
+h2 { font-size: clamp(2rem, 6vw, 4.5rem); line-height: 1; letter-spacing: -.02em; max-width: 14ch; }
+
+.panneau { background: var(--panneau); color: var(--clair);
+  clip-path: inset(40% 30% 40% 30%);           /* état initial défini en CSS : pas de flash */
+  width: 100%; min-height: 100vh; display: grid; place-items: center; padding: 8vw 6vw; }
+.chiffres { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 3rem; width: min(1000px, 100%); }
+.chiffre { font-size: clamp(3rem, 8vw, 6rem); font-weight: 600; line-height: 1;
+  font-variant-numeric: tabular-nums; }
+.libelle { margin-top: .5rem; opacity: .75; }
+.js .element { opacity: 0; transform: translateY(12px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .panneau { clip-path: none; }
+  .js .element { opacity: 1; transform: none; }
+}
+</style>
+</head>
+<body>
+<section><h2>Ce que nous avons construit en dix ans</h2></section>
+
+<div class="panneau" id="panneau">
+  <div class="chiffres">
+    <div><div class="chiffre element" data-vers="1240">1&nbsp;240</div><div class="libelle element">traversées par an</div></div>
+    <div><div class="chiffre element" data-vers="38">38</div><div class="libelle element">minutes en moyenne</div></div>
+    <div><div class="chiffre element" data-vers="96">96</div><div class="libelle element">% à l'heure</div></div>
+  </div>
+</div>
+<section><h2>Et la suite.</h2></section>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script>
+gsap.registerPlugin(ScrollTrigger);
+const mm = gsap.matchMedia();
+
+mm.add('(prefers-reduced-motion: no-preference)', () => {
+  // 1. Le panneau s'ouvre avec le scroll (scrub : l'easing vient du geste)
+  gsap.to('#panneau', {
+    clipPath: 'inset(0% 0% 0% 0%)', ease: 'none',
+    scrollTrigger: { trigger: '#panneau', start: 'top 90%', end: 'top 10%', scrub: true }
+  });
+
+  // 2. Libellés et chiffres entrent une seule fois
+  gsap.to('.element', {
+    opacity: 1, y: 0, duration: 0.7, ease: 'expo.out', stagger: 0.08,
+    scrollTrigger: { trigger: '.chiffres', start: 'top 70%', once: true }
+  });
+
+  // 3. Compteurs
+  const fmt = new Intl.NumberFormat('fr-FR');
+  document.querySelectorAll('.chiffre').forEach(el => {
+    const cible = +el.dataset.vers, etat = { v: 0 };
+    gsap.to(etat, {
+      v: cible, duration: 1.4, ease: 'power4.out',
+      onUpdate: () => { el.textContent = fmt.format(Math.round(etat.v)); },
+      scrollTrigger: { trigger: '.chiffres', start: 'top 70%', once: true }
+    });
+  });
+});
+
+mm.add('(prefers-reduced-motion: reduce)', () => {
+  gsap.set('.element', { opacity: 1, y: 0 });   // valeurs finales déjà dans le HTML
+});
+</script>
+</body>
+</html>

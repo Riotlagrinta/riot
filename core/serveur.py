@@ -60,6 +60,16 @@ def app():
         except Exception:
             LOG.exception("montage du cockpit")
         try:
+            from core.mobile import monter_routes as monter_mobile
+            monter_mobile(_APP)                   # /mobile + /api/mobile/* (PWA Smartphone)
+        except Exception:
+            LOG.exception("montage du module mobile")
+        try:
+            from core.claude_app import monter_routes as monter_claude
+            monter_claude(_APP)                   # / + /claude + /api/claude/* (Interface Claude Web & Desktop)
+        except Exception:
+            LOG.exception("montage de l'interface Claude")
+        try:
             from tools.appel_direct import monter_ws
             monter_ws(_APP)                        # /stream (Twilio Media Streams)
         except Exception:
@@ -98,29 +108,42 @@ def demarrer():
         if _port_ouvert(port):
             break
         time.sleep(0.15)
-    # Ouvre le tunnel ngrok automatiquement (si authtoken configure et pas d'URL
-    # manuelle) pour que l'endpoint soit joignable des le demarrage.
+    # Ouvre le tunnel distant en arrière-plan pour ne jamais bloquer l'accès local
     try:
-        _ouvrir_tunnel()
+        threading.Thread(target=_ouvrir_tunnel, daemon=True, name="tunnel-distant").start()
     except Exception:
-        LOG.exception("ouverture du tunnel ngrok")
-    print(f"Serveur web : port {port} (iPhone /api/inbox, Twilio /stream).")
+        LOG.exception("ouverture du tunnel distant")
+    print(f"Serveur web : port {port} (Interface Web/Mobile: http://localhost:{port}/mobile).")
 
 
 def _ouvrir_tunnel():
-    """Ouvre le tunnel ngrok en mode AUTO : authtoken configure, pas d'URL manuelle.
-    Utilise ton domaine STATIQUE si serveur.ngrok_domaine est renseigne.
-    Degrade proprement (message clair) si l'antivirus bloque ngrok."""
+    """Ouvre le tunnel distant : Cloudflare Tunnel par défaut (solution A), ou ngrok en repli."""
     global _URL
     if reglage("serveur.public_url", "") or reglage("twilio.public_url", ""):
-        return                          # tu geres ton tunnel toi-meme (CLI)
+        return  # URL manuelle configurée
+
     if _URL:
         return
+
+    # 1. Priorité Solution A : Cloudflare Tunnel
+    type_tunnel = reglage("serveur.tunnel", "cloudflare").lower().strip()
+    if type_tunnel in ("cloudflare", "auto"):
+        try:
+            from core import tunnel
+            if tunnel.binaire_disponible():
+                url_cf = tunnel.demarrer_tunnel_cloudflare(_port())
+                if url_cf:
+                    _URL = url_cf
+                    return
+        except Exception:
+            LOG.exception("ouverture du tunnel Cloudflare")
+
+    # 2. Repli Solution B : Ngrok si authtoken renseigné
     tok = reglage("serveur.ngrok_authtoken", "") or reglage("twilio.ngrok_authtoken", "")
     if not tok:
         return
-    from pyngrok import ngrok
     try:
+        from pyngrok import ngrok
         ngrok.set_auth_token(tok)
         domaine = reglage("serveur.ngrok_domaine", "")
         options = {"domain": domaine} if domaine else {}
@@ -129,19 +152,7 @@ def _ouvrir_tunnel():
         print(f"Tunnel ngrok ouvert : {_URL}")
     except Exception as e:
         _URL = None
-        msg = str(e)
-        if "certificate" in msg or "x509" in msg or "unknown authority" in msg:
-            # Cas connu : un antivirus (Avast Web Shield) intercepte et BLOQUE ngrok
-            # avec un certificat "Untrusted Root" -> l'agent ne peut pas s'authentifier.
-            LOG.error("tunnel ngrok bloque par l'antivirus (certificat non fiable). "
-                      "Ajoute une exception Avast pour connect.ngrok-agent.com et *.ngrok-free.app, "
-                      "ou utilise un tunnel lance a la main (serveur.public_url). Voir docs/iphone.md.")
-            print("ATTENTION : le tunnel ngrok est bloque par l'antivirus (Avast). "
-                  "Le serveur local tourne mais n'est pas joignable de l'exterieur. "
-                  "Ajoute une exception Avast (voir docs/iphone.md) puis relance.")
-        else:
-            LOG.exception("ouverture du tunnel ngrok")
-            print(f"Tunnel ngrok indisponible : {msg[:120]}")
+        LOG.exception("ouverture du tunnel ngrok : %s", e)
 
 
 def url_publique():

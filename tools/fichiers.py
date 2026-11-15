@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from core.config import reglage
+from core.config import dossier_projets
 from core.registre import outil
 
 EXTENSIONS = {
@@ -117,33 +118,113 @@ def chercher_fichiers(mot_cle: str, type_media: str = "") -> str:
 @outil(
     nom="lister_dossier",
     mcp_expose=True,
-    description="Liste le contenu d'un dossier personnel connu : photos, videos, "
-                "musique, documents ou telechargements. Utilise pour 'qu'est-ce qu'il y a "
-                "dans mes photos', 'liste mes documents'.",
+    description="Liste le contenu d'un dossier quelconque sur le PC (disques C:, E:, dossiers personnels ou projets). "
+                "Affiche les dossiers et les fichiers avec leur taille réelle.",
     parametres={
         "type": "object",
         "properties": {
             "dossier": {
                 "type": "string",
-                "description": "Nom du dossier : photos, videos, musique, documents ou "
-                               "telechargements",
+                "description": "Chemin du dossier (ex: 'E:\\', 'E:\\PROJETS', 'telechargements', 'documents')",
             },
         },
         "required": ["dossier"],
     },
 )
 def lister_dossier(dossier: str) -> str:
-    """Liste les fichiers presents directement dans un dossier personnel connu."""
-    cle = dossier.lower().strip()
-    nom_reel = ALIAS_DOSSIERS.get(cle, dossier)
-    chemin = Path.home() / nom_reel
+    """Liste les dossiers et fichiers présents dans n'importe quel répertoire."""
+    d_clean = dossier.strip().strip('"').strip("'")
+    cle = d_clean.lower()
+    
+    # 1. Vérifier si c'est un alias personnel
+    if cle in ALIAS_DOSSIERS:
+        chemin = Path.home() / ALIAS_DOSSIERS[cle]
+    else:
+        chemin = Path(d_clean)
+        if not chemin.is_absolute():
+            # Si relatif, tester dans home puis dans E:\PROJETS
+            if (Path.home() / d_clean).exists():
+                chemin = Path.home() / d_clean
+            elif (dossier_projets() / d_clean).exists():
+                chemin = dossier_projets() / d_clean
+            else:
+                chemin = Path.cwd() / d_clean
+
     if not chemin.exists():
-        return f"Je ne trouve pas le dossier {dossier}."
-    fichiers = sorted(f.name for f in chemin.iterdir() if f.is_file())[:15]
-    if not fichiers:
-        return f"Le dossier {dossier} est vide."
-    suffixe = "..." if len(fichiers) == 15 else "."
-    return f"Dans {dossier}, il y a : " + ", ".join(fichiers) + suffixe
+        return f"[ERREUR] Le dossier '{chemin}' n'existe pas."
+    if not chemin.is_dir():
+        return f"[ERREUR] '{chemin}' est un fichier, pas un dossier."
+
+    try:
+        entrees = sorted(list(chemin.iterdir()), key=lambda e: (not e.is_dir(), e.name.lower()))
+    except PermissionError:
+        return f"[ERREUR] Accès refusé à '{chemin}'."
+
+    dossiers = []
+    fichiers = []
+    for e in entrees:
+        if e.is_dir():
+            dossiers.append(f"📁 {e.name}/")
+        else:
+            taille_mo = round(e.stat().st_size / (1024 * 1024), 2)
+            if taille_mo >= 1.0:
+                fichiers.append(f"📄 {e.name} ({taille_mo} Mo)")
+            else:
+                taille_ko = round(e.stat().st_size / 1024, 1)
+                fichiers.append(f"📄 {e.name} ({taille_ko} Ko)")
+
+    res = [f"Contenu de '{chemin}' :"]
+    if dossiers:
+        res.append(f"• Dossiers ({len(dossiers)}) : " + ", ".join(dossiers[:25]) + ("..." if len(dossiers) > 25 else ""))
+    if fichiers:
+        res.append(f"• Fichiers ({len(fichiers)}) : " + ", ".join(fichiers[:30]) + ("..." if len(fichiers) > 30 else ""))
+    if not dossiers and not fichiers:
+        res.append("(Dossier vide)")
+
+    return "\n".join(res)
+
+
+@outil(
+    nom="supprimer_fichier",
+    description="Supprime un fichier spécifique sur le disque avec confirmation de sécurité. "
+                "Gère parfaitement les chemins contenant des crochets [ ], espaces et caractères spéciaux.",
+    parametres={
+        "type": "object",
+        "properties": {
+            "fichier": {
+                "type": "string",
+                "description": "Chemin absolu ou nom exact du fichier à supprimer",
+            },
+        },
+        "required": ["fichier"],
+    },
+)
+def supprimer_fichier(fichier: str) -> str:
+    """Supprime un fichier en toute sécurité."""
+    f_clean = fichier.strip().strip('"').strip("'")
+    chemin = Path(f_clean)
+    if not chemin.is_absolute():
+        if (Path.home() / f_clean).exists():
+            chemin = Path.home() / f_clean
+        elif (dossier_projets() / f_clean).exists():
+            chemin = dossier_projets() / f_clean
+        elif Path("E:\\").exists() and (Path("E:\\") / f_clean).exists():
+            chemin = Path("E:\\") / f_clean
+        else:
+            chemin = Path.cwd() / f_clean
+
+    if not chemin.exists():
+        return f"[ERREUR] Le fichier '{chemin}' est introuvable."
+    if chemin.is_dir():
+        return f"[ERREUR] '{chemin}' est un dossier. Pour supprimer un dossier, utilisez rmdir dans le terminal."
+
+    try:
+        taille_mo = round(chemin.stat().st_size / (1024 * 1024), 2)
+        nom = chemin.name
+        chemin.unlink()
+        return f"✓ Fichier '{nom}' supprimé avec succès ({taille_mo} Mo libérés sur le disque)."
+    except Exception as e:
+        return f"[ERREUR] Impossible de supprimer '{chemin}' : {e}"
 
 
 @outil(
@@ -170,7 +251,7 @@ def ouvrir_fichier(nom: str) -> str:
         return f"Je n'ai trouve aucun fichier correspondant a {nom}."
     chemin = resultats[0]
     try:
-        os.startfile(str(chemin))
+        os.startfile(str(chemin))   # gere .exe, fichiers, et protocoles (steam://, spotify:)
         return f"J'ouvre {chemin.name}."
     except Exception as e:
         return f"Je n'ai pas pu ouvrir {chemin.name} ({e})."

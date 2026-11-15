@@ -54,8 +54,29 @@ class ProviderLLM:
     def disponible(self):
         return True
 
-    def repondre(self, systeme, historique, outils):
+    def repondre(self, systeme, historique, outils, visites=None, **kwargs):
         raise NotImplementedError
+
+
+# --------------------------------------------------------------- Groq (cloud rapide)
+
+def _recuperer_liste_cles(val_config, env_nom=""):
+    """Normalise une chaîne, liste ou variable d'environnement en une liste propre de clés API."""
+    import os
+    cles = []
+    if isinstance(val_config, list):
+        cles.extend(str(c).strip() for c in val_config if str(c).strip())
+    elif isinstance(val_config, str) and val_config.strip():
+        for chunk in val_config.replace(";", ",").split(","):
+            if chunk.strip():
+                cles.append(chunk.strip())
+    if not cles and env_nom:
+        env_val = os.environ.get(env_nom, "")
+        if env_val.strip():
+            for chunk in env_val.replace(";", ",").split(","):
+                if chunk.strip():
+                    cles.append(chunk.strip())
+    return cles
 
 
 # --------------------------------------------------------------- Groq (cloud rapide)
@@ -64,13 +85,14 @@ class GroqProvider(ProviderLLM):
     nom = "Groq"
 
     def __init__(self, modele=None):
-        import os
-        self.cle = reglage("groq.cle", "") or os.environ.get("GROQ_API_KEY", "")
+        cles_brutes = reglage("groq.cles", []) or reglage("groq.cle", "")
+        self.cles = _recuperer_liste_cles(cles_brutes, "GROQ_API_KEY")
+        self.cle = self.cles[0] if self.cles else ""
         self.modele = modele or reglage("groq.modele", "openai/gpt-oss-120b")
         rotation = reglage("groq.modeles_rotation", [
             "openai/gpt-oss-120b",
             "openai/gpt-oss-20b",
-            "groq/compound",
+            "qwen/qwen3.8-27b",
             "llama-3.3-70b-versatile",
         ])
         if not isinstance(rotation, list):
@@ -79,7 +101,7 @@ class GroqProvider(ProviderLLM):
         self.api_url = "https://api.groq.com/openai/v1/chat/completions"
 
     def disponible(self):
-        return bool(self.cle and self.cle.strip())
+        return bool(self.cles)
 
     def _traduire(self, systeme, historique):
         messages = [{"role": "system", "content": systeme}]
@@ -149,51 +171,58 @@ class GroqProvider(ProviderLLM):
         import requests
 
         derniere_erreur = None
-        for modele_courant in self.rotation:
-            payload = {
-                "model": modele_courant,
-                "messages": messages,
-                "temperature": float(reglage("groq.temperature", 0.3)),
-                "max_tokens": int(reglage("groq.max_tokens", 1024)),
-            }
-            if tools:
-                payload["tools"] = tools
-                payload["tool_choice"] = "auto"
+        cles_a_tester = self.cles or [self.cle]
+        for cle_courante in cles_a_tester:
+            for modele_courant in self.rotation:
+                payload = {
+                    "model": modele_courant,
+                    "messages": messages,
+                    "temperature": float(reglage("groq.temperature", 0.3)),
+                    "max_tokens": int(reglage("groq.max_tokens", 1024)),
+                }
+                if tools:
+                    payload["tools"] = tools
+                    payload["tool_choice"] = "auto"
 
-            headers = {
-                "Authorization": f"Bearer {self.cle}",
-                "Content-Type": "application/json",
-            }
+                headers = {
+                    "Authorization": f"Bearer {cle_courante}",
+                    "Content-Type": "application/json",
+                }
 
-            try:
-                r = requests.post(self.api_url, headers=headers, json=payload, timeout=25)
-                if r.status_code == 429 or r.status_code >= 500:
-                    LOG.warning("groq: modele %s statut %s, bascule sur le modele suivant de la rotation",
-                                modele_courant, r.status_code)
-                    derniere_erreur = f"HTTP {r.status_code}: {r.text}"
-                    continue
-                r.raise_for_status()
-                data = r.json()
-
-                # Enregistrement consommation budget
                 try:
-                    usage = data.get("usage", {})
-                    if usage:
-                        from core import budget
-                        budget.enregistrer(
-                            "Groq (Jarvis)", modele_courant,
-                            usage.get("prompt_tokens", 0) or 0,
-                            usage.get("completion_tokens", 0) or 0)
-                except Exception:
-                    pass
+                    r = requests.post(self.api_url, headers=headers, json=payload, timeout=25)
+                    if r.status_code == 413:
+                        LOG.warning("groq: payload/outils trop volumineux (HTTP 413 TPM limite atteinte)")
+                        raise RuntimeError("Groq TPM limite atteinte (413): outils trop volumineux pour le tier gratuit")
+                    if r.status_code == 429 or r.status_code >= 500:
+                        LOG.warning("groq: cle %s... modele %s statut %s, bascule...",
+                                    cle_courante[:8], modele_courant, r.status_code)
+                        derniere_erreur = f"HTTP {r.status_code}: {r.text}"
+                        continue
+                    r.raise_for_status()
+                    data = r.json()
 
-                return data
-            except Exception as e:
-                LOG.warning("groq: echec sur %s (%s)", modele_courant, e)
-                derniere_erreur = e
-                continue
+                    # Enregistrement consommation budget
+                    try:
+                        usage = data.get("usage", {})
+                        if usage:
+                            from core import budget
+                            budget.enregistrer(
+                                "Groq (Jarvis)", modele_courant,
+                                usage.get("prompt_tokens", 0) or 0,
+                                usage.get("completion_tokens", 0) or 0)
+                    except Exception:
+                        pass
 
-        raise RuntimeError(f"Tous les modeles Groq ont echoue. Derniere erreur : {derniere_erreur}")
+                    return data
+                except Exception as e:
+                    if "413" in str(e):
+                        raise
+                    LOG.warning("groq: echec sur cle %s... / modele %s (%s)", cle_courante[:8], modele_courant, e)
+                    derniere_erreur = e
+                    continue
+
+        raise RuntimeError(f"Toutes les cles et modeles Groq ont echoue. Derniere erreur : {derniere_erreur}")
 
     def _parser(self, rep):
         choices = rep.get("choices", [])
@@ -220,15 +249,294 @@ class GroqProvider(ProviderLLM):
         stop = "tool_use" if any(b.type == "tool_use" for b in blocs) else "end"
         return Reponse(stop, blocs)
 
-    def repondre(self, systeme, historique, outils):
+    def repondre(self, systeme, historique, outils, visites=None, **kwargs):
+        if visites is None:
+            visites = set()
+        visites.add(self.nom)
         messages = self._traduire(systeme, historique)
         tools = self._outils(outils)
         try:
             return self._parser(self._chat(messages, tools))
         except Exception as e:
-            LOG.exception("groq: echec d'appel")
-            return Reponse("end", [Bloc("text", text=(
-                f"Desole, l'API Groq a rencontre une erreur ({e}). Verifie ta cle ou ta connexion."))])
+            LOG.warning("groq: echec (%s), declenchement cascade failover...", e)
+            return cascade_failover(systeme, historique, outils, visites, **kwargs)
+
+
+# --------------------------------------------------------------- Gemini (Google AI Studio)
+
+class GeminiProvider(ProviderLLM):
+    nom = "Gemini"
+
+    def __init__(self, modele=None):
+        cles_brutes = reglage("gemini.cles", []) or reglage("gemini.cle", "")
+        self.cles = _recuperer_liste_cles(cles_brutes, "GEMINI_API_KEY")
+        self.cle = self.cles[0] if self.cles else ""
+        self.modele = modele or reglage("gemini.modele", "gemini-flash-latest")
+        rotation = reglage("gemini.modeles_rotation", [
+            "gemini-flash-latest",
+            "gemini-3.8-flash",
+            "gemini-pro-latest",
+            "gemini-flash-lite-latest",
+        ])
+        if not isinstance(rotation, list):
+            rotation = [rotation]
+        self.rotation = [self.modele] + [m for m in rotation if m != self.modele]
+        self.api_url = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+
+    def disponible(self):
+        return bool(self.cles)
+
+    _traduire = GroqProvider._traduire
+    _outils = GroqProvider._outils
+    _parser = GroqProvider._parser
+
+    def _chat(self, messages, tools):
+        import requests
+        derniere_erreur = None
+        cles_a_tester = self.cles or [self.cle]
+        for cle_courante in cles_a_tester:
+            for modele_courant in self.rotation:
+                payload = {
+                    "model": modele_courant,
+                    "messages": messages,
+                    "temperature": float(reglage("gemini.temperature", 0.3)),
+                    "max_tokens": int(reglage("gemini.max_tokens", 2048)),
+                }
+                if tools:
+                    payload["tools"] = tools
+                    payload["tool_choice"] = "auto"
+
+                headers = {
+                    "Authorization": f"Bearer {cle_courante}",
+                    "Content-Type": "application/json",
+                }
+
+                try:
+                    r = requests.post(self.api_url, headers=headers, json=payload, timeout=25)
+                    if r.status_code == 429 or r.status_code == 503 or r.status_code >= 500:
+                        LOG.warning("gemini: cle %s... modele %s statut %s, bascule...",
+                                    cle_courante[:8], modele_courant, r.status_code)
+                        derniere_erreur = f"HTTP {r.status_code}: {r.text}"
+                        if "RESOURCE_EXHAUSTED" in r.text or "quota" in r.text.lower():
+                            break
+                        continue
+                    r.raise_for_status()
+                    data = r.json()
+
+                    try:
+                        usage = data.get("usage", {})
+                        if usage:
+                            from core import budget
+                            budget.enregistrer(
+                                "Gemini (RIOT)", modele_courant,
+                                usage.get("prompt_tokens", 0) or 0,
+                                usage.get("completion_tokens", 0) or 0)
+                    except Exception:
+                        pass
+
+                    return data
+                except Exception as e:
+                    LOG.warning("gemini: echec sur cle %s... / modele %s (%s)", cle_courante[:8], modele_courant, e)
+                    derniere_erreur = e
+                    continue
+
+        raise RuntimeError(f"Toutes les cles et modeles Gemini ont echoue. Derniere erreur : {derniere_erreur}")
+
+    def repondre(self, systeme, historique, outils, visites=None, **kwargs):
+        if visites is None:
+            visites = set()
+        visites.add(self.nom)
+        messages = self._traduire(systeme, historique)
+        tools = self._outils(outils)
+        try:
+            return self._parser(self._chat(messages, tools))
+        except Exception as e:
+            LOG.warning("gemini: echec (%s), declenchement cascade failover...", e)
+            return cascade_failover(systeme, historique, outils, visites, **kwargs)
+
+
+# --------------------------------------------------------------- OpenRouter
+
+class OpenRouterProvider(ProviderLLM):
+    nom = "OpenRouter"
+
+    def __init__(self, modele=None):
+        cles_brutes = reglage("openrouter.cles", []) or reglage("openrouter.cle", "")
+        self.cles = _recuperer_liste_cles(cles_brutes, "OPENROUTER_API_KEY")
+        self.cle = self.cles[0] if self.cles else ""
+        self.modele = modele or reglage("openrouter.modele", "openrouter/free")
+        rotation = reglage("openrouter.modeles_rotation", [
+            "openrouter/free",
+            "google/gemma-4-31b-it:free",
+            "nvidia/nemotron-3.5-lightning:free",
+            "cohere/north-mini-code:free",
+        ])
+        if not isinstance(rotation, list):
+            rotation = [rotation]
+        self.rotation = [self.modele] + [m for m in rotation if m != self.modele]
+        self.api_url = "https://openrouter.ai/api/v1/chat/completions"
+
+    def disponible(self):
+        return bool(self.cles)
+
+    _traduire = GroqProvider._traduire
+    _outils = GroqProvider._outils
+    _parser = GroqProvider._parser
+
+    def _chat(self, messages, tools):
+        import requests
+        derniere_erreur = None
+        cles_a_tester = self.cles or [self.cle]
+        for cle_courante in cles_a_tester:
+            for modele_courant in self.rotation:
+                payload = {
+                    "model": modele_courant,
+                    "messages": messages,
+                    "temperature": float(reglage("openrouter.temperature", 0.3)),
+                    "max_tokens": int(reglage("openrouter.max_tokens", 2048)),
+                }
+                if tools:
+                    payload["tools"] = tools
+                    payload["tool_choice"] = "auto"
+
+                headers = {
+                    "Authorization": f"Bearer {cle_courante}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://riot.local",
+                    "X-Title": "RIOT Copilot",
+                }
+
+                try:
+                    r = requests.post(self.api_url, headers=headers, json=payload, timeout=25)
+                    if r.status_code == 429 or r.status_code == 503 or r.status_code >= 500:
+                        LOG.warning("openrouter: cle %s... modele %s statut %s, bascule...",
+                                    cle_courante[:8], modele_courant, r.status_code)
+                        derniere_erreur = f"HTTP {r.status_code}: {r.text}"
+                        continue
+                    r.raise_for_status()
+                    data = r.json()
+
+                    try:
+                        usage = data.get("usage", {})
+                        if usage:
+                            from core import budget
+                            budget.enregistrer(
+                                "OpenRouter (RIOT)", modele_courant,
+                                usage.get("prompt_tokens", 0) or 0,
+                                usage.get("completion_tokens", 0) or 0)
+                    except Exception:
+                        pass
+
+                    return data
+                except Exception as e:
+                    LOG.warning("openrouter: echec sur cle %s... / modele %s (%s)", cle_courante[:8], modele_courant, e)
+                    derniere_erreur = e
+                    continue
+
+        raise RuntimeError(f"Toutes les cles et modeles OpenRouter ont echoue. Derniere erreur : {derniere_erreur}")
+
+    def repondre(self, systeme, historique, outils, visites=None, **kwargs):
+        if visites is None:
+            visites = set()
+        visites.add(self.nom)
+        messages = self._traduire(systeme, historique)
+        tools = self._outils(outils)
+        try:
+            return self._parser(self._chat(messages, tools))
+        except Exception as e:
+            LOG.warning("openrouter: echec (%s), declenchement cascade failover...", e)
+            return cascade_failover(systeme, historique, outils, visites, **kwargs)
+
+
+# --------------------------------------------------------------- Mistral AI
+
+class MistralProvider(ProviderLLM):
+    nom = "Mistral"
+
+    def __init__(self, modele=None):
+        cles_brutes = reglage("mistral.cles", []) or reglage("mistral.cle", "")
+        self.cles = _recuperer_liste_cles(cles_brutes, "MISTRAL_API_KEY")
+        self.cle = self.cles[0] if self.cles else ""
+        self.modele = modele or reglage("mistral.modele", "codestral-latest")
+        rotation = reglage("mistral.modeles_rotation", [
+            "codestral-latest",
+            "mistral-small-latest",
+            "open-mistral-nemo",
+            "pixtral-12b",
+        ])
+        if not isinstance(rotation, list):
+            rotation = [rotation]
+        self.rotation = [self.modele] + [m for m in rotation if m != self.modele]
+        self.api_url = "https://api.mistral.ai/v1/chat/completions"
+
+    def disponible(self):
+        return bool(self.cles)
+
+    _traduire = GroqProvider._traduire
+    _outils = GroqProvider._outils
+    _parser = GroqProvider._parser
+
+    def _chat(self, messages, tools):
+        import requests
+        derniere_erreur = None
+        cles_a_tester = self.cles or [self.cle]
+        for cle_courante in cles_a_tester:
+            for modele_courant in self.rotation:
+                payload = {
+                    "model": modele_courant,
+                    "messages": messages,
+                    "temperature": float(reglage("mistral.temperature", 0.2)),
+                    "max_tokens": int(reglage("mistral.max_tokens", 2048)),
+                }
+                if tools:
+                    payload["tools"] = tools
+                    payload["tool_choice"] = "auto"
+
+                headers = {
+                    "Authorization": f"Bearer {cle_courante}",
+                    "Content-Type": "application/json",
+                }
+
+                try:
+                    r = requests.post(self.api_url, headers=headers, json=payload, timeout=25)
+                    if r.status_code == 429 or r.status_code == 503 or r.status_code >= 500:
+                        LOG.warning("mistral: cle %s... modele %s statut %s, bascule...",
+                                    cle_courante[:8], modele_courant, r.status_code)
+                        derniere_erreur = f"HTTP {r.status_code}: {r.text}"
+                        continue
+                    r.raise_for_status()
+                    data = r.json()
+
+                    try:
+                        usage = data.get("usage", {})
+                        if usage:
+                            from core import budget
+                            budget.enregistrer(
+                                "Mistral (RIOT)", modele_courant,
+                                usage.get("prompt_tokens", 0) or 0,
+                                usage.get("completion_tokens", 0) or 0)
+                    except Exception:
+                        pass
+
+                    return data
+                except Exception as e:
+                    LOG.warning("mistral: echec sur cle %s... / modele %s (%s)", cle_courante[:8], modele_courant, e)
+                    derniere_erreur = e
+                    continue
+
+        raise RuntimeError(f"Toutes les cles et modeles Mistral ont echoue. Derniere erreur : {derniere_erreur}")
+
+    def repondre(self, systeme, historique, outils, visites=None, **kwargs):
+        if visites is None:
+            visites = set()
+        visites.add(self.nom)
+        messages = self._traduire(systeme, historique)
+        tools = self._outils(outils)
+        try:
+            return self._parser(self._chat(messages, tools))
+        except Exception as e:
+            LOG.warning("mistral: echec (%s), declenchement cascade failover...", e)
+            return cascade_failover(systeme, historique, outils, visites, **kwargs)
 
 
 # --------------------------------------------------------------- Claude (cloud)
@@ -245,7 +553,7 @@ class ClaudeProvider(ProviderLLM):
     def disponible(self):
         return self.client is not None
 
-    def repondre(self, systeme, historique, outils):
+    def repondre(self, systeme, historique, outils, visites=None, **kwargs):
         # La reponse native Anthropic a deja la bonne forme (.stop_reason/.content).
         rep = self.client.messages.create(
             model=self.modele,
@@ -276,9 +584,9 @@ class ClaudeProvider(ProviderLLM):
 class OllamaProvider(ProviderLLM):
     nom = "Ollama"
 
-    def __init__(self):
+    def __init__(self, modele=None):
         self.hote = reglage("ollama.hote", "http://localhost:11434").rstrip("/")
-        self.modele = reglage("ollama.modele", "qwen2.5:1.5b")
+        self.modele = modele or reglage("ollama.modele", "dolphin-phi:latest")
 
     def disponible(self):
         try:
@@ -333,13 +641,27 @@ class OllamaProvider(ProviderLLM):
         import requests
         if nudge:
             messages = messages + [{"role": "user", "content": nudge}]
-        # think=false : desactive le "raisonnement" natif (qwen3.5, etc.). Sinon le
-        # modele est tres lent et rend parfois ses appels d'outils en texte au lieu
-        # de les executer. Un modele sans thinking ignore ce parametre.
-        r = requests.post(f"{self.hote}/api/chat", timeout=300, json={
-            "model": self.modele, "messages": messages, "tools": tools,
-            "stream": False, "think": bool(reglage("ollama.think", False)),
-            "options": {"temperature": 0.3, "num_ctx": 8192}})
+        est_modele_brut = any(k in self.modele.lower() for k in ("dolphin", "abliterated", "uncensored"))
+        payload = {
+            "model": self.modele,
+            "messages": messages,
+            "stream": False,
+            "think": bool(reglage("ollama.think", False)),
+            "options": {
+                "temperature": 0.15 if est_modele_brut else 0.25,
+                "top_p": 0.9,
+                "repeat_penalty": 1.20 if est_modele_brut else 1.15,
+                "num_ctx": 4096,
+                "num_predict": int(reglage("ollama.max_tokens", 768)),
+            },
+        }
+        if tools and not est_modele_brut:
+            payload["tools"] = tools
+
+        r = requests.post(f"{self.hote}/api/chat", timeout=300, json=payload)
+        if r.status_code == 400 and "does not support tools" in r.text:
+            payload.pop("tools", None)
+            r = requests.post(f"{self.hote}/api/chat", timeout=300, json=payload)
         r.raise_for_status()
         return r.json()
 
@@ -358,23 +680,76 @@ class OllamaProvider(ProviderLLM):
         stop = "tool_use" if any(b.type == "tool_use" for b in blocs) else "end"
         return Reponse(stop, blocs)
 
-    def repondre(self, systeme, historique, outils):
+    def repondre(self, systeme, historique, outils, visites=None, prefill=None, **kwargs):
         messages = self._traduire(systeme, historique)
+        if prefill:
+            # Prefill de l'assistant pour court-circuiter tout refus ou préambule
+            messages.append({"role": "assistant", "content": prefill})
         tools = self._outils(outils)
         try:
-            return self._parser(self._chat(messages, tools))
+            rep = self._parser(self._chat(messages, tools))
+            if prefill and rep.content:
+                for b in rep.content:
+                    if getattr(b, "type", None) == "text" and b.text:
+                        if not b.text.startswith(prefill):
+                            b.text = f"{prefill} {b.text}".strip()
+                        break
+            return rep
         except Exception as e:
             LOG.warning("ollama: 1er essai en echec (%s), retry plus directif", e)
             # Retry unique, avec une consigne plus stricte sur l'appel d'outil.
             nudge = ("Rappel : pour agir, appelle l'outil approprie via un tool call "
                      "avec des arguments JSON valides ; sinon reponds simplement en texte.")
             try:
-                return self._parser(self._chat(messages, tools, nudge=nudge))
+                rep = self._parser(self._chat(messages, tools, nudge=nudge))
+                if prefill and rep.content:
+                    for b in rep.content:
+                        if getattr(b, "type", None) == "text" and b.text:
+                            if not b.text.startswith(prefill):
+                                b.text = f"{prefill} {b.text}".strip()
+                            break
+                return rep
             except Exception:
                 LOG.exception("ollama: echec apres retry")
                 return Reponse("end", [Bloc("text", text=(
                     "Desole, le modele local n'a pas reussi a traiter la demande "
                     "correctement. Reessaie en reformulant, ou repasse en mode cloud."))])
+
+
+# --------------------------------------------------------------- cascade de secours automatique
+
+def cascade_failover(systeme, historique, outils, visites: set, **kwargs):
+    """Bascule vers le prochain fournisseur IA disponible sans jamais entrer en boucle récursive."""
+    if visites is None:
+        visites = set()
+
+    # Ordre de secours intelligent :
+    # 1. Mistral (champion code/français, accepte les 105 outils sans limite TPM)
+    # 2. OpenRouter (agrégateur multi-modèles avec accès gratuit)
+    # 3. Groq (ultra-rapide pour texte et outils légers)
+    # 4. Gemini (Google AI Studio)
+    # 5. Claude (Anthropic si configuré)
+    candidats = [
+        ("Mistral", MistralProvider),
+        ("OpenRouter", OpenRouterProvider),
+        ("Groq", GroqProvider),
+        ("Gemini", GeminiProvider),
+        ("Claude", ClaudeProvider),
+    ]
+    for nom, cls_prov in candidats:
+        if nom in visites:
+            continue
+        try:
+            prov = cls_prov()
+            if prov.disponible():
+                LOG.warning("Cascade Failover RIOT : secours automatique vers %s...", nom)
+                return prov.repondre(systeme, historique, outils, visites=visites, **kwargs)
+        except Exception as e:
+            LOG.warning("Cascade Failover: echec sur %s (%s)", nom, e)
+            continue
+
+    LOG.error("Cascade Failover: tous les fournisseurs disponibles ont echoue.")
+    return Reponse("end", [Bloc("text", text="Tous les fournisseurs IA ont échoué ou sont temporairement indisponibles.")])
 
 
 # --------------------------------------------------------------- fabrique
@@ -397,15 +772,27 @@ def llm():
 
         if m == "groq" or fournisseur == "groq":
             _LLM = GroqProvider()
+        elif m == "mistral" or fournisseur == "mistral":
+            _LLM = MistralProvider()
+        elif m == "gemini" or fournisseur == "gemini":
+            _LLM = GeminiProvider()
+        elif m == "openrouter" or fournisseur == "openrouter":
+            _LLM = OpenRouterProvider()
         elif m == "local" or fournisseur == "ollama":
             _LLM = OllamaProvider()
         elif m == "qualite":
             _LLM = ClaudeProvider(reglage("anthropic.modele_qualite",
                                           "claude-sonnet-4-5"))
         else:                                    # hybride (defaut)
-            # Si une cle Groq est presente et pas de cle Claude, on utilise Groq
-            if reglage("groq.cle", "") and not reglage("anthropic.cle", ""):
+            # Priorité aux clés configurées (Groq -> Mistral -> Gemini -> OpenRouter -> Claude)
+            if reglage("groq.cles", []) or reglage("groq.cle", ""):
                 _LLM = GroqProvider()
+            elif reglage("mistral.cles", []) or reglage("mistral.cle", ""):
+                _LLM = MistralProvider()
+            elif reglage("gemini.cles", []) or reglage("gemini.cle", ""):
+                _LLM = GeminiProvider()
+            elif reglage("openrouter.cles", []) or reglage("openrouter.cle", ""):
+                _LLM = OpenRouterProvider()
             else:
                 _LLM = ClaudeProvider(reglage("anthropic.modele", "claude-haiku-4-5"))
 

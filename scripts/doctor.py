@@ -11,6 +11,13 @@ import socket
 import sys
 from pathlib import Path
 
+# Injection du magasin de certificats Windows pour eviter SSLCertVerificationError
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except Exception:
+    pass
+
 RACINE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RACINE))
 
@@ -134,26 +141,75 @@ def _reco_modele(vram):
 def v_llm():
     titre("Modele de langage (LLM)")
     mode = reglage("mode", "groq")
-    if mode == "groq" or (reglage("groq.cle", "") and not reglage("anthropic.cle", "")):
-        cle = reglage("groq.cle", "")
-        modele = reglage("groq.modele", "llama-3.3-70b-versatile")
-        if cle:
-            try:
-                import requests
-                r = requests.get(
-                    "https://api.groq.com/openai/v1/models",
-                    headers={"Authorization": f"Bearer {cle}"},
-                    timeout=5,
-                )
-                if r.status_code == 200:
-                    ok(f"cle Groq valide, connecte a l'API (modele actif: {modele})")
-                else:
-                    ko(f"cle Groq invalide (HTTP {r.status_code})", "verifie ta cle groq.cle sur console.groq.com/keys")
-            except Exception as e:
-                ko("echec de connexion a l'API Groq", f"verifie ta connexion internet ({e})")
-        else:
-            ko("cle Groq absente", "mets groq.cle (console.groq.com/keys) dans config.yaml.")
-    elif mode == "local":
+    cle_groq = reglage("groq.cle", "")
+    cle_gemini = reglage("gemini.cle", "")
+
+    if cle_groq:
+        modele_groq = reglage("groq.modele", "openai/gpt-oss-120b")
+        try:
+            import requests
+            r = requests.get(
+                "https://api.groq.com/openai/v1/models",
+                headers={"Authorization": f"Bearer {cle_groq}"},
+                timeout=5,
+            )
+            if r.status_code == 200:
+                ok(f"cle Groq valide (modele: {modele_groq})")
+            else:
+                ko(f"cle Groq invalide (HTTP {r.status_code})", "verifie ta cle groq.cle")
+        except Exception as e:
+            ko("echec de connexion a l'API Groq", str(e))
+
+    if cle_gemini:
+        modele_gem = reglage("gemini.modele", "gemini-flash-latest")
+        try:
+            import requests
+            r = requests.get(
+                f"https://generativelanguage.googleapis.com/v1beta/models?key={cle_gemini}",
+                timeout=5,
+            )
+            if r.status_code == 200:
+                ok(f"cle Google Gemini valide (modele: {modele_gem})")
+            else:
+                ko(f"cle Gemini invalide (HTTP {r.status_code})", "verifie ta cle gemini.cle")
+        except Exception as e:
+            ko("echec de connexion a l'API Gemini", str(e))
+
+    cle_openrouter = reglage("openrouter.cle", "")
+    if cle_openrouter:
+        modele_or = reglage("openrouter.modele", "openrouter/free")
+        try:
+            import requests
+            r = requests.get(
+                "https://openrouter.ai/api/v1/auth/key",
+                headers={"Authorization": f"Bearer {cle_openrouter}"},
+                timeout=5,
+            )
+            if r.status_code == 200:
+                ok(f"cle OpenRouter valide (modele: {modele_or})")
+            else:
+                ko(f"cle OpenRouter invalide (HTTP {r.status_code})", "verifie ta cle openrouter.cle")
+        except Exception as e:
+            ko("echec de connexion a l'API OpenRouter", str(e))
+
+    cle_mistral = reglage("mistral.cle", "")
+    if cle_mistral:
+        modele_mis = reglage("mistral.modele", "codestral-latest")
+        try:
+            import requests
+            r = requests.get(
+                "https://api.mistral.ai/v1/models",
+                headers={"Authorization": f"Bearer {cle_mistral}"},
+                timeout=5,
+            )
+            if r.status_code == 200:
+                ok(f"cle Mistral AI valide (modele: {modele_mis})")
+            else:
+                ko(f"cle Mistral invalide (HTTP {r.status_code})", "verifie ta cle mistral.cle")
+        except Exception as e:
+            ko("echec de connexion a l'API Mistral", str(e))
+
+    if mode == "local":
         hote = reglage("ollama.hote", "http://localhost:11434")
         modele = reglage("ollama.modele", "qwen2.5:1.5b")
         try:
@@ -166,6 +222,8 @@ def v_llm():
                 ko(f"Ollama joignable mais '{modele}' absent", f"lance : ollama pull {modele}")
         except Exception:
             ko("Ollama injoignable", "installe/lance Ollama (ollama.com), puis 'ollama serve'.")
+    elif mode in ("groq", "gemini", "openrouter", "mistral"):
+        pass  # Valide via les cles cloud ci-dessus
     else:
         if reglage("anthropic.cle", ""):
             ok("cle Anthropic (Claude) presente")
@@ -270,7 +328,7 @@ def v_micro():
 
 def main():
     print("=" * 48)
-    print("  Diagnostic de Jarvis (doctor)")
+    print("  Diagnostic de RIOT (doctor)")
     print("=" * 48)
     v_python()
     v_dependances()
@@ -284,7 +342,7 @@ def main():
     print(f"  Bilan : {_scores['ok']} OK, {_scores['warn']} avertissement(s), "
           f"{_scores['ko']} probleme(s).")
     if _scores["ko"] == 0:
-        print("  Tout est bon a l'essentiel. Lance : uv run python jarvis14.py")
+        print("  Tout est bon a l'essentiel. Lance : uv run python riot.py")
     else:
         print("  Corrige les [X] ci-dessus, puis relance ce diagnostic.")
     print("=" * 48)

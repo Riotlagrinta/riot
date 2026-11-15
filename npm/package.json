@@ -1,0 +1,31 @@
+{
+  "name": "@kelvix/riot",
+  "version": "0.2.0",
+  "description": "RIOT — Copilote développeur, système et agent IA multiplateforme en ligne de commande.",
+  "bin": {
+    "riot": "./bin/riot.js"
+  },
+  "files": [
+    "bin/",
+    "README.md"
+  ],
+  "keywords": [
+    "ai",
+    "cli",
+    "agent",
+    "copilot",
+    "developer-tools",
+    "riot",
+    "kelvix"
+  ],
+  "author": "Kelvix",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Riotlagrinta/riot.git"
+  }
+}
+

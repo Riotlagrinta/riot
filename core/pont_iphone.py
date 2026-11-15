@@ -57,8 +57,11 @@ def traiter_commande(phrase):
     faits = []
     for _ in range(4):
         try:
-            rep = P.repondre(systeme, messages,
-                             registre.schemas_api(local_seulement=(P.nom == "Ollama")))
+            rep = P.repondre(
+                systeme,
+                messages,
+                registre.schemas_api(local_seulement=(P.nom == "Ollama"), requete=phrase),
+            )
         except Exception as e:
             LOG.exception("pont: appel modele")
             return {"ok": False, "reponse": f"Erreur du modele ({e})."}

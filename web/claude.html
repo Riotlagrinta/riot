@@ -1,0 +1,2163 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Claude // RIOT Dev Studio</title>
+  <link rel="manifest" href="/claude/manifest.json">
+  <meta name="theme-color" content="#181816">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <!-- Polices & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Markdown-it, Highlight.js & Mermaid.js -->
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.2/dist/markdown-it.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+
+  <style>
+    :root {
+      --claude-bg: #181816;
+      --claude-sidebar: #131312;
+      --claude-card: #222220;
+      --claude-card-subtle: #1c1c1a;
+      --claude-border: #2e2e2a;
+      --claude-border-subtle: #242421;
+      
+      --claude-coral: #d97757;
+      --claude-coral-hover: #c46445;
+      --claude-coral-dim: rgba(217, 119, 87, 0.15);
+      
+      --claude-text: #f5f4ef;
+      --claude-text-muted: #9e9d95;
+      --claude-text-dim: #6e6d66;
+
+      --claude-green: #98c379;
+      --claude-gold: #e5c07b;
+      --claude-cyan: #56b6c2;
+      --claude-red: #e06c75;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background: var(--claude-bg);
+      color: var(--claude-text);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      height: 100vh;
+      height: 100dvh;
+      display: flex;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    code, pre {
+      font-family: 'JetBrains Mono', Consolas, Monaco, monospace;
+    }
+
+    /* Scrollbars élégantes */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #3d3d38;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--claude-coral);
+    }
+
+    /* ------------------------------------------------------------- */
+    /* LAYOUT 3 COLONNES CLAUDE                                      */
+    /* ------------------------------------------------------------- */
+    #sidebar {
+      width: 280px;
+      background: var(--claude-sidebar);
+      border-right: 1px solid var(--claude-border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 40;
+    }
+    #sidebar.collapsed {
+      display: none;
+    }
+
+    #chat-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      height: 100dvh;
+      min-height: 0;
+      min-width: 0;
+      overflow: hidden;
+      background: var(--claude-bg);
+      position: relative;
+    }
+
+    #artifacts-panel {
+      width: 480px;
+      max-width: 45vw;
+      background: var(--claude-card-subtle);
+      border-left: 1px solid var(--claude-border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      transition: all 0.25s ease;
+      z-index: 30;
+    }
+    #artifacts-panel.closed {
+      display: none;
+    }
+
+    /* ------------------------------------------------------------- */
+    /* SIDEBAR COMPOSANTS                                            */
+    /* ------------------------------------------------------------- */
+    .sidebar-header {
+      padding: 16px 14px 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--claude-border-subtle);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      font-size: 15px;
+      letter-spacing: -0.2px;
+    }
+    .brand-icon {
+      width: 26px;
+      height: 26px;
+      border-radius: 7px;
+      background: var(--claude-coral);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+    }
+
+    .btn-new-chat {
+      margin: 12px 14px;
+      padding: 10px 14px;
+      background: var(--claude-card);
+      border: 1px solid var(--claude-border);
+      border-radius: 9px;
+      color: var(--claude-text);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13.5px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .btn-new-chat:hover {
+      background: #2a2a27;
+      border-color: #3d3d37;
+    }
+
+    .section-label {
+      padding: 10px 14px 6px 14px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--claude-text-dim);
+    }
+
+    /* Sélecteur de projet */
+    .project-selector {
+      margin: 0 14px 12px 14px;
+      position: relative;
+    }
+    .project-select-btn {
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--claude-card-subtle);
+      border: 1px solid var(--claude-border);
+      border-radius: 8px;
+      color: var(--claude-text);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .project-menu {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      margin-top: 4px;
+      background: var(--claude-card);
+      border: 1px solid var(--claude-border);
+      border-radius: 8px;
+      max-height: 240px;
+      overflow-y: auto;
+      z-index: 50;
+      display: none;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+    }
+    .project-item {
+      padding: 8px 12px;
+      font-size: 12.5px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+    .project-item:hover {
+      background: #2f2f2b;
+      color: var(--claude-coral);
+    }
+
+    /* Sélecteur de modes (Swarm vs Coder) */
+    .mode-group {
+      margin: 0 14px 16px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .mode-pill {
+      padding: 7px 10px;
+      border-radius: 7px;
+      font-size: 12.5px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: var(--claude-text-muted);
+      cursor: pointer;
+      transition: all 0.12s ease;
+    }
+    .mode-pill:hover {
+      background: var(--claude-card);
+      color: var(--claude-text);
+    }
+    .mode-pill.active {
+      background: var(--claude-coral-dim);
+      color: var(--claude-coral);
+      font-weight: 500;
+    }
+
+    /* Historique dynamique */
+    .chat-history {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .history-item {
+      padding: 8px 10px;
+      border-radius: 7px;
+      font-size: 12.5px;
+      color: var(--claude-text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      transition: all 0.15s ease;
+      position: relative;
+    }
+    .history-item:hover {
+      background: var(--claude-card);
+      color: var(--claude-text);
+    }
+    .history-item.active {
+      background: rgba(217, 119, 87, 0.15);
+      color: var(--claude-coral);
+      font-weight: 500;
+    }
+    .history-title {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+    .history-del-btn {
+      opacity: 0;
+      background: transparent;
+      border: none;
+      color: var(--claude-text-dim);
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+    }
+    .history-item:hover .history-del-btn {
+      opacity: 0.8;
+    }
+    .history-del-btn:hover {
+      color: var(--claude-red);
+      opacity: 1 !important;
+      background: rgba(224, 108, 117, 0.15);
+    }
+
+    /* Sidebar footer */
+    .sidebar-footer {
+      padding: 12px 14px;
+      border-top: 1px solid var(--claude-border-subtle);
+      font-size: 11.5px;
+      color: var(--claude-text-dim);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .sys-pill {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* ------------------------------------------------------------- */
+    /* CHAT HEADER & FILTRE                                          */
+    /* ------------------------------------------------------------- */
+    .chat-header {
+      height: 54px;
+      border-bottom: 1px solid var(--claude-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      background: rgba(24, 24, 22, 0.95);
+      backdrop-filter: blur(10px);
+      z-index: 20;
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .badge-project {
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--claude-gold);
+      background: rgba(229, 192, 123, 0.1);
+      border: 1px solid rgba(229, 192, 123, 0.25);
+      padding: 3px 9px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .badge-branch {
+      font-size: 11.5px;
+      color: var(--claude-cyan);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-header {
+      background: transparent;
+      border: 1px solid var(--claude-border);
+      border-radius: 7px;
+      padding: 6px 11px;
+      font-size: 12px;
+      color: var(--claude-text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+    .btn-header:hover {
+      background: var(--claude-card);
+      color: var(--claude-text);
+    }
+    .btn-header.active {
+      border-color: var(--claude-coral);
+      color: var(--claude-coral);
+    }
+
+    /* ------------------------------------------------------------- */
+    /* MESSAGES AREA                                                 */
+    /* ------------------------------------------------------------- */
+    .messages-scroll {
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 24px 20px 0 20px;
+      display: block;
+    }
+    .messages-track {
+      width: 100%;
+      max-width: 780px;
+      margin: 0 auto;
+      padding-bottom: 260px;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+    .btn-scroll-bottom {
+      position: absolute;
+      bottom: 130px;
+      right: 28px;
+      background: var(--claude-card);
+      border: 1px solid var(--claude-coral);
+      color: var(--claude-text);
+      border-radius: 20px;
+      padding: 6px 13px;
+      font-size: 12px;
+      font-weight: 500;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+      z-index: 30;
+      pointer-events: auto;
+      transition: all 0.15s ease;
+    }
+    .btn-scroll-bottom:hover {
+      background: var(--claude-coral);
+      color: #fff;
+    }
+
+    .msg-row {
+      display: flex;
+      gap: 14px;
+      animation: fadeIn 0.2s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .msg-avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .avatar-user {
+      background: #3a3935;
+      color: #fff;
+    }
+    .avatar-claude {
+      background: var(--claude-coral);
+      color: #fff;
+    }
+
+    .msg-content {
+      flex: 1;
+      min-width: 0;
+      font-size: 14.5px;
+      line-height: 1.6;
+      color: var(--claude-text);
+    }
+    .msg-content img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 8px;
+      border: 1px solid var(--claude-border);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      margin: 14px 0;
+      display: block;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .msg-content img:hover {
+      transform: scale(1.01);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
+    }
+    .msg-content p {
+      margin-bottom: 12px;
+    }
+    .msg-content p:last-child {
+      margin-bottom: 0;
+    }
+    .msg-content pre {
+      background: #111110;
+      border: 1px solid var(--claude-border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      overflow-x: auto;
+      margin: 12px 0;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .msg-content code:not(pre code) {
+      background: #242421;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-size: 13px;
+      color: var(--claude-coral);
+    }
+    .msg-content ul, .msg-content ol {
+      margin-left: 20px;
+      margin-bottom: 12px;
+    }
+    .msg-content li {
+      margin-bottom: 4px;
+    }
+
+    .msg-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .msg-action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11.5px;
+      color: var(--claude-text-muted);
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--claude-border);
+      border-radius: 6px;
+      padding: 4px 9px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .msg-action-btn:hover {
+      color: var(--claude-coral);
+      border-color: var(--claude-coral);
+      background: var(--claude-card);
+    }
+
+    /* ------------------------------------------------------------- */
+    /* DIAGRAMMES TECHNIQUES MERMAID                                 */
+    /* ------------------------------------------------------------- */
+    .diagramme-box {
+      background: var(--claude-card);
+      border: 1px solid var(--claude-border);
+      border-radius: 8px;
+      margin: 14px 0;
+      overflow: hidden;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    }
+    .diagramme-header {
+      background: var(--claude-card-subtle);
+      border-bottom: 1px solid var(--claude-border-subtle);
+      padding: 7px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .diagramme-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--claude-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .diagramme-actions {
+      display: flex;
+      gap: 6px;
+    }
+    .diag-btn {
+      background: transparent;
+      border: 1px solid var(--claude-border);
+      color: var(--claude-text-muted);
+      padding: 3px 8px;
+      border-radius: 5px;
+      font-size: 11px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s ease;
+    }
+    .diag-btn:hover {
+      background: var(--claude-card);
+      border-color: var(--claude-coral);
+      color: var(--claude-coral);
+    }
+    .diagramme-body {
+      padding: 16px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow-x: auto;
+      background: #141412;
+      min-height: 80px;
+    }
+    .diagramme-body .mermaid {
+      width: 100%;
+      text-align: center;
+    }
+    .diagramme-body .mermaid svg {
+      max-width: 100% !important;
+      height: auto !important;
+    }
+
+    /* ------------------------------------------------------------- */
+    /* TOOL CALL CARDS (Façon Claude Code)                          */
+    /* ------------------------------------------------------------- */
+    .tool-card {
+      margin: 8px 0;
+      background: var(--claude-card-subtle);
+      border: 1px solid var(--claude-border);
+      border-radius: 7px;
+      overflow: hidden;
+      font-size: 12.5px;
+    }
+    .tool-header {
+      padding: 7px 11px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+      background: rgba(255,255,255,0.015);
+    }
+    .tool-header:hover {
+      background: rgba(255,255,255,0.035);
+    }
+    .tool-badge {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-weight: 500;
+    }
+    .tool-badge .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--claude-coral);
+    }
+    .tool-badge .dot.success { background: var(--claude-green); }
+    .tool-badge .dot.running { animation: pulse 1.2s infinite; }
+    @keyframes pulse { 0% { opacity: 0.3; } 50% { opacity: 1; } 100% { opacity: 0.3; } }
+    .tool-detail {
+      padding: 8px 11px;
+      border-top: 1px solid var(--claude-border-subtle);
+      background: #121211;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11.5px;
+      color: #9e9d95;
+      display: none;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    /* ------------------------------------------------------------- */
+    /* SWARM STEPPER (Pipeline Multi-Agents)                         */
+    /* ------------------------------------------------------------- */
+    .swarm-stepper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: #1c1c1a;
+      border: 1px solid var(--claude-border);
+      border-radius: 9px;
+      margin-bottom: 14px;
+    }
+    .step-item {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--claude-text-dim);
+    }
+    .step-item.active {
+      color: var(--claude-coral);
+      font-weight: 600;
+    }
+    .step-item.done {
+      color: var(--claude-green);
+    }
+    .step-bubble {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 1px solid currentColor;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+    }
+    .step-item.done .step-bubble {
+      background: rgba(152, 195, 121, 0.15);
+      border-color: var(--claude-green);
+    }
+
+    /* ------------------------------------------------------------- */
+    /* INDICATEUR DE RÉFLEXION DU MODÈLE (Thinking Indicator)       */
+    /* ------------------------------------------------------------- */
+    .thinking-box {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      margin-bottom: 12px;
+      background: rgba(217, 119, 87, 0.08);
+      border: 1px solid rgba(217, 119, 87, 0.25);
+      border-radius: 20px;
+      font-size: 12px;
+      color: var(--claude-coral);
+      font-weight: 500;
+      user-select: none;
+      transition: all 0.25s ease;
+    }
+    .thinking-box.done {
+      background: rgba(255, 255, 255, 0.03);
+      border-color: var(--claude-border-subtle);
+      color: var(--claude-text-dim);
+      font-size: 11.5px;
+    }
+    .thinking-dots {
+      display: inline-flex;
+      gap: 3px;
+      align-items: center;
+    }
+    .thinking-dot {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: thinkingBounce 1.4s infinite ease-in-out both;
+    }
+    .thinking-dot:nth-child(1) { animation-delay: -0.32s; }
+    .thinking-dot:nth-child(2) { animation-delay: -0.16s; }
+    @keyframes thinkingBounce {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.3; }
+      40% { transform: scale(1.2); opacity: 1; }
+    }
+
+    /* ------------------------------------------------------------- */
+    /* PROMPT INPUT BAR (Bas de page)                                */
+    /* ------------------------------------------------------------- */
+    .input-wrapper {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 0 20px 20px 20px;
+      background: linear-gradient(to top, var(--claude-bg) 75%, transparent);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      pointer-events: none;
+      z-index: 25;
+    }
+    .input-box {
+      width: 100%;
+      max-width: 780px;
+      background: var(--claude-card);
+      border: 1px solid #383833;
+      border-radius: 14px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      box-shadow: 0 12px 35px rgba(0,0,0,0.45);
+      transition: border-color 0.15s ease;
+      pointer-events: auto;
+    }
+    .input-box:focus-within {
+      border-color: var(--claude-coral);
+    }
+    .input-box.drag-over {
+      border-color: var(--claude-coral) !important;
+      background: rgba(217, 119, 87, 0.08) !important;
+      box-shadow: 0 0 25px rgba(217, 119, 87, 0.3) !important;
+    }
+
+    /* Barre des fichiers joints au prompt */
+    .attached-files-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding-bottom: 6px;
+      margin-bottom: 4px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .file-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(217, 119, 87, 0.12);
+      border: 1px solid rgba(217, 119, 87, 0.3);
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: 11.5px;
+      color: var(--claude-text);
+      max-width: 260px;
+    }
+    .file-chip i {
+      color: var(--claude-coral);
+    }
+    .file-chip-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+    }
+    .file-chip-size {
+      color: var(--claude-text-dim);
+      font-size: 10px;
+    }
+    .file-chip-del {
+      background: none;
+      border: none;
+      color: var(--claude-text-dim);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      padding: 1px;
+      border-radius: 4px;
+      margin-left: 2px;
+    }
+    .file-chip-del:hover {
+      color: var(--claude-coral);
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    /* Badges de fichiers joints dans la bulle utilisateur */
+    .user-attached-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .user-file-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(229, 192, 123, 0.1);
+      border: 1px solid rgba(229, 192, 123, 0.3);
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: 11.5px;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--claude-gold);
+    }
+    .input-textarea {
+      width: 100%;
+      max-height: 180px;
+      background: transparent;
+      border: none;
+      outline: none;
+      resize: none;
+      font-family: inherit;
+      font-size: 14.5px;
+      line-height: 1.5;
+      color: var(--claude-text);
+    }
+    .input-textarea::placeholder {
+      color: var(--claude-text-dim);
+    }
+    .input-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 4px;
+    }
+    .shortcuts-pills {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow-x: auto;
+    }
+    .shortcut-pill {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--claude-border);
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: 11.5px;
+      color: var(--claude-text-muted);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .shortcut-pill:hover {
+      background: rgba(255,255,255,0.08);
+      color: var(--claude-coral);
+    }
+    .input-buttons {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--claude-text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .btn-icon:hover {
+      background: rgba(255,255,255,0.05);
+      color: var(--claude-text);
+    }
+    .btn-send {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      border: none;
+      background: var(--claude-coral);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    .btn-send:hover {
+      background: var(--claude-coral-hover);
+    }
+
+    /* ------------------------------------------------------------- */
+    /* ARTIFACTS PANEL (Volet Droit)                                 */
+    /* ------------------------------------------------------------- */
+    .artifacts-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--claude-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #151514;
+    }
+    .artifacts-tabs {
+      display: flex;
+      gap: 4px;
+    }
+    .art-tab {
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      color: var(--claude-text-muted);
+      cursor: pointer;
+    }
+    .art-tab.active {
+      background: var(--claude-card);
+      color: var(--claude-coral);
+      font-weight: 500;
+    }
+    .artifacts-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px;
+      font-size: 13px;
+    }
+    .code-viewer {
+      background: #111110;
+      border: 1px solid var(--claude-border);
+      border-radius: 8px;
+      padding: 12px;
+      overflow-x: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .file-tree-item {
+      padding: 5px 8px;
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      color: var(--claude-text-muted);
+      cursor: pointer;
+    }
+    .file-tree-item:hover {
+      background: var(--claude-card);
+      color: var(--claude-text);
+    }
+
+    /* Responsive Mobile */
+    @media (max-width: 768px) {
+      #sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        transform: translateX(-100%);
+      }
+      #sidebar.open {
+        transform: translateX(0);
+      }
+      #artifacts-panel {
+        position: fixed;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        max-width: 90vw;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============================================================ -->
+  <!-- 1. SIDEBAR GAUCHE                                            -->
+  <!-- ============================================================ -->
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <div class="brand">
+        <div class="brand-icon">
+          <i data-lucide="sparkles" style="width: 15px; height: 15px;"></i>
+        </div>
+        <span>Claude RIOT</span>
+      </div>
+      <button class="btn-icon" onclick="toggleSidebar()" title="Fermer la barre">
+        <i data-lucide="chevron-left" style="width: 16px; height: 16px;"></i>
+      </button>
+    </div>
+
+    <button class="btn-new-chat" onclick="nouveauChat()">
+      <i data-lucide="plus" style="width: 16px; height: 16px; color: var(--claude-coral);"></i>
+      <span>Nouveau chat</span>
+    </button>
+
+    <div class="section-label">Projet ou Contexte</div>
+    <div class="project-selector">
+      <button class="project-select-btn" onclick="toggleProjectMenu()">
+        <span id="label-projet-sidebar">Discussion Libre</span>
+        <i data-lucide="chevron-down" style="width: 14px; height: 14px;"></i>
+      </button>
+      <div id="project-menu" class="project-menu"></div>
+    </div>
+
+    <div class="section-label">Mode d'action</div>
+    <div class="mode-group">
+      <div class="mode-pill active" data-mode="swarm" onclick="changerMode('swarm', this)">
+        <i data-lucide="users" style="width: 14px; height: 14px;"></i>
+        <span>⚡ Swarm Multi-Agents</span>
+      </div>
+      <div class="mode-pill" data-mode="raw" onclick="changerMode('raw', this)">
+        <i data-lucide="flame" style="width: 14px; height: 14px; color: #ff5555;"></i>
+        <span>🔥 RIOT Raw (0 Censure)</span>
+      </div>
+      <div class="mode-pill" data-mode="trader" onclick="changerMode('trader', this)">
+        <i data-lucide="trending-up" style="width: 14px; height: 14px; color: var(--claude-gold);"></i>
+        <span>📈 RIOT Trader (Quant)</span>
+      </div>
+      <div class="mode-pill" data-mode="coder" onclick="changerMode('coder', this)">
+        <i data-lucide="code-2" style="width: 14px; height: 14px;"></i>
+        <span>💻 RIOT Coder (Mono)</span>
+      </div>
+      <div class="mode-pill" data-mode="architect" onclick="changerMode('architect', this)">
+        <i data-lucide="compass" style="width: 14px; height: 14px;"></i>
+        <span>📐 Architecte seul</span>
+      </div>
+      <div class="mode-pill" data-mode="review" onclick="changerMode('review', this)">
+        <i data-lucide="shield-check" style="width: 14px; height: 14px;"></i>
+        <span>🛡️ Reviewer Sécurité</span>
+      </div>
+    </div>
+
+    <div class="section-label">Historique Discussions</div>
+    <div class="chat-history" id="chat-history">
+      <div style="padding: 10px; font-size: 11.5px; color: var(--claude-text-dim);">Chargement des discussions...</div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="sys-pill">
+        <span>Modèle LLM :</span>
+        <strong id="footer-modele" style="color: var(--claude-text);">Codestral</strong>
+      </div>
+      <div class="sys-pill">
+        <span>RAM système :</span>
+        <span id="footer-ram" style="color: var(--claude-green);">-- / -- Go</span>
+      </div>
+      <div class="sys-pill">
+        <span>Tokens session :</span>
+        <span id="footer-tokens" style="color: var(--claude-gold);">0 tokens</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============================================================ -->
+  <!-- 2. ZONE CENTRALE (CHAT)                                      -->
+  <!-- ============================================================ -->
+  <main id="chat-container">
+    <!-- Header -->
+    <header class="chat-header">
+      <div class="header-left">
+        <button class="btn-icon" onclick="toggleSidebar()">
+          <i data-lucide="menu" style="width: 18px; height: 18px;"></i>
+        </button>
+        <div class="badge-project" id="header-project-badge" onclick="toggleProjectMenu()" style="cursor: pointer;" title="Cliquer pour changer de projet ou passer en Discussion Libre">
+          <i data-lucide="message-square" id="icon-projet-header" style="width: 13px; height: 13px;"></i>
+          <span id="label-projet-header">Discussion Libre</span>
+        </div>
+        <div class="badge-branch" id="header-branch-badge" style="display: none;">
+          <i data-lucide="git-branch" style="width: 12px; height: 12px;"></i>
+          <span id="label-branche-header">main</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <button class="btn-header" id="btn-toggle-artifacts" onclick="toggleArtifacts()">
+          <i data-lucide="panel-right" style="width: 14px; height: 14px;"></i>
+          <span>Artifacts</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Fil de messages -->
+    <div class="messages-scroll" id="messages-scroll">
+      <div class="messages-track" id="messages-track">
+        <!-- Message d'accueil Claude -->
+        <div class="msg-row">
+          <div class="msg-avatar avatar-claude">
+            <i data-lucide="sparkles" style="width: 16px; height: 16px;"></i>
+          </div>
+          <div class="msg-content">
+            <p><strong>Bonjour, je suis Claude RIOT.</strong></p>
+            <p>Je suis connecté à ton environnement local et prêt à travailler sur tes projets (<strong>Trade App</strong>, <strong>medi_go</strong>, <strong>neuro-studio</strong>, etc.).</p>
+            <p>Tu peux me demander de modifier du code, concevoir une architecture, exécuter des tests unitaires ou lancer la chaîne <strong>Swarm Multi-Agents</strong>.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bouton flottant de retour en bas de page -->
+    <button class="btn-scroll-bottom" id="btn-scroll-bottom" onclick="allerEnBas(true)" title="Défiler jusqu'en bas">
+      <i data-lucide="arrow-down" style="width: 14px; height: 14px;"></i>
+      <span>Bas de page</span>
+    </button>
+
+    <!-- Saisie Prompt (Bas de page) -->
+    <div class="input-wrapper" id="input-wrapper">
+      <div class="input-box" id="input-box">
+        <!-- Barre de prévisualisation des fichiers joints -->
+        <div id="attached-files-bar" class="attached-files-bar" style="display: none;"></div>
+
+        <textarea
+          id="prompt-input"
+          class="input-textarea"
+          rows="1"
+          placeholder="Demandez à Claude d'explorer, coder ou tester... (ou déposez vos fichiers ici)"
+          onkeydown="gererTouche(event)"
+          oninput="autoResize(this)"
+        ></textarea>
+        <div class="input-actions">
+          <div class="shortcuts-pills">
+            <div class="shortcut-pill" onclick="injecterOrdre('/raw ')">/raw (0 censure)</div>
+            <div class="shortcut-pill" onclick="injecterOrdre('/trade Analyse BTCUSDT avec sizing pour 10000$')">/trade BTC</div>
+            <div class="shortcut-pill" onclick="injecterOrdre('/swarm ')">/swarm</div>
+            <div class="shortcut-pill" onclick="injecterOrdre('/architect ')">/architect</div>
+            <div class="shortcut-pill" onclick="injecterOrdre('Explore la structure du projet')">Explorer</div>
+            <div class="shortcut-pill" onclick="injecterOrdre('Vérifie la sécurité et les secrets')">Sécurité</div>
+          </div>
+          <div class="input-buttons">
+            <input type="file" id="file-upload-input" multiple style="display: none;" onchange="gererSelectionFichiers(this.files)">
+            <button class="btn-icon" id="btn-attach" onclick="document.getElementById('file-upload-input').click()" title="Joindre des fichiers (code, texte, markdown, JSON, etc.)">
+              <i data-lucide="paperclip" style="width: 16px; height: 16px;"></i>
+            </button>
+            <button class="btn-icon" id="btn-mic" onclick="toggleVocal()" title="Parler à la voix">
+              <i data-lucide="mic" style="width: 16px; height: 16px;"></i>
+            </button>
+            <button class="btn-send" onclick="envoyerMessage()" title="Envoyer (Entrée)">
+              <i data-lucide="arrow-up" style="width: 16px; height: 16px;"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ============================================================ -->
+  <!-- 3. VOLET LATÉRAL DROIT (ARTIFACTS FAÇON CLAUDE)              -->
+  <!-- ============================================================ -->
+  <aside id="artifacts-panel" class="closed">
+    <div class="artifacts-header">
+      <div class="artifacts-tabs">
+        <div class="art-tab active" id="tab-code" onclick="afficherOngletArtifact('code')">Code</div>
+        <div class="art-tab" id="tab-preview" onclick="afficherOngletArtifact('preview')">Aperçu</div>
+        <div class="art-tab" id="tab-tree" onclick="afficherOngletArtifact('tree')">Fichiers</div>
+      </div>
+      <div style="display: flex; gap: 4px;">
+        <button class="btn-icon" onclick="copierCodeArtifact()" title="Copier le code">
+          <i data-lucide="copy" style="width: 14px; height: 14px;"></i>
+        </button>
+        <button class="btn-icon" onclick="toggleArtifacts()" title="Fermer">
+          <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+        </button>
+      </div>
+    </div>
+    <div class="artifacts-body" id="artifacts-body">
+      <!-- Vue Code -->
+      <div id="art-view-code">
+        <div style="margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+          <div style="font-size: 11.5px; color: var(--claude-gold); font-family: 'JetBrains Mono', monospace;" id="art-file-title">backend/app/main.py</div>
+          <button class="btn-header" onclick="attacherFichierActifAuChat()" title="Joindre ce fichier au prompt pour poser une question dessus" style="font-size: 11px; padding: 3px 8px;">
+            <i data-lucide="paperclip" style="width: 12px; height: 12px;"></i>
+            <span>Joindre au prompt</span>
+          </button>
+        </div>
+        <pre class="code-viewer"><code class="language-python" id="art-code-content"># Sélectionnez un fichier ou générez du code pour l'afficher ici.</code></pre>
+      </div>
+      <!-- Vue Aperçu -->
+      <div id="art-view-preview" style="display: none;">
+        <div id="art-preview-content" style="line-height: 1.6;">Aperçu direct...</div>
+      </div>
+      <!-- Vue Fichiers -->
+      <div id="art-view-tree" style="display: none;">
+        <div id="art-tree-list"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============================================================ -->
+  <!-- JAVASCRIPT DU CLIENT CLAUDE RIOT                             -->
+  <!-- ============================================================ -->
+  <script>
+    const md = window.markdownit({
+      html: true,
+      linkify: true,
+      highlight: function (str, lang) {
+        if (lang && hljs.getLanguage(lang)) {
+          try {
+            return hljs.highlight(str, { language: lang }).value;
+          } catch (__) {}
+        }
+        return '';
+      }
+    });
+
+    if (window.mermaid) {
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'dark',
+        securityLevel: 'loose',
+        themeVariables: {
+          darkMode: true,
+          background: '#141412',
+          primaryColor: '#242421',
+          primaryTextColor: '#ececec',
+          primaryBorderColor: '#d97757',
+          lineColor: '#e5c07b',
+          secondaryColor: '#1c1c1a',
+          tertiaryColor: '#2e2e2a'
+        }
+      });
+    }
+
+    const defaultFence = md.renderer.rules.fence || function(tokens, idx, options, env, self) {
+      return self.renderToken(tokens, idx, options);
+    };
+
+    md.renderer.rules.fence = function (tokens, idx, options, env, self) {
+      const token = tokens[idx];
+      const lang = token.info ? token.info.trim() : '';
+      if (lang === 'mermaid') {
+        const raw = token.content;
+        const safeCode = raw.replace(/"/g, '&quot;');
+        const diagId = 'mermaid-' + Math.random().toString(36).substr(2, 9);
+        return `<div class="diagramme-box" id="${diagId}-wrapper">
+          <div class="diagramme-header">
+            <span class="diagramme-title"><i data-lucide="git-fork" style="width:13px;height:13px;"></i> Diagramme Technique</span>
+            <div class="diagramme-actions">
+              <button class="diag-btn" onclick="copierCodeMermaid('${diagId}')" title="Copier le code Mermaid"><i data-lucide="copy" style="width:12px;height:12px;"></i> Copier</button>
+            </div>
+          </div>
+          <div class="diagramme-body">
+            <div class="mermaid" id="${diagId}">${raw}</div>
+          </div>
+          <textarea id="${diagId}-raw" style="display:none;">${safeCode}</textarea>
+        </div>`;
+      }
+      return defaultFence(tokens, idx, options, env, self);
+    };
+
+    function copierCodeMermaid(id) {
+      const el = document.getElementById(id + '-raw');
+      if (el) {
+        navigator.clipboard.writeText(el.value).then(() => {
+          alert('Code Mermaid copié dans le presse-papier !');
+        });
+      }
+    }
+
+    async function rendreDiagrammesMermaid() {
+      if (window.mermaid) {
+        try {
+          await mermaid.run({
+            querySelector: '.mermaid'
+          });
+          lucide.createIcons();
+        } catch (e) {
+          console.warn("Rendu Mermaid :", e);
+        }
+      }
+    }
+
+    let _MODE_ACTIF = "swarm";
+    let _PROJET_ACTIF = "";
+    let _CODE_ACTUEL = "";
+    let _CHAT_ID_ACTIF = null;
+    let _LISTE_CHATS = [];
+
+    // Initialisation
+    document.addEventListener("DOMContentLoaded", () => {
+      lucide.createIcons();
+      rafraichirSession();
+      chargerProjets();
+      chargerArborescence();
+      chargerHistoriqueChats();
+
+      const scrollEl = document.getElementById("messages-scroll");
+      const btnBottom = document.getElementById("btn-scroll-bottom");
+      if (scrollEl && btnBottom) {
+        scrollEl.addEventListener("scroll", () => {
+          const distBas = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
+          btnBottom.style.display = (distBas > 140) ? "inline-flex" : "none";
+        });
+      }
+
+      // Support Drag & Drop global de fichiers sur l'application
+      const inputBox = document.getElementById("input-box");
+      window.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        if (inputBox) inputBox.classList.add("drag-over");
+      });
+      window.addEventListener("dragleave", (e) => {
+        if (e.clientX <= 0 || e.clientY <= 0) {
+          if (inputBox) inputBox.classList.remove("drag-over");
+        }
+      });
+      window.addEventListener("drop", (e) => {
+        e.preventDefault();
+        if (inputBox) inputBox.classList.remove("drag-over");
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+          gererSelectionFichiers(e.dataTransfer.files);
+        }
+      });
+
+      // Support Collage direct (Ctrl+V) de fichiers ou texte dans le prompt
+      const promptInput = document.getElementById("prompt-input");
+      if (promptInput) {
+        promptInput.addEventListener("paste", (e) => {
+          if (e.clipboardData && e.clipboardData.files && e.clipboardData.files.length) {
+            e.preventDefault();
+            gererSelectionFichiers(e.clipboardData.files);
+          }
+        });
+      }
+    });
+
+    function allerEnBas(force = false) {
+      const scrollEl = document.getElementById("messages-scroll");
+      if (!scrollEl) return;
+      const distBas = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
+      if (force || distBas < 220) {
+        scrollEl.scrollTop = scrollEl.scrollHeight;
+      }
+    }
+
+    function toggleSidebar() {
+      const sb = document.getElementById("sidebar");
+      if (window.innerWidth <= 768) {
+        sb.classList.toggle("open");
+      } else {
+        sb.classList.toggle("collapsed");
+      }
+    }
+
+    function toggleArtifacts() {
+      const p = document.getElementById("artifacts-panel");
+      p.classList.toggle("closed");
+      document.getElementById("btn-toggle-artifacts").classList.toggle("active", !p.classList.contains("closed"));
+    }
+
+    function ouvrirArtifact(titre, contenu, lang = "python") {
+      document.getElementById("art-file-title").innerText = titre;
+      document.getElementById("art-code-content").className = "language-" + lang;
+      document.getElementById("art-code-content").innerText = contenu;
+      hljs.highlightElement(document.getElementById("art-code-content"));
+      _CODE_ACTUEL = contenu;
+      
+      const p = document.getElementById("artifacts-panel");
+      p.classList.remove("closed");
+      document.getElementById("btn-toggle-artifacts").classList.add("active");
+      afficherOngletArtifact('code');
+    }
+
+    function afficherOngletArtifact(nom) {
+      document.getElementById("art-view-code").style.display = (nom === 'code') ? 'block' : 'none';
+      document.getElementById("art-view-preview").style.display = (nom === 'preview') ? 'block' : 'none';
+      document.getElementById("art-view-tree").style.display = (nom === 'tree') ? 'block' : 'none';
+
+      document.getElementById("tab-code").classList.toggle("active", nom === 'code');
+      document.getElementById("tab-preview").classList.toggle("active", nom === 'preview');
+      document.getElementById("tab-tree").classList.toggle("active", nom === 'tree');
+    }
+
+    function copierCodeArtifact() {
+      if (_CODE_ACTUEL) {
+        navigator.clipboard.writeText(_CODE_ACTUEL);
+        alert("Code copié dans le presse-papiers !");
+      }
+    }
+
+    function changerMode(mode, el) {
+      _MODE_ACTIF = mode;
+      document.querySelectorAll(".mode-pill").forEach(p => p.classList.remove("active"));
+      if (el) {
+        el.classList.add("active");
+      } else {
+        const cible = document.querySelector(`.mode-pill[data-mode="${mode}"]`);
+        if (cible) cible.classList.add("active");
+      }
+    }
+
+    async function rafraichirSession() {
+      try {
+        const res = await fetch("/api/claude/session");
+        const data = await res.json();
+        if (data.ok) {
+          const estLibre = data.projet.libre || !data.projet.chemin;
+          _PROJET_ACTIF = estLibre ? "" : data.projet.nom;
+          
+          const labelSidebar = document.getElementById("label-projet-sidebar");
+          const labelHeader = document.getElementById("label-projet-header");
+          const iconHeader = document.getElementById("icon-projet-header");
+          const badgeBranch = document.getElementById("header-branch-badge");
+
+          if (estLibre) {
+            labelSidebar.innerText = "Discussion Libre";
+            labelHeader.innerText = "Discussion Libre";
+            if (iconHeader) iconHeader.setAttribute("data-lucide", "message-square");
+            if (badgeBranch) badgeBranch.style.display = "none";
+          } else {
+            labelSidebar.innerText = data.projet.nom;
+            labelHeader.innerText = data.projet.nom;
+            if (iconHeader) iconHeader.setAttribute("data-lucide", "folder");
+            document.getElementById("label-branche-header").innerText = data.projet.branche || "main";
+            if (badgeBranch) badgeBranch.style.display = "inline-flex";
+          }
+          
+          document.getElementById("footer-modele").innerText = data.llm.modele || "Codestral";
+          document.getElementById("footer-ram").innerText = `${data.systeme.ram_pct}% (${data.systeme.ram_dispo_go} Go lib.)`;
+          document.getElementById("footer-tokens").innerText = `${data.tokens.total} tokens`;
+          lucide.createIcons();
+        }
+      } catch (e) {
+        console.error("Erreur session:", e);
+      }
+    }
+
+    async function chargerProjets() {
+      try {
+        const res = await fetch("/api/claude/projets");
+        const data = await res.json();
+        if (data.ok) {
+          const menu = document.getElementById("project-menu");
+          menu.innerHTML = data.projets.map(p => `
+            <div class="project-item ${p.actif ? 'active' : ''}" onclick="selectionnerProjet('${p.nom}')">
+              <span>${p.libre ? '💬' : '📁'} ${p.nom}</span>
+              <span style="font-size: 10.5px; color: var(--claude-text-dim);">${p.branche}</span>
+            </div>
+          `).join("");
+        }
+      } catch (e) {
+        console.error("Erreur projets:", e);
+      }
+    }
+
+    function toggleProjectMenu() {
+      const m = document.getElementById("project-menu");
+      m.style.display = (m.style.display === "block") ? "none" : "block";
+    }
+
+    async function selectionnerProjet(nom) {
+      document.getElementById("project-menu").style.display = "none";
+      try {
+        const res = await fetch("/api/claude/changer_projet", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projet: nom })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          rafraichirSession();
+          chargerArborescence();
+        }
+      } catch (e) {
+        alert("Erreur changement projet : " + e);
+      }
+    }
+
+    async function chargerArborescence() {
+      try {
+        const res = await fetch("/api/claude/arborescence");
+        const data = await res.json();
+        if (data.ok) {
+          const list = document.getElementById("art-tree-list");
+          if (!data.fichiers || !data.fichiers.length) {
+            list.innerHTML = `
+              <div style="padding: 16px; text-align: center; color: var(--claude-text-dim); font-size: 12px;">
+                <p>Aucun projet ouvert.</p>
+                <p style="margin-top: 6px;">Sélectionnez un projet dans la barre latérale pour explorer ses fichiers ou joignez des fichiers directement avec le trombone 📎.</p>
+              </div>
+            `;
+            return;
+          }
+          list.innerHTML = data.fichiers.map(f => {
+            const icon = f.type === 'dossier' ? 'folder' : 'file-code';
+            const click = f.type === 'fichier' ? `onclick="chargerFichierProjet('${f.chemin}')"` : '';
+            return `
+              <div class="file-tree-item" ${click}>
+                <i data-lucide="${icon}" style="width: 13px; height: 13px;"></i>
+                <span>${f.chemin}</span>
+              </div>
+            `;
+          }).join("");
+          lucide.createIcons();
+        }
+      } catch (e) {
+        console.error("Erreur arborescence:", e);
+      }
+    }
+
+    async function chargerFichierProjet(chemin) {
+      try {
+        const res = await fetch(`/api/claude/fichier?chemin=${encodeURIComponent(chemin)}`);
+        const data = await res.json();
+        if (data.ok) {
+          ouvrirArtifact(data.nom, data.contenu, data.extension);
+        } else {
+          alert("Erreur : " + data.erreur);
+        }
+      } catch (e) {
+        alert("Erreur chargement : " + e);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // HISTORIQUE PERSISTANT DES DISCUSSIONS (SQLITE LONG TERME)
+    // -------------------------------------------------------------
+    async function chargerHistoriqueChats() {
+      try {
+        const res = await fetch("/api/claude/chats");
+        const data = await res.json();
+        if (data.ok) {
+          _LISTE_CHATS = data.chats || [];
+          const container = document.getElementById("chat-history");
+          if (!_LISTE_CHATS.length) {
+            container.innerHTML = `
+              <div style="padding: 10px 8px; font-size: 11.5px; color: var(--claude-text-dim); text-align: center;">
+                Aucune discussion précédente.<br>Posez votre première question !
+              </div>
+            `;
+            return;
+          }
+          container.innerHTML = _LISTE_CHATS.map(c => {
+            const estActif = (c.id === _CHAT_ID_ACTIF);
+            const titreSecurise = (c.titre || "Discussion").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            return `
+              <div class="history-item ${estActif ? 'active' : ''}" onclick="chargerChat('${c.id}')" title="${titreSecurise}">
+                <i data-lucide="message-square" style="width: 13px; height: 13px; flex-shrink: 0; opacity: 0.7;"></i>
+                <span class="history-title">${titreSecurise}</span>
+                <button class="history-del-btn" onclick="supprimerChat('${c.id}', event)" title="Supprimer cette discussion">
+                  <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
+                </button>
+              </div>
+            `;
+          }).join("");
+          lucide.createIcons();
+        }
+      } catch (e) {
+        console.error("Erreur chargement historique chats:", e);
+      }
+    }
+
+    async function chargerChat(chatId) {
+      try {
+        const res = await fetch(`/api/claude/chats/${chatId}`);
+        const data = await res.json();
+        if (!data.ok || !data.chat) {
+          alert("Impossible de charger la discussion : " + (data.erreur || "Introuvable"));
+          return;
+        }
+
+        _CHAT_ID_ACTIF = chatId;
+        chargerHistoriqueChats();
+
+        const track = document.getElementById("messages-track");
+        track.innerHTML = "";
+
+        const messages = data.chat.messages || [];
+        if (!messages.length) {
+          track.innerHTML = `
+            <div class="msg-row">
+              <div class="msg-avatar avatar-claude">
+                <i data-lucide="sparkles" style="width: 16px; height: 16px;"></i>
+              </div>
+              <div class="msg-content">
+                <p>Cette discussion est prête. Posez votre question pour continuer.</p>
+              </div>
+            </div>
+          `;
+        } else {
+          for (const m of messages) {
+            if (m.role === "user") {
+              let htmlFichiers = "";
+              if (m.fichiers && m.fichiers.length) {
+                htmlFichiers = `
+                  <div class="user-attached-badges">
+                    ${m.fichiers.map(f => `
+                      <span class="user-file-pill">
+                        <i data-lucide="file-code" style="width: 12px; height: 12px;"></i>
+                        <strong>${f.nom || 'Fichier'}</strong>
+                      </span>
+                    `).join("")}
+                  </div>
+                `;
+              }
+              const texteAffiche = (m.content || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+              track.insertAdjacentHTML("beforeend", `
+                <div class="msg-row">
+                  <div class="msg-avatar avatar-user">U</div>
+                  <div class="msg-content">
+                    ${htmlFichiers}
+                    <p>${texteAffiche}</p>
+                  </div>
+                </div>
+              `);
+            } else {
+              const htmlRendu = md.render(m.content || "");
+              track.insertAdjacentHTML("beforeend", `
+                <div class="msg-row">
+                  <div class="msg-avatar avatar-claude">
+                    <i data-lucide="sparkles" style="width: 16px; height: 16px;"></i>
+                  </div>
+                  <div class="msg-content">
+                    <div class="msg-text">${htmlRendu}</div>
+                    <div class="msg-actions">
+                      <button class="msg-action-btn" onclick="exporterMessageEnPdf(this)" title="Exporter cette réponse en PDF">
+                        <i data-lucide="file-down" style="width: 12px; height: 12px;"></i>
+                        <span>Exporter en PDF</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              `);
+            }
+          }
+        }
+
+        if (data.chat.mode) {
+          changerMode(data.chat.mode);
+        }
+
+        lucide.createIcons();
+        await rendreDiagrammesMermaid();
+        allerEnBas(true);
+      } catch (err) {
+        alert("Erreur lors de la réouverture du chat : " + err);
+      }
+    }
+
+    async function supprimerChat(chatId, event) {
+      if (event) event.stopPropagation();
+      if (!confirm("Voulez-vous vraiment supprimer définitivement cette discussion ?")) {
+        return;
+      }
+      try {
+        const res = await fetch(`/api/claude/chats/${chatId}`, { method: "DELETE" });
+        const data = await res.json();
+        if (data.ok) {
+          if (_CHAT_ID_ACTIF === chatId) {
+            nouveauChat();
+          } else {
+            chargerHistoriqueChats();
+          }
+        }
+      } catch (e) {
+        alert("Erreur lors de la suppression : " + e);
+      }
+    }
+
+    function autoResize(textarea) {
+      textarea.style.height = "auto";
+      textarea.style.height = Math.min(textarea.scrollHeight, 180) + "px";
+    }
+
+    function gererTouche(e) {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        envoyerMessage();
+      }
+    }
+
+    function injecterOrdre(texte) {
+      if (texte.startsWith("/raw")) changerMode("raw");
+      else if (texte.startsWith("/trade")) changerMode("trader");
+      else if (texte.startsWith("/swarm")) changerMode("swarm");
+      else if (texte.startsWith("/architect")) changerMode("architect");
+      else if (texte.startsWith("/review")) changerMode("review");
+
+      const input = document.getElementById("prompt-input");
+      input.value = texte;
+      autoResize(input);
+      input.focus();
+    }
+
+    async function nouveauChat() {
+      _CHAT_ID_ACTIF = null;
+      try {
+        await fetch("/api/claude/nouveau_chat", { method: "POST" });
+      } catch (e) {}
+      
+      chargerHistoriqueChats();
+
+      const contexteNom = _PROJET_ACTIF ? `sur le projet <strong>${_PROJET_ACTIF}</strong>` : "en <strong>Discussion Libre (aucun projet imposé)</strong>";
+
+      document.getElementById("messages-track").innerHTML = `
+        <div class="msg-row">
+          <div class="msg-avatar avatar-claude">
+            <i data-lucide="sparkles" style="width: 16px; height: 16px;"></i>
+          </div>
+          <div class="msg-content">
+            <p><strong>Bonjour, je suis Claude RIOT.</strong></p>
+            <p style="margin-top: 6px; color: var(--claude-text-muted);">Nouvelle discussion ouverte ${contexteNom}. Posez vos questions, discutez librement ou joignez des fichiers.</p>
+          </div>
+        </div>
+      `;
+      lucide.createIcons();
+      allerEnBas(true);
+    }
+
+    // -------------------------------------------------------------
+    // GESTION DES FICHIERS JOINTS AU PROMPT
+    // -------------------------------------------------------------
+    let _FICHIERS_ATTACHES = [];
+
+    function formaterTaille(octets) {
+      if (!octets || octets < 1024) return (octets || 0) + " o";
+      if (octets < 1024 * 1024) return (octets / 1024).toFixed(1) + " Ko";
+      return (octets / (1024 * 1024)).toFixed(1) + " Mo";
+    }
+
+    function rafraichirBarreFichiers() {
+      const bar = document.getElementById("attached-files-bar");
+      if (!_FICHIERS_ATTACHES.length) {
+        bar.style.display = "none";
+        bar.innerHTML = "";
+        return;
+      }
+      bar.style.display = "flex";
+      bar.innerHTML = _FICHIERS_ATTACHES.map((f, idx) => `
+        <div class="file-chip">
+          <i data-lucide="file-code" style="width: 13px; height: 13px;"></i>
+          <span class="file-chip-name" title="${f.nom}">${f.nom}</span>
+          <span class="file-chip-size">${formaterTaille(f.taille)}</span>
+          <button class="file-chip-del" onclick="supprimerFichierAttache(${idx})" title="Retirer ce fichier">
+            <i data-lucide="x" style="width: 12px; height: 12px;"></i>
+          </button>
+        </div>
+      `).join("");
+      lucide.createIcons();
+    }
+
+    function supprimerFichierAttache(index) {
+      _FICHIERS_ATTACHES.splice(index, 1);
+      rafraichirBarreFichiers();
+    }
+
+    function lireFichierTexte(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = (e) => reject(e);
+        reader.readAsText(file, "UTF-8");
+      });
+    }
+
+    async function gererSelectionFichiers(files) {
+      if (!files || !files.length) return;
+      for (const file of Array.from(files)) {
+        if (file.size > 2_000_000) {
+          alert(`Le fichier "${file.name}" dépasse 2 Mo. Veuillez sélectionner un fichier plus compact.`);
+          continue;
+        }
+        try {
+          const contenu = await lireFichierTexte(file);
+          _FICHIERS_ATTACHES.push({
+            nom: file.name,
+            taille: file.size,
+            type: file.type || "text/plain",
+            contenu: contenu
+          });
+        } catch (err) {
+          alert(`Erreur de lecture de "${file.name}" : ${err}`);
+        }
+      }
+      const fileInput = document.getElementById("file-upload-input");
+      if (fileInput) fileInput.value = "";
+      rafraichirBarreFichiers();
+      document.getElementById("prompt-input").focus();
+    }
+
+    function attacherFichierActifAuChat() {
+      const titre = (document.getElementById("art-file-title").innerText || "").trim();
+      if (!_CODE_ACTUEL || !titre || titre.startsWith("bienvenue") || titre.startsWith("backend/app/main.py")) {
+        alert("Ouvrez d'abord un fichier du projet dans le volet pour le joindre.");
+        return;
+      }
+      if (_FICHIERS_ATTACHES.some(f => f.nom === titre)) {
+        alert(`Le fichier "${titre}" est déjà joint au prompt.`);
+        return;
+      }
+      _FICHIERS_ATTACHES.push({
+        nom: titre,
+        taille: _CODE_ACTUEL.length,
+        type: "text/plain",
+        contenu: _CODE_ACTUEL
+      });
+      rafraichirBarreFichiers();
+      document.getElementById("prompt-input").focus();
+    }
+
+    async function envoyerMessage() {
+      const input = document.getElementById("prompt-input");
+      const texte = input.value.trim();
+      const fichiersEnvoi = [..._FICHIERS_ATTACHES];
+      if (!texte && !fichiersEnvoi.length) return;
+
+      input.value = "";
+      autoResize(input);
+      _FICHIERS_ATTACHES = [];
+      rafraichirBarreFichiers();
+
+      const track = document.getElementById("messages-track");
+
+      // 1. Bulle Utilisateur avec affichage des badges des fichiers joints
+      let htmlFichiers = "";
+      if (fichiersEnvoi.length) {
+        htmlFichiers = `
+          <div class="user-attached-badges">
+            ${fichiersEnvoi.map(f => `
+              <span class="user-file-pill">
+                <i data-lucide="file-code" style="width: 12px; height: 12px;"></i>
+                <strong>${f.nom}</strong> <small>(${formaterTaille(f.taille)})</small>
+              </span>
+            `).join("")}
+          </div>
+        `;
+      }
+
+      const promptAffiche = texte || "Analyse ces fichiers et donne-moi une vue d'ensemble complète.";
+      track.insertAdjacentHTML("beforeend", `
+        <div class="msg-row">
+          <div class="msg-avatar avatar-user">U</div>
+          <div class="msg-content">
+            ${htmlFichiers}
+            <p>${promptAffiche.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
+          </div>
+        </div>
+      `);
+
+      // 2. Bulle Réponse Claude avec conteneur d'étapes et d'outils
+      const idRep = "rep-" + Date.now();
+      track.insertAdjacentHTML("beforeend", `
+        <div class="msg-row" id="${idRep}">
+          <div class="msg-avatar avatar-claude">
+            <i data-lucide="sparkles" style="width: 16px; height: 16px;"></i>
+          </div>
+          <div class="msg-content">
+            <div id="${idRep}-swarm-stepper" style="display: none;" class="swarm-stepper">
+              <div class="step-item" id="${idRep}-step-architect"><div class="step-bubble">1</div><span>Architecte</span></div>
+              <div class="step-item" id="${idRep}-step-engineer"><div class="step-bubble">2</div><span>Ingénieur</span></div>
+              <div class="step-item" id="${idRep}-step-tester"><div class="step-bubble">3</div><span>Testeur</span></div>
+              <div class="step-item" id="${idRep}-step-reviewer"><div class="step-bubble">4</div><span>Reviewer</span></div>
+            </div>
+            <div class="thinking-box" id="${idRep}-thinking">
+              <i data-lucide="brain" style="width: 14px; height: 14px;"></i>
+              <span id="${idRep}-thinking-text">Réflexion en cours...</span>
+              <span id="${idRep}-thinking-timer" style="opacity: 0.8; font-variant-numeric: tabular-nums;">(0s)</span>
+              <div class="thinking-dots" id="${idRep}-thinking-dots">
+                <div class="thinking-dot"></div>
+                <div class="thinking-dot"></div>
+                <div class="thinking-dot"></div>
+              </div>
+            </div>
+            <div id="${idRep}-tools"></div>
+            <div id="${idRep}-text" class="msg-text"></div>
+          </div>
+        </div>
+      `);
+      lucide.createIcons();
+      allerEnBas(true);
+
+      let secReflexion = 0;
+      const timerReflexion = setInterval(() => {
+        secReflexion++;
+        const elTimer = document.getElementById(`${idRep}-thinking-timer`);
+        if (elTimer) elTimer.innerText = `(${secReflexion}s)`;
+      }, 1000);
+
+      // 3. Appel de l'API Streaming SSE avec fichiers joints et chat_id persistant
+      try {
+        const response = await fetch("/api/claude/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: texte, mode: _MODE_ACTIF, fichiers: fichiersEnvoi, chat_id: _CHAT_ID_ACTIF })
+        });
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let texteTotal = "";
+        let premierChunk = true;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lignes = buffer.split("\n\n");
+          buffer = lignes.pop();
+
+          for (const ligne of lignes) {
+            if (!ligne.startsWith("data: ")) continue;
+            const event = JSON.parse(ligne.slice(6));
+
+            if (event.type === "debut") {
+              if (event.chat_id && _CHAT_ID_ACTIF !== event.chat_id) {
+                _CHAT_ID_ACTIF = event.chat_id;
+                chargerHistoriqueChats();
+              }
+              if (event.mode === "swarm") {
+                document.getElementById(`${idRep}-swarm-stepper`).style.display = "flex";
+              }
+            }
+
+            if (event.type === "thinking") {
+              const elText = document.getElementById(`${idRep}-thinking-text`);
+              if (elText) elText.innerText = event.message || "Réflexion en cours...";
+            }
+
+            if (event.type === "swarm_etape_start") {
+              const elStep = document.getElementById(`${idRep}-step-${event.etape}`);
+              if (elStep) {
+                elStep.classList.add("active");
+                elStep.classList.remove("done");
+              }
+              const elText = document.getElementById(`${idRep}-thinking-text`);
+              if (elText) elText.innerText = `${event.agent} travaille en coulisses...`;
+            }
+
+            if (event.type === "swarm_etape_end") {
+              const elStep = document.getElementById(`${idRep}-step-${event.etape}`);
+              if (elStep) {
+                elStep.classList.remove("active");
+                elStep.classList.add("done");
+              }
+              if (event.texte && event.etape !== "reviewer") {
+                const idEtape = "stepcard-" + Math.random().toString(36).substr(2, 6);
+                const texteEchappe = event.texte.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                document.getElementById(`${idRep}-tools`).insertAdjacentHTML("beforeend", `
+                  <div class="tool-card" id="${idEtape}">
+                    <div class="tool-header" onclick="document.getElementById('${idEtape}-detail').style.display = document.getElementById('${idEtape}-detail').style.display === 'block' ? 'none' : 'block'">
+                      <div class="tool-badge">
+                        <div class="dot success"></div>
+                        <span>${event.agent} — Rapport interne (cliquer pour voir)</span>
+                      </div>
+                      <span style="font-size: 11px; color: var(--claude-green);">✓ Validé</span>
+                    </div>
+                    <div class="tool-detail" id="${idEtape}-detail">${texteEchappe}</div>
+                  </div>
+                `);
+              }
+            }
+
+            if (event.type === "tool_start") {
+              const elText = document.getElementById(`${idRep}-thinking-text`);
+              if (elText) elText.innerText = `Outil : ${event.outil}...`;
+              const idTool = "tool-" + Math.random().toString(36).substr(2, 6);
+              document.getElementById(`${idRep}-tools`).insertAdjacentHTML("beforeend", `
+                <div class="tool-card" id="${idTool}">
+                  <div class="tool-header" onclick="document.getElementById('${idTool}-detail').style.display = document.getElementById('${idTool}-detail').style.display === 'block' ? 'none' : 'block'">
+                    <div class="tool-badge">
+                      <div class="dot running"></div>
+                      <span>${event.outil}</span>
+                    </div>
+                    <span style="font-size: 11px; color: var(--claude-text-dim);">Exécution...</span>
+                  </div>
+                  <div class="tool-detail" id="${idTool}-detail">${JSON.stringify(event.args, null, 2)}</div>
+                </div>
+              `);
+            }
+
+            if (event.type === "tool_end") {
+              const tools = document.getElementById(`${idRep}-tools`).querySelectorAll(".tool-card");
+              if (tools.length > 0) {
+                const dernier = tools[tools.length - 1];
+                dernier.querySelector(".dot").className = "dot success";
+                dernier.querySelector(".tool-header span:last-child").innerText = `✓ (${event.duree}s)`;
+              }
+            }
+
+            if (event.type === "artifact_update") {
+              chargerFichierProjet(event.fichier);
+            }
+
+            if (event.type === "chunk") {
+              if (premierChunk) {
+                clearInterval(timerReflexion);
+                const elThinking = document.getElementById(`${idRep}-thinking`);
+                if (elThinking) {
+                  elThinking.className = "thinking-box done";
+                  elThinking.innerHTML = `<i data-lucide="check" style="width: 13px; height: 13px; color: var(--claude-green);"></i><span>Réflexion achevée en ${secReflexion}s</span>`;
+                  lucide.createIcons();
+                }
+                document.getElementById(`${idRep}-text`).innerHTML = "";
+                premierChunk = false;
+              }
+              texteTotal += event.texte;
+              document.getElementById(`${idRep}-text`).innerHTML = md.render(texteTotal);
+            }
+
+            if (event.type === "erreur") {
+              clearInterval(timerReflexion);
+              const elThinking = document.getElementById(`${idRep}-thinking`);
+              if (elThinking) elThinking.style.display = "none";
+              document.getElementById(`${idRep}-text`).innerHTML = `<span style="color: var(--claude-red);">Erreur : ${event.message}</span>`;
+            }
+
+            if (event.type === "fin") {
+              clearInterval(timerReflexion);
+              rafraichirSession();
+              chargerHistoriqueChats();
+
+              const repContent = document.querySelector(`#${idRep} .msg-content`);
+              if (repContent && !repContent.querySelector(".msg-actions")) {
+                repContent.insertAdjacentHTML("beforeend", `
+                  <div class="msg-actions">
+                    <button class="msg-action-btn" onclick="exporterMessageEnPdf(this)" title="Exporter cette réponse en PDF">
+                      <i data-lucide="file-down" style="width: 12px; height: 12px;"></i>
+                      <span>Exporter en PDF</span>
+                    </button>
+                  </div>
+                `);
+                lucide.createIcons();
+                rendreDiagrammesMermaid();
+              } else {
+                rendreDiagrammesMermaid();
+              }
+            }
+
+            allerEnBas(false);
+          }
+        }
+      } catch (err) {
+        clearInterval(timerReflexion);
+        const elThinking = document.getElementById(`${idRep}-thinking`);
+        if (elThinking) elThinking.style.display = "none";
+        document.getElementById(`${idRep}-text`).innerHTML = `<span style="color: var(--claude-red);">Erreur : ${err}</span>`;
+      }
+    }
+
+    // Reconnaissance vocale Web Speech API
+    let _RECOGNITION = null;
+    function toggleVocal() {
+      if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        alert("La reconnaissance vocale n'est pas supportée sur ce navigateur.");
+        return;
+      }
+      const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!_RECOGNITION) {
+        _RECOGNITION = new Speech();
+        _RECOGNITION.lang = "fr-FR";
+        _RECOGNITION.continuous = false;
+        _RECOGNITION.onstart = () => {
+          document.getElementById("btn-mic").style.color = "var(--claude-coral)";
+        };
+        _RECOGNITION.onresult = (e) => {
+          const trans = e.results[0][0].transcript;
+          const input = document.getElementById("prompt-input");
+          input.value += (input.value ? " " : "") + trans;
+          autoResize(input);
+        };
+        _RECOGNITION.onend = () => {
+          document.getElementById("btn-mic").style.color = "var(--claude-text-muted)";
+        };
+      }
+      _RECOGNITION.start();
+    }
+
+    // Export PDF universel à la demande (depuis n'importe quel message)
+    async function exporterMessageEnPdf(btn) {
+      const contentEl = btn.closest(".msg-content").querySelector(".msg-text");
+      if (!contentEl) return;
+      const texte = contentEl.innerText || contentEl.textContent || "";
+      if (!texte.trim()) return;
+
+      const originalHtml = btn.innerHTML;
+      btn.innerHTML = `<span style="opacity:0.8;">⏳ Création du PDF...</span>`;
+      btn.disabled = true;
+
+      try {
+        const res = await fetch("/api/claude/pdf/exporter_texte", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            titre: "Document Kéranos RIOT",
+            texte: texte,
+            theme: "moderne"
+          })
+        });
+        const data = await res.json();
+        if (data.ok && data.url) {
+          window.open(data.url, "_blank");
+        } else {
+          alert("Erreur lors de la génération du PDF : " + (data.erreur || "inconnue"));
+        }
+      } catch (err) {
+        alert("Échec de l'export PDF : " + err);
+      } finally {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+        lucide.createIcons();
+      }
+    }
+      // Agrandissement des captures d'écran au clic
+    document.addEventListener('click', function(e) {
+      if (e.target && e.target.tagName === 'IMG' && e.target.closest('.msg-content')) {
+        window.open(e.target.src, '_blank');
+      }
+    });
+  </script>
+</body>
+</html>

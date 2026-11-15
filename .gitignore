@@ -11,14 +11,24 @@ wheels/
 
 # Secrets et donnees personnelles (ne JAMAIS versionner)
 config.yaml
+securite.json
+securite.tmp
 contenus.yaml
 budget.json
 memoire.json
 memory.json
+riot_memory.db
+riot_memory.db-wal
+riot_memory.db-shm
+*.db
+bin/
+*.exe
 google_credentials.json
 google_token.json
 notes/
 reminders.json
+etude/*
+!etude/LISEZ-MOI.md
 
 # Journaux
 logs/
@@ -38,10 +48,51 @@ gestes/.venv-tracker/
 gestes/models/
 gestes/calibration.json
 
-# Musique : venv isole (Python 3.12 + shazamio) et captures audio temporaires.
-musique/.venv-shazam/
+# Captures temporaires et monitoring
+_captures/
 musique/captures/
+musique/.venv-shazam/
+
 
 # Cockpit : donnees financieres PERSO (tout le dossier sauf l'exemple versionne).
 finances/*
 !finances/abonnements.example.yaml
+
+# Sessions, exports et configurations locales sensibles (Option A repo public)
+.env
+.env.*
+.whatsapp_session/
+mcp_servers.json
+tablette_pubs_statut.json
+scripts/whatsapp_export_*/
+scripts/whatsapp_*.py
+scripts/extraire_chat.py
+scripts/analyser_*.py
+scripts/inspect_chat.py
+scripts/inspect_cordon.py
+scripts/ameliorer_detourage.py
+scripts/preparer_cutout.py
+scripts/inspect_cutout_flaws.py
+scripts/completer_templates_originaux.py
+scripts/composer_affiche_pro.py
+scripts/creer_affiche_vraie_toofan.py
+scripts/generer_affiche*.py
+scripts/generer_les_deux_mixes.py
+scripts/generer_routine_dj.py
+lancer_whatsapp_*.bat
+
+# Medias lourds et sorties generees localement
+affiches/
+motion design/
+output_documents/
+output_pdf/
+output_products/
+musique/a_mixer/
+musique/mixes/
+musique/*.wav
+musique/*.mp3
+
+# Packaging npm
+npm/node_modules/
+npm/*.tgz
+

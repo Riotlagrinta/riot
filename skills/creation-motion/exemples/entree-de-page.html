@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Traversée — exemple d'entrée orchestrée (CSS pur)</title>
+<!--
+PLAN DE MOUVEMENT
+Moment signature : la ligne de la traversée se dessine d'une île à l'autre.
+Rôle            : poser le sujet (un trajet) avant même de lire le titre.
+Personnalité    : posée, éditoriale. Courbes douces, durées longues.
+Séquence :
+  t=0.00s  route (tracé)         stroke-dashoffset   1.8s  trajet
+  t=0.35s  titre ligne 1         translateY(110%)    0.9s  sortie
+  t=0.45s  titre ligne 2         translateY(110%)    0.9s  sortie
+  t=0.95s  sous-titre            opacité + 12px      0.7s  sortie
+  t=1.15s  bouton                opacité + 12px      0.7s  sortie
+  t=1.60s  points d'escale       scale 0 → 1         0.5s  élan
+Interactions : bouton (retour au survol/clic).
+Repli reduced-motion : tout est visible immédiatement, route déjà tracée.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anybody:wdth,wght@100,75..150&family=Hanken+Grotesk:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* Palette : encre marine, écume, rouille de balise */
+  --fond:   #0f2a33;
+  --encre:  #e9efe6;
+  --calme:  #8fb0ad;
+  --balise: #e2673a;
+
+  --ease-sortie: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-trajet: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-elan:   cubic-bezier(0.34, 1.4, 0.64, 1);
+  --ease-sec:    cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-micro: 140ms;
+  --dur-intro: 900ms;
+}
+* { box-sizing: border-box; margin: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--fond); color: var(--encre);
+  font-family: "Hanken Grotesk", system-ui, sans-serif;
+  display: grid; place-items: center; padding: clamp(1.25rem, 4vw, 3rem);
+}
+.scene { width: min(1100px, 100%); position: relative; }
+
+/* La route : décor principal, posé en premier */
+.route-svg { width: 100%; height: auto; display: block; color: var(--calme); }
+.route { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round;
+  stroke-dasharray: 1; stroke-dashoffset: 1;
+  animation: trace 1.8s var(--ease-trajet) forwards; }
+@keyframes trace { to { stroke-dashoffset: 0; } }
+
+.escale { fill: var(--balise); transform-box: fill-box; transform-origin: center;
+  transform: scale(0); animation: pop .5s var(--ease-elan) 1.6s forwards; }
+.escale.b { animation-delay: 1.75s; }
+@keyframes pop { to { transform: scale(1); } }
+
+/* Titre : révélation par masques, pas de fondu */
+h1 { font-family: "Anybody", system-ui, sans-serif; font-weight: 600;
+  font-stretch: 125%; font-size: clamp(2.4rem, 8vw, 6rem);
+  line-height: .98; letter-spacing: -.02em; margin-top: clamp(1rem, 3vw, 2rem); }
+.ligne { display: block; overflow: hidden; padding-bottom: .1em; }
+.ligne > span { display: block; transform: translateY(110%);
+  animation: leve var(--dur-intro) var(--ease-sortie) forwards; }
+.ligne:nth-child(1) > span { animation-delay: .35s; }
+.ligne:nth-child(2) > span { animation-delay: .45s; }
+@keyframes leve { to { transform: none; } }
+
+.sous, .actions { opacity: 0; transform: translateY(12px);
+  animation: monte .7s var(--ease-sortie) forwards; }
+.sous { max-width: 46ch; margin-top: 1.25rem; color: var(--calme); font-size: 1.1rem;
+  line-height: 1.55; animation-delay: .95s; }
+.actions { margin-top: 1.75rem; animation-delay: 1.15s; }
+@keyframes monte { to { opacity: 1; transform: none; } }
+
+.bouton { display: inline-block; padding: .85rem 1.4rem; border-radius: 2px;
+  background: var(--balise); color: #1a0d07; font-weight: 500; text-decoration: none;
+  transition: transform var(--dur-micro) var(--ease-sec); }
+.bouton:hover  { transform: translateY(-1px); }
+.bouton:active { transform: scale(.98); }
+.bouton:focus-visible { outline: 2px solid var(--encre); outline-offset: 3px; }
+
+/* Repli : tout visible, sans mouvement */
+@media (prefers-reduced-motion: reduce) {
+  .route { animation: none; stroke-dashoffset: 0; }
+  .escale { animation: none; transform: none; }
+  .ligne > span { animation: none; transform: none; }
+  .sous, .actions { animation: none; opacity: 1; transform: none; }
+}
+</style>
+</head>
+<body>
+<main class="scene">
+  <svg class="route-svg" viewBox="0 0 1000 220" aria-hidden="true">
+    <path class="route" pathLength="1" d="M30 170 C 250 40, 430 220, 640 110 S 900 40, 970 70"/>
+    <circle class="escale" cx="30"  cy="170" r="7"/>
+    <circle class="escale b" cx="970" cy="70"  r="7"/>
+  </svg>
+
+  <h1>
+    <span class="ligne"><span>Traverser</span></span>
+    <span class="ligne"><span>sans bruit</span></span>
+  </h1>
+  <p class="sous">Deux îles, une traversée de quarante minutes. Horaires clairs, billets sur votre téléphone.</p>
+  <div class="actions"><a class="bouton" href="#horaires">Voir les horaires</a></div>
+</main>
+</body>
+</html>

@@ -30,10 +30,10 @@ except Exception:
     pass
 
 import numpy as np
-import openwakeword
-import sounddevice as sd
-from faster_whisper import WhisperModel
-from openwakeword.model import Model as WakeModel
+try:
+    import sounddevice as sd
+except Exception:
+    sd = None
 
 from core import config, journal, memoire, personnalite, registre, voix
 from core.util import sans_accents
@@ -577,10 +577,26 @@ def repondre(historique):
             if fil_accuse:
                 fil_accuse.join(timeout=2)
             return ""
+        # Routage dynamique des outils selon l'intention utilisateur
+        dernier_user_msg = ""
+        for m in reversed(historique):
+            if isinstance(m, dict) and m.get("role") == "user":
+                c = m.get("content", "")
+                if isinstance(c, str):
+                    dernier_user_msg = c
+                elif isinstance(c, list):
+                    dernier_user_msg = " ".join(
+                        b.get("text", "") for b in c if isinstance(b, dict) and b.get("text")
+                    )
+                break
+
         try:
             reponse = fournisseur.repondre(
                 SYSTEME_COURANT, historique,
-                registre.schemas_api(local_seulement=(fournisseur.nom == "Ollama")))
+                registre.schemas_api(
+                    local_seulement=(fournisseur.nom == "Ollama"),
+                    requete=dernier_user_msg,
+                ))
         except Exception as e:
             print(f"  [{fournisseur.nom}] erreur : {e}")
             LOG.exception("appel LLM en echec")
@@ -665,6 +681,7 @@ def _ajouter_dll_nvidia():
 def charger_whisper():
     """Charge Whisper sur GPU si possible, sinon sur CPU."""
     _ajouter_dll_nvidia()
+    from faster_whisper import WhisperModel
 
     try:
         modele = WhisperModel(MODELE_WHISPER, device="cuda", compute_type="float16")
@@ -980,25 +997,27 @@ def _installer_raccourci_micro():
 
 
 def main():
-    print("Chargement des modeles...")
-
     registre.charger_outils()
     voix.definir_parleur(dire)
 
-    reveil = WakeModel(wakeword_model_paths=[str(
-        Path(openwakeword.__file__).parent / "resources" / "models" / "hey_jarvis_v0.1.onnx"
-    )])
+    ecoute_active = config.reglage("assistant.ecoute_permanente", False)
 
-    whisper = charger_whisper()
-
-    # Les appels telephoniques reutilisent ce Whisper pour transcrire les reponses.
-    from tools.appels import definir_transcripteur
-    definir_transcripteur(lambda chemin: " ".join(
-        s.text for s in whisper.transcribe(chemin, language="fr", beam_size=5)[0]).strip())
-    # V2 (conversation temps reel) : transcription d'un tableau audio (16kHz float32).
-    from tools.appel_direct import definir_transcripteur_direct
-    definir_transcripteur_direct(lambda audio: " ".join(
-        s.text for s in whisper.transcribe(audio, language="fr", beam_size=1)[0]).strip())
+    reveil = None
+    whisper = None
+    if ecoute_active:
+        print("Chargement des modèles vocaux...")
+        import openwakeword
+        from openwakeword.model import Model as WakeModel
+        reveil = WakeModel(wakeword_model_paths=[str(
+            Path(openwakeword.__file__).parent / "resources" / "models" / "hey_jarvis_v0.1.onnx"
+        )])
+        whisper = charger_whisper()
+        from tools.appels import definir_transcripteur
+        definir_transcripteur(lambda chemin: " ".join(
+            s.text for s in whisper.transcribe(chemin, language="fr", beam_size=5)[0]).strip())
+        from tools.appel_direct import definir_transcripteur_direct
+        definir_transcripteur_direct(lambda audio: " ".join(
+            s.text for s in whisper.transcribe(audio, language="fr", beam_size=1)[0]).strip())
 
     charger_pieces_hue()
     allumer_si_nuit()
@@ -1012,9 +1031,10 @@ def main():
     from tools.instagram import demarrer_refresh_instagram
     demarrer_refresh_instagram()
 
-    # Serveur web unifie (pont iPhone + webhook Twilio + panneau + gestes en loopback).
-    if (config.reglage("serveur.actif", False) or config.reglage("pont_iphone.actif", False)
-            or config.reglage("gestes.actif", False) or config.reglage("cockpit.actif", False)):
+    # Serveur web unifie (pont iPhone + mobile PWA + webhook Twilio + panneau + cockpit).
+    if (config.reglage("serveur.actif", True) or config.reglage("mobile.actif", True)
+            or config.reglage("pont_iphone.actif", False) or config.reglage("gestes.actif", False)
+            or config.reglage("cockpit.actif", False)):
         from core.serveur import demarrer as demarrer_serveur_web
         demarrer_serveur_web()
         # Cockpit : ouvre l'app web en fenetre dediee (--app) sur l'ecran choisi.
@@ -1066,6 +1086,37 @@ def main():
         print(f"Memoire : {len(faits)} information(s).")
     _refaire_systeme(faits)
     historique = []
+
+    if not ecoute_active:
+        ip = "127.0.0.1"
+        try:
+            from core.mobile import _ip_locale
+            ip = _ip_locale()
+        except Exception:
+            pass
+        port = int(config.reglage("serveur.port", 8790))
+        url_pub = ""
+        try:
+            url_pub = serveur.url_publique()
+        except Exception:
+            pass
+        print("\n" + "=" * 60)
+        print("              ⚡ RIOT - COPILOTE PERSONNEL ACTIF")
+        print("=" * 60)
+        print(f"  • Moteur IA        : {_fournisseur.nom} ({getattr(_fournisseur, 'modele', '-')})")
+        print(f"  • Interface Mobile : http://{ip}:{port}/mobile")
+        if url_pub:
+            print(f"  • Tunnel 4G/5G     : {url_pub}/mobile")
+        print("  • Mode Écoute PC   : EN VEILLE (0% CPU au repos)")
+        print("  • Contrôles        : Smartphone (Web Speech) / Web / CLI")
+        print("=" * 60)
+        print("\nAppuyez sur Ctrl+C pour quitter.\n")
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\nArrêt de RIOT.")
+            return
 
     flux = sd.InputStream(
         samplerate=TAUX, channels=1, dtype="float32",
@@ -1131,7 +1182,8 @@ def main():
     print('Vous pouvez le couper en redisant "Hey Jarvis" pendant qu\'il parle.\n')
 
     try:
-        voix.parler("Bonjour Pierre Paul. Tu as besoin de quoi pour aujourd'hui ?")
+        salutation = config.reglage("assistant.salutation", "Système RIOT opérationnel. Prêt pour vos ordres.")
+        voix.parler(salutation)
     except Exception:
         LOG.exception("salutation de demarrage")
 
