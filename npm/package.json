@@ -1,5 +1,5 @@
 {
-  "name": "@kelvix/riot",
+  "name": "@riotlagrinta/riot",
   "version": "0.2.0",
   "description": "RIOT — Copilote développeur, système et agent IA multiplateforme en ligne de commande.",
   "bin": {

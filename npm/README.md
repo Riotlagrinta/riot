@@ -1,4 +1,4 @@
-# @kelvix/riot
+# @riotlagrinta/riot
 
 Wrapper CLI multiplateforme permettant d'installer et d'exécuter **RIOT** via `npm` sur Windows, macOS et Linux.
 
@@ -13,7 +13,7 @@ Wrapper CLI multiplateforme permettant d'installer et d'exécuter **RIOT** via `
 
 2. Installer sur n'importe quelle autre machine :
    ```bash
-   npm install -g @kelvix/riot
+   npm install -g @riotlagrinta/riot
    riot
    ```
 
