@@ -21,7 +21,7 @@ riot_memory.db
 riot_memory.db-wal
 riot_memory.db-shm
 *.db
-bin/
+/bin/
 *.exe
 google_credentials.json
 google_token.json
