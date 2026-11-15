@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "description": "RIOT — Copilote développeur, système et agent IA multiplateforme en ligne de commande.",
   "bin": {
-    "riot": "./bin/riot.js"
+    "riot": "bin/riot.js"
   },
   "files": [
     "bin/",
@@ -25,7 +25,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Riotlagrinta/riot.git"
+    "url": "git+https://github.com/Riotlagrinta/riot.git"
   }
 }
-
