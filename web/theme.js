@@ -86,9 +86,81 @@
   // Appliquer immediatement pour eviter le flash au chargement
   apply(initialTheme(), false);
 
+  function checkForUpdates() {
+    try {
+      if (sessionStorage.getItem("riot_update_dismissed") === "1") return;
+      fetch("/api/version")
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (info) {
+          if (!info || !info.disponible) return;
+          var label = info.version_distante || info.commit_distant || "MAJ";
+          var hosts = document.querySelectorAll("[data-riot-update-slot]");
+          if (hosts.length > 0) {
+            hosts.forEach(function (h) {
+              if (h.dataset.mounted === "1") return;
+              h.dataset.mounted = "1";
+              var pill = document.createElement("button");
+              pill.type = "button";
+              pill.className = "riot-update-pill";
+              pill.title = info.details || "Nouvelle version disponible";
+              pill.textContent = "MAJ v" + label;
+              pill.addEventListener("click", function () { triggerUpdate(info, pill); });
+              h.appendChild(pill);
+            });
+            return;
+          }
+          if (document.getElementById("riot-update-toast")) return;
+          var toast = document.createElement("div");
+          toast.id = "riot-update-toast";
+          toast.className = "riot-update-toast";
+          toast.innerHTML =
+            '<span>Mise a jour RIOT disponible (<strong>' + String(label).replace(/</g, "") + '</strong>)</span>' +
+            '<button type="button" data-action="apply">Mettre a jour</button>' +
+            '<button type="button" class="riot-toast-close" title="Fermer">✕</button>';
+          toast.querySelector('[data-action="apply"]').addEventListener("click", function (ev) {
+            triggerUpdate(info, ev.currentTarget);
+          });
+          toast.querySelector(".riot-toast-close").addEventListener("click", function () {
+            try { sessionStorage.setItem("riot_update_dismissed", "1"); } catch (_) {}
+            toast.remove();
+          });
+          document.body.appendChild(toast);
+        })
+        .catch(function () {});
+    } catch (_) {}
+  }
+
+  function triggerUpdate(info, btnEl) {
+    var orig = btnEl ? btnEl.textContent : "";
+    if (btnEl) {
+      btnEl.disabled = true;
+      btnEl.textContent = "Mise a jour...";
+    }
+    fetch("/api/update", { method: "POST" })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (btnEl) btnEl.disabled = false;
+        if (res && res.ok && !res.redemarrage_requis) {
+          if (btnEl) btnEl.textContent = "A jour ✓";
+          setTimeout(function () { window.location.reload(); }, 900);
+        } else {
+          if (btnEl) btnEl.textContent = orig;
+          window.alert((res && res.message) || ("Commande : " + (info.commande_maj || "riot --update-cli")));
+        }
+      })
+      .catch(function () {
+        if (btnEl) {
+          btnEl.disabled = false;
+          btnEl.textContent = orig;
+        }
+        window.alert("Commande de mise a jour : " + (info.commande_maj || "riot --update-cli"));
+      });
+  }
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", function () {
       mountSwitchers();
+      setTimeout(checkForUpdates, 800);
       // Synchroniser si aucun choix local explicite n'etait encore stocke
       try {
         if (!localStorage.getItem("riot_theme")) {
@@ -100,12 +172,14 @@
     });
   } else {
     mountSwitchers();
+    setTimeout(checkForUpdates, 800);
   }
 
   window.RiotTheme = {
     get: function () { return document.documentElement.getAttribute("data-theme") || "obsidian"; },
     set: function (name) { return apply(name, true); },
     mount: mountSwitchers,
+    checkUpdates: checkForUpdates,
     themes: THEMES
   };
 })();

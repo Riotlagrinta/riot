@@ -60,6 +60,26 @@ def app():
                 return Response("", media_type="application/javascript", status_code=404)
             return Response(f.read_text(encoding="utf-8"), media_type="application/javascript")
 
+        @_APP.get("/logo.svg")
+        def route_logo_svg():
+            f = _RACINE / "web" / "riot-logo.svg"
+            if not f.exists():
+                return Response("", media_type="image/svg+xml", status_code=404)
+            return Response(f.read_text(encoding="utf-8"), media_type="image/svg+xml")
+
+        @_APP.get("/api/version")
+        def route_get_version(forcer: bool = False):
+            from core import updater
+            return updater.etat_mise_a_jour(forcer=forcer)
+
+        @_APP.post("/api/update")
+        def route_post_update(request: Request):
+            from core import updater
+            from core.panneau import _local_seulement
+            if not _local_seulement(request):
+                return JSONResponse({"ok": False, "erreur": "Mise a jour accessible en local uniquement."}, status_code=403)
+            return JSONResponse(updater.executer_mise_a_jour())
+
         @_APP.get("/api/theme")
         def route_get_theme():
             from core import theme
@@ -101,6 +121,11 @@ def app():
             monter_claude(_APP)                   # / + /claude + /api/claude/* (Interface Claude Web & Desktop)
         except Exception:
             LOG.exception("montage de l'interface Claude")
+        try:
+            from core.ide import monter_routes as monter_ide
+            monter_ide(_APP)                      # /ide + /api/ide/* (RIOT IDE style Antigravity, local)
+        except Exception:
+            LOG.exception("montage de RIOT IDE")
         try:
             from tools.appel_direct import monter_ws
             monter_ws(_APP)                        # /stream (Twilio Media Streams)

@@ -38,7 +38,7 @@ def main():
         from core import cli
         acc = theme.palette()["cli_accent"]
         cli.console.print(f"  [bold {acc}]⚡ Application RIOT Studio lancée en mode bureau.[/bold {acc}]")
-        cli.console.print("  [dim]Accès Web direct : http://localhost:8790/ (Studio) · http://localhost:8790/mobile[/dim]")
+        cli.console.print("  [dim]Accès Web direct : http://localhost:8790/ (Studio) · http://localhost:8790/ide (IDE) · http://localhost:8790/mobile[/dim]")
         cli.console.print("  [dim]Serveur actif en continu. Appuyez sur Ctrl+C pour quitter.[/dim]")
         try:
             import time
@@ -46,6 +46,26 @@ def main():
                 time.sleep(1)
         except KeyboardInterrupt:
             cli.console.print("\n[dim]Arrêt du serveur web RIOT Studio.[/dim]")
+        return
+
+    # Mode IDE Agentique (style Antigravity)
+    if "--ide" in args or (args and args[0].lower() in ("/ide", "ide")):
+        from core import serveur, theme, cli
+        import webbrowser, time
+        serveur.demarrer()
+        url_ide = "http://localhost:8790/ide"
+        try:
+            webbrowser.open(url_ide)
+        except Exception:
+            pass
+        acc = theme.palette()["cli_accent"]
+        cli.console.print(f"  [bold {acc}]⚡ RIOT IDE actif :[/bold {acc}] [bold white]{url_ide}[/bold white]")
+        cli.console.print("  [dim]Serveur actif en continu. Appuyez sur Ctrl+C pour quitter.[/dim]")
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            cli.console.print("\n[dim]Arrêt du serveur RIOT IDE.[/dim]")
         return
 
     # Mode 2 : Exécution d'un ordre unique en ligne de commande ou commande directe
@@ -57,6 +77,9 @@ def main():
         cmd = args[0].lower()
         if cmd == "/theme":
             cli.commande_theme(" ".join(args[1:]))
+            return
+        if cmd in ("/update", "update"):
+            cli.commande_update(" ".join(args[1:]))
             return
         if cmd in ("/tools", "/outils"):
             cli.commande_outils()

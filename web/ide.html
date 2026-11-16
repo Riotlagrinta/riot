@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="obsidian">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0B0C0E" />
+  <title>RIOT // IDE Agentique</title>
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+  <link rel="stylesheet" href="/theme.css" />
+  <link rel="stylesheet" href="/ide.css" />
+  <script src="/theme.js"></script>
+</head>
+<body class="ide-body">
+  <header class="ide-topbar">
+    <div class="ide-topbar-left">
+      <a href="/ide" class="ide-brand" title="RIOT IDE">
+        <img src="/logo.svg" alt="RIOT" class="ide-logo" />
+        <span class="ide-brand-name">RIOT</span>
+        <span class="ide-brand-badge">IDE</span>
+      </a>
+      <select id="ide-project-select" class="ide-select" title="Projet actif"></select>
+      <span id="ide-branch-pill" class="ide-pill ide-pill-dim" title="Branche Git">-</span>
+    </div>
+
+    <div class="ide-topbar-right">
+      <button id="ide-btn-model" type="button" class="ide-pill ide-pill-btn" title="Changer de modele / FreeLLMAPI">
+        <span class="ide-dot-live"></span>
+        <span id="ide-model-label">Chargement...</span>
+      </button>
+      <div data-riot-update-slot></div>
+      <div data-riot-theme-switcher></div>
+      <a href="/studio" class="ide-nav-link">Studio</a>
+      <a href="/panneau" class="ide-nav-link">Réglages</a>
+    </div>
+  </header>
+
+  <main class="ide-shell">
+    <!-- COLONNE GAUCHE : EXPLORATEUR + RECHERCHE -->
+    <aside class="ide-sidebar" id="ide-sidebar">
+      <div class="ide-sidebar-tabs">
+        <button type="button" class="ide-stab active" data-stab="explorer">Fichiers</button>
+        <button type="button" class="ide-stab" data-stab="search">Recherche</button>
+        <button type="button" id="ide-btn-newfile" class="ide-icon-btn" title="Nouveau fichier">+</button>
+        <button type="button" id="ide-btn-refresh" class="ide-icon-btn" title="Actualiser l'arbre">↻</button>
+      </div>
+
+      <div id="ide-pane-explorer" class="ide-spane active">
+        <input id="ide-tree-filter" class="ide-input-sm" type="search" placeholder="Filtrer les fichiers..." />
+        <div id="ide-tree" class="ide-tree"></div>
+      </div>
+
+      <div id="ide-pane-search" class="ide-spane">
+        <form id="ide-search-form" class="ide-search-box">
+          <input id="ide-search-input" class="ide-input-sm" type="search" placeholder="Rechercher dans le projet..." />
+        </form>
+        <div id="ide-search-results" class="ide-search-results"></div>
+      </div>
+    </aside>
+
+    <!-- ZONE CENTRALE : EDITEUR + DIFF + TERMINAL -->
+    <section class="ide-center">
+      <div class="ide-tabs-bar" id="ide-tabs-bar">
+        <div id="ide-tabs" class="ide-tabs"></div>
+        <div class="ide-editor-actions">
+          <button type="button" id="ide-btn-diff" class="ide-btn-sm" title="Voir dernier diff">Diff</button>
+          <button type="button" id="ide-btn-save" class="ide-btn-sm ide-btn-accent" title="Enregistrer (Ctrl+S)">Enregistrer</button>
+          <button type="button" id="ide-btn-term-toggle" class="ide-btn-sm" title="Terminal (Ctrl+`)">Terminal</button>
+        </div>
+      </div>
+
+      <div class="ide-breadcrumb" id="ide-breadcrumb">
+        <span>Sélectionnez un fichier à gauche ou demandez à l'agent RIOT.</span>
+      </div>
+
+      <div class="ide-editor-stage">
+        <div id="ide-empty-state" class="ide-empty-state">
+          <img src="/logo.svg" alt="RIOT" class="ide-empty-logo" />
+          <h2>Workspace Agentique RIOT IDE</h2>
+          <p>Éditez vos fichiers avec contexte en direct, inspectez les diffs générés, lancez le terminal ou pilotez l'agent autonome à droite.</p>
+          <div class="ide-shortcuts">
+            <span><kbd>Ctrl+S</kbd> Sauvegarder</span>
+            <span><kbd>Ctrl+`</kbd> Terminal</span>
+            <span><kbd>Ctrl+Enter</kbd> Envoyer à l'agent</span>
+          </div>
+        </div>
+
+        <div id="ide-code-wrap" class="ide-code-wrap hidden">
+          <pre id="ide-gutter" class="ide-gutter" aria-hidden="true">1</pre>
+          <textarea id="ide-editor" class="ide-textarea" spellcheck="false"></textarea>
+        </div>
+
+        <div id="ide-diff-wrap" class="ide-diff-wrap hidden">
+          <div class="ide-diff-header">
+            <span>Dernier diff enregistré</span>
+            <button type="button" id="ide-diff-close" class="ide-btn-sm">Fermer Diff</button>
+          </div>
+          <pre id="ide-diff-pre" class="ide-diff-pre"></pre>
+        </div>
+      </div>
+
+      <div id="ide-terminal-panel" class="ide-terminal-panel">
+        <div class="ide-terminal-head">
+          <span>Terminal · <code id="ide-term-cwd">.</code></span>
+          <button type="button" id="ide-term-clear" class="ide-btn-sm">Effacer</button>
+        </div>
+        <div id="ide-term-output" class="ide-term-output"></div>
+        <form id="ide-term-form" class="ide-term-form">
+          <span class="ide-term-prompt">$</span>
+          <input id="ide-term-input" type="text" placeholder="Ex: git status, pytest, npm run build..." autocomplete="off" />
+        </form>
+      </div>
+    </section>
+
+    <!-- PANNEAU DROIT : AGENT COPILOT -->
+    <aside class="ide-agent">
+      <div class="ide-agent-head">
+        <span class="ide-agent-title">Agent RIOT</span>
+        <div class="ide-mode-pills" id="ide-agent-modes">
+          <button type="button" class="ide-mpill active" data-mode="code">Code</button>
+          <button type="button" class="ide-mpill" data-mode="plan">Plan</button>
+          <button type="button" class="ide-mpill" data-mode="swarm">Swarm</button>
+          <button type="button" class="ide-mpill" data-mode="ask">Ask</button>
+        </div>
+      </div>
+
+      <div id="ide-agent-feed" class="ide-agent-feed">
+        <div class="ide-msg ide-msg-sys">
+          Prêt. Je vois le projet actif et l'onglet ouvert. Choisis un mode (<b>Code</b>, <b>Plan</b>, <b>Swarm</b> ou <b>Ask</b>) et donne-moi ta mission.
+        </div>
+      </div>
+
+      <form id="ide-agent-form" class="ide-agent-composer">
+        <div class="ide-context-row">
+          <label class="ide-check-ctx">
+            <input type="checkbox" id="ide-attach-active" checked />
+            <span id="ide-active-file-chip">Joindre onglet actif (aucun)</span>
+          </label>
+        </div>
+        <textarea id="ide-agent-input" rows="3" placeholder="Ex: Audite ce fichier, propose un patch ou génère une maquette UI..."></textarea>
+        <div class="ide-composer-bar">
+          <span class="ide-hint">Ctrl+Entrée pour envoyer</span>
+          <button type="submit" id="ide-agent-send" class="ide-btn-sm ide-btn-accent">Exécuter</button>
+        </div>
+      </form>
+    </aside>
+  </main>
+
+  <!-- MODAL FOURNISSEUR LLM / FREELMAPI -->
+  <div id="ide-model-modal" class="ide-modal hidden">
+    <div class="ide-modal-card">
+      <div class="ide-modal-head">
+        <h3>Fournisseur LLM &amp; Passerelle Compatible</h3>
+        <button type="button" id="ide-modal-close" class="ide-icon-btn">✕</button>
+      </div>
+      <form id="ide-model-form" class="ide-modal-form">
+        <label>Mode / Provider
+          <select id="ide-cfg-mode">
+            <option value="mistral">Mistral AI</option>
+            <option value="groq">Groq</option>
+            <option value="gemini">Google Gemini</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="custom">Custom / FreeLLMAPI (OpenAI-compatible)</option>
+            <option value="anthropic">Anthropic Claude</option>
+            <option value="local">Ollama Local</option>
+          </select>
+        </label>
+        <label id="ide-cfg-baseurl-wrap" class="hidden">URL Base OpenAI (/v1 ou /v1/chat/completions)
+          <input id="ide-cfg-baseurl" type="text" placeholder="http://localhost:3001/v1" />
+        </label>
+        <label>Modèle (optionnel)
+          <input id="ide-cfg-model" type="text" placeholder="Ex: codestral-latest, auto, llama-3.3-70b-versatile" />
+        </label>
+        <label>Clé API (laisser vide pour conserver l'actuelle)
+          <input id="ide-cfg-key" type="password" placeholder="sk-... ou freellmapi-..." />
+        </label>
+        <div class="ide-modal-actions">
+          <button type="submit" class="ide-btn-sm ide-btn-accent">Appliquer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/ide.js"></script>
+</body>
+</html>
+

@@ -539,6 +539,122 @@ class MistralProvider(ProviderLLM):
             return cascade_failover(systeme, historique, outils, visites, **kwargs)
 
 
+# --------------------------------------------------------------- Custom / OpenAI-Compatible (FreeLLMAPI, LiteLLM, LM Studio...)
+
+def _normaliser_url_chat(url: str) -> str:
+    u = (url or "").strip().rstrip("/")
+    if not u:
+        return "http://localhost:3001/v1/chat/completions"
+    if u.endswith("/chat/completions"):
+        return u
+    if u.endswith("/v1") or u.endswith("/openai"):
+        return f"{u}/chat/completions"
+    return f"{u}/v1/chat/completions" if "/v1/" not in u else u
+
+
+class CustomOpenAIProvider(ProviderLLM):
+    """Provider generique compatible OpenAI (/v1/chat/completions) : FreeLLMAPI, LiteLLM, LM Studio, DeepSeek..."""
+
+    nom = "Custom"
+
+    def __init__(self, modele=None):
+        import os
+
+        cles_brutes = reglage("custom.cles", []) or reglage("custom.cle", "")
+        self.cles = _recuperer_liste_cles(cles_brutes, "CUSTOM_API_KEY")
+        if not self.cles:
+            self.cles = _recuperer_liste_cles("", "FREELLMAPI_KEY")
+        self.cle = self.cles[0] if self.cles else ""
+
+        base_cfg = (
+            reglage("custom.base_url", "")
+            or reglage("custom.url", "")
+            or os.environ.get("CUSTOM_BASE_URL", "")
+            or os.environ.get("FREELLMAPI_BASE_URL", "")
+        )
+        self.base_url_configuree = bool(str(base_cfg).strip())
+        self.api_url = _normaliser_url_chat(str(base_cfg))
+        self.nom_affiche = str(reglage("custom.nom_affiche", "Custom / FreeLLMAPI") or "Custom / FreeLLMAPI")
+        self.nom = self.nom_affiche
+        self.modele = modele or reglage("custom.modele", "auto")
+        rotation = reglage("custom.modeles_rotation", [])
+        if not isinstance(rotation, list):
+            rotation = [rotation] if rotation else []
+        self.rotation = [self.modele] + [m for m in rotation if m and m != self.modele]
+
+    def disponible(self):
+        return bool(self.cles or self.base_url_configuree)
+
+    _traduire = GroqProvider._traduire
+    _outils = GroqProvider._outils
+    _parser = GroqProvider._parser
+
+    def _chat(self, messages, tools):
+        import requests
+
+        derniere_erreur = None
+        cles_a_tester = self.cles or ["no-key-required"]
+        for cle_courante in cles_a_tester:
+            for modele_courant in self.rotation:
+                payload = {
+                    "model": modele_courant,
+                    "messages": messages,
+                    "temperature": float(reglage("custom.temperature", 0.3)),
+                    "max_tokens": int(reglage("custom.max_tokens", 2048)),
+                }
+                if tools:
+                    payload["tools"] = tools
+                    payload["tool_choice"] = "auto"
+
+                headers = {
+                    "Authorization": f"Bearer {cle_courante}",
+                    "Content-Type": "application/json",
+                }
+                try:
+                    r = requests.post(self.api_url, headers=headers, json=payload, timeout=35)
+                    if r.status_code == 400 and tools and "tool" in r.text.lower():
+                        payload.pop("tools", None)
+                        payload.pop("tool_choice", None)
+                        r = requests.post(self.api_url, headers=headers, json=payload, timeout=35)
+                    if r.status_code == 429 or r.status_code == 503 or r.status_code >= 500:
+                        LOG.warning("custom (%s): modele %s statut %s, bascule...", self.api_url, modele_courant, r.status_code)
+                        derniere_erreur = f"HTTP {r.status_code}: {r.text}"
+                        continue
+                    r.raise_for_status()
+                    data = r.json()
+                    try:
+                        usage = data.get("usage", {})
+                        if usage:
+                            from core import budget
+                            budget.enregistrer(
+                                self.nom_affiche,
+                                modele_courant,
+                                usage.get("prompt_tokens", 0) or 0,
+                                usage.get("completion_tokens", 0) or 0,
+                            )
+                    except Exception:
+                        pass
+                    return data
+                except Exception as e:
+                    LOG.warning("custom: echec sur %s / modele %s (%s)", self.api_url, modele_courant, e)
+                    derniere_erreur = e
+                    continue
+
+        raise RuntimeError(f"Echec du fournisseur compatible OpenAI ({self.api_url}). Derniere erreur : {derniere_erreur}")
+
+    def repondre(self, systeme, historique, outils, visites=None, **kwargs):
+        if visites is None:
+            visites = set()
+        visites.add(self.nom)
+        messages = self._traduire(systeme, historique)
+        tools = self._outils(outils)
+        try:
+            return self._parser(self._chat(messages, tools))
+        except Exception as e:
+            LOG.warning("custom: echec (%s), declenchement cascade failover...", e)
+            return cascade_failover(systeme, historique, outils, visites, **kwargs)
+
+
 # --------------------------------------------------------------- Claude (cloud)
 
 class ClaudeProvider(ProviderLLM):
@@ -734,6 +850,7 @@ def cascade_failover(systeme, historique, outils, visites: set, **kwargs):
         ("OpenRouter", OpenRouterProvider),
         ("Groq", GroqProvider),
         ("Gemini", GeminiProvider),
+        ("Custom", CustomOpenAIProvider),
         ("Claude", ClaudeProvider),
     ]
     for nom, cls_prov in candidats:
@@ -778,13 +895,15 @@ def llm():
             _LLM = GeminiProvider()
         elif m == "openrouter" or fournisseur == "openrouter":
             _LLM = OpenRouterProvider()
+        elif m in ("custom", "freellmapi", "openai", "litellm") or fournisseur in ("custom", "freellmapi", "openai", "litellm"):
+            _LLM = CustomOpenAIProvider()
         elif m == "local" or fournisseur == "ollama":
             _LLM = OllamaProvider()
         elif m == "qualite":
             _LLM = ClaudeProvider(reglage("anthropic.modele_qualite",
                                           "claude-sonnet-4-5"))
         else:                                    # hybride (defaut)
-            # Priorité aux clés configurées (Groq -> Mistral -> Gemini -> OpenRouter -> Claude)
+            # Priorité aux clés configurées (Groq -> Mistral -> Gemini -> OpenRouter -> Custom -> Claude)
             if reglage("groq.cles", []) or reglage("groq.cle", ""):
                 _LLM = GroqProvider()
             elif reglage("mistral.cles", []) or reglage("mistral.cle", ""):
@@ -793,6 +912,8 @@ def llm():
                 _LLM = GeminiProvider()
             elif reglage("openrouter.cles", []) or reglage("openrouter.cle", ""):
                 _LLM = OpenRouterProvider()
+            elif reglage("custom.base_url", "") or reglage("custom.cles", []) or reglage("custom.cle", ""):
+                _LLM = CustomOpenAIProvider()
             else:
                 _LLM = ClaudeProvider(reglage("anthropic.modele", "claude-haiku-4-5"))
 

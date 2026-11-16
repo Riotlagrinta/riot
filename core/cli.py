@@ -76,6 +76,8 @@ _STYLE_PROMPT = _style_prompt_courant()
 _COMMANDES_INTERNES = [
     "/mcp",
     "/theme",
+    "/update",
+    "/ide",
     "/app", "/studio", "/claude",
     "/file", "/fichier",
     "/trade", "/trader",
@@ -196,6 +198,35 @@ def commande_theme(arg: str = ""):
     console.print(f"[bold {pal_new['cli_accent']}]✓ Thème RIOT basculé sur :[/bold {pal_new['cli_accent']}] [bold white]{pal_new['nom']}[/bold white] ({nouveau})\n")
 
 
+def commande_update(arg: str = ""):
+    """Vérifie ou exécute la mise à jour de RIOT."""
+    from core import updater
+    p = _pal()
+    acc = p["cli_accent"]
+    sec = p["cli_secondary"]
+    arg_clean = (arg or "").strip().lower()
+
+    if arg_clean in ("check", "statut", "status"):
+        etat = updater.etat_mise_a_jour(forcer=True)
+        console.print(f"  [bold {acc}]RIOT Version :[/bold {acc}] v{etat['version_locale']} ({etat['mode_install']})")
+        if etat.get("disponible"):
+            console.print(f"  [bold {p['cli_warn']}]↑ {etat['details']}[/bold {p['cli_warn']}]")
+        else:
+            console.print(f"  [bold {sec}]✓ {etat['details']}[/bold {sec}]")
+        return
+
+    etat = updater.etat_mise_a_jour(forcer=True)
+    if not etat.get("disponible") and arg_clean != "force":
+        console.print(f"  [bold {sec}]✓ {etat['details']}[/bold {sec}]")
+        return
+
+    res = updater.executer_mise_a_jour()
+    if res.get("ok"):
+        console.print(f"  [bold {sec}]✓ {res.get('message', 'Mise à jour effectuée.')}[/bold {sec}]")
+    else:
+        console.print(f"  [bold {p['cli_err']}]✕ {res.get('message', 'Échec de mise à jour.')}[/bold {p['cli_err']}]")
+
+
 def commande_outils():
     """Affiche la liste catégorisée des outils disponibles sans erreur d'attribut."""
     p = _pal()
@@ -278,6 +309,8 @@ def commande_aide():
         f"  • [bold {sec}]/review <mission>[/bold {sec}]    : Audit de sécurité (secrets/tokens), typage et verdict final\n\n"
         f"[bold {acc}]Commandes Rapides & Design :[/bold {acc}]\n"
         f"  • [bold {sec}]/theme [nom][/bold {sec}]         : Change le design (obsidian, paper, tactical)\n"
+        f"  • [bold {sec}]/ide[/bold {sec}]                  : Ouvre RIOT IDE (éditeur multi-panneaux + terminal + agent)\n"
+        f"  • [bold {sec}]/update [check][/bold {sec}]       : Vérifie et installe les mises à jour RIOT\n"
         f"  • [bold {sec}]/mcp [reload][/bold {sec}]         : Gère les connexions aux serveurs MCP externes (mcp_servers.json)\n"
         f"  • [bold {sec}]/app[/bold {sec}]                  : Lance RIOT Studio en application bureau & web\n"
         f"  • [bold {sec}]/code[/bold {sec}]                 : Bascule le mode Développeur / Coder mono-agent\n"
@@ -555,15 +588,23 @@ def _verifier_configuration_initiale():
     console.print(Panel(
         f"[bold {p['cli_warn']}]Premiere configuration de RIOT sur cette machine[/bold {p['cli_warn']}]\n"
         f"[dim]Fichier cible : {config.FICHIER}[/dim]\n"
-        "Fournisseurs supportes : [bold]groq[/bold], [bold]mistral[/bold], [bold]gemini[/bold], [bold]openrouter[/bold], [bold]anthropic[/bold]",
+        "Fournisseurs supportes : [bold]groq[/bold], [bold]mistral[/bold], [bold]gemini[/bold], [bold]openrouter[/bold], [bold]custom[/bold] (FreeLLMAPI), [bold]anthropic[/bold], [bold]local[/bold]",
         border_style=p["cli_accent"],
         box=ROUNDED,
     ))
     try:
         mode = input("Fournisseur par defaut [groq] : ").strip().lower() or "groq"
-        if mode not in ("groq", "mistral", "gemini", "openrouter", "anthropic", "local"):
+        if mode not in ("groq", "mistral", "gemini", "openrouter", "custom", "freellmapi", "anthropic", "local"):
             mode = "groq"
+        if mode == "freellmapi":
+            mode = "custom"
         config.definir("mode", mode)
+        if mode == "custom":
+            url = input("URL base OpenAI (ex: http://localhost:3001/v1) : ").strip()
+            if url:
+                config.definir("custom.base_url", url)
+            mod = input("Modele cible [auto] : ").strip() or "auto"
+            config.definir("custom.modele", mod)
         if mode != "local":
             cle = input(f"Cle API {mode} (Entree pour passer) : ").strip()
             if cle:
@@ -578,6 +619,17 @@ def lancer_terminal_interactif():
     """Boucle principale du Terminal RIOT inspirée de Claude Code."""
     _verifier_configuration_initiale()
     afficher_banniere_claude()
+
+    # Vérification non-bloquante des mises à jour (cache 24h)
+    try:
+        from core import updater
+        etat_cache = updater.etat_mise_a_jour(forcer=False, sans_reseau=True)
+        if etat_cache.get("disponible"):
+            console.print(f"  [bold {_pal()['cli_warn']}]↑ {etat_cache['details']}[/bold {_pal()['cli_warn']}] — tape [bold white]/update[/bold white]")
+        else:
+            updater.lancer_verification_arriere_plan()
+    except Exception:
+        pass
 
     # Démarrage automatique en tâche de fond du serveur Web et du tunnel
     from core import serveur, tunnel
@@ -628,6 +680,22 @@ def lancer_terminal_interactif():
                 parties = texte.split(maxsplit=1)
                 arg_th = parties[1] if len(parties) > 1 else ""
                 commande_theme(arg_th)
+                continue
+            elif cmd.startswith("/update"):
+                parties = texte.split(maxsplit=1)
+                arg_up = parties[1] if len(parties) > 1 else ""
+                commande_update(arg_up)
+                continue
+            elif cmd in ("/ide", "/editeur"):
+                from core import serveur, claude_app
+                import webbrowser
+                serveur.demarrer()
+                url_ide = "http://localhost:8790/ide"
+                try:
+                    webbrowser.open(url_ide)
+                except Exception:
+                    pass
+                console.print(f"  [bold {_pal()['cli_accent']}]⚡ RIOT IDE ouvert :[/bold {_pal()['cli_accent']}] [bold white]{url_ide}[/bold white]")
                 continue
             elif cmd.startswith("/mcp"):
                 parties = texte.split(maxsplit=1)
@@ -755,13 +823,30 @@ def lancer_terminal_interactif():
                 console.print(f"  🌐 [bold white]Distant :[/bold white] {st.get('url_publique') or 'En cours ou local seul'}")
                 continue
             elif cmd.startswith("/model") or cmd.startswith("/fournisseur"):
+                from core import llm as llm_mod
                 parties = texte.split(maxsplit=1)
                 provider = llm()
+                fournisseurs_ok = ("groq", "mistral", "gemini", "openrouter", "custom", "freellmapi", "anthropic", "local")
                 if len(parties) > 1:
-                    nouveau = parties[1].strip()
-                    console.print(f"[yellow]Bascule de modèle : {nouveau} (rechargez la session pour persister).[/yellow]")
+                    cible = parties[1].strip()
+                    cible_low = cible.lower()
+                    if cible_low in fournisseurs_ok:
+                        mode_final = "custom" if cible_low == "freellmapi" else cible_low
+                        config.definir("mode", mode_final)
+                        llm_mod.reinitialiser()
+                        nouveau_prov = llm()
+                        console.print(f"  [bold {_pal()['cli_accent']}]✓ Fournisseur actif :[/bold {_pal()['cli_accent']}] [bold white]{nouveau_prov.nom}[/bold white] ({getattr(nouveau_prov, 'modele', '-')})")
+                    else:
+                        sec = "ollama" if getattr(provider, "nom", "").lower() == "ollama" else reglage("mode", "mistral")
+                        if sec == "freellmapi":
+                            sec = "custom"
+                        config.definir(f"{sec}.modele", cible)
+                        llm_mod.reinitialiser()
+                        nouveau_prov = llm()
+                        console.print(f"  [bold {_pal()['cli_accent']}]✓ Modèle basculé :[/bold {_pal()['cli_accent']}] [bold white]{getattr(nouveau_prov, 'modele', cible)}[/bold white] ({nouveau_prov.nom})")
                 else:
                     console.print(f"  ⚡ Modèle actuel : [bold {_pal()['cli_warn']}]{getattr(provider, 'modele', '-')}[/bold {_pal()['cli_warn']}] ({provider.nom})")
+                    console.print("  [dim]Fournisseurs : groq · mistral · gemini · openrouter · custom (FreeLLMAPI) · anthropic · local[/dim]")
                 continue
             elif cmd in ("/help", "/aide"):
                 commande_aide()
