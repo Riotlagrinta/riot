@@ -77,6 +77,7 @@
       <div class="ide-tabs-bar" id="ide-tabs-bar">
         <div id="ide-tabs" class="ide-tabs"></div>
         <div class="ide-editor-actions">
+          <button type="button" id="ide-btn-revert" class="ide-btn-sm hidden" title="Annuler le dernier patch accepté">Annuler patch</button>
           <button type="button" id="ide-btn-preview" class="ide-btn-sm" title="Aperçu Markdown">Aperçu</button>
           <button type="button" id="ide-btn-diff" class="ide-btn-sm" title="Voir diff">Diff</button>
           <button type="button" id="ide-btn-save" class="ide-btn-sm ide-btn-accent" title="Enregistrer (Ctrl+S)">Enregistrer</button>
@@ -200,34 +201,44 @@
     </div>
   </div>
 
-  <!-- MODAL FOURNISSEUR LLM / FREELMAPI -->
+  <!-- MODAL PROFIL RIOT / FOURNISSEUR CREATEUR -->
   <div id="ide-model-modal" class="ide-modal hidden">
     <div class="ide-modal-card">
       <div class="ide-modal-head">
-        <h3>Fournisseur LLM &amp; Passerelle Compatible</h3>
+        <h3 id="ide-modal-title">Moteur RIOT</h3>
         <button type="button" id="ide-modal-close" class="ide-icon-btn">✕</button>
       </div>
       <form id="ide-model-form" class="ide-modal-form">
-        <label>Mode / Provider
-          <select id="ide-cfg-mode">
-            <option value="mistral">Mistral AI</option>
-            <option value="groq">Groq</option>
-            <option value="gemini">Google Gemini</option>
-            <option value="openrouter">OpenRouter</option>
-            <option value="custom">Custom / FreeLLMAPI (OpenAI-compatible)</option>
-            <option value="anthropic">Anthropic Claude</option>
-            <option value="local">Ollama Local</option>
+        <label id="ide-cfg-profil-wrap">Profil de performance RIOT
+          <select id="ide-cfg-profil">
+            <option value="auto">RIOT Auto (Équilibré)</option>
+            <option value="fast">RIOT Fast (Réponses instantanées)</option>
+            <option value="code">RIOT Code (Ingénierie avancée)</option>
+            <option value="deep">RIOT Deep (Raisonnement approfondi)</option>
           </select>
         </label>
-        <label id="ide-cfg-baseurl-wrap" class="hidden">URL Base OpenAI (/v1 ou /v1/chat/completions)
-          <input id="ide-cfg-baseurl" type="text" placeholder="http://localhost:3001/v1" />
-        </label>
-        <label>Modèle (optionnel)
-          <input id="ide-cfg-model" type="text" placeholder="Ex: codestral-latest, auto, llama-3.3-70b-versatile" />
-        </label>
-        <label>Clé API (laisser vide pour conserver l'actuelle)
-          <input id="ide-cfg-key" type="password" placeholder="sk-... ou freellmapi-..." />
-        </label>
+        <div id="ide-admin-model-fields" class="hidden" style="display:flex;flex-direction:column;gap:10px;">
+          <label>Mode / Provider (Créateur)
+            <select id="ide-cfg-mode">
+              <option value="mistral">Mistral AI</option>
+              <option value="groq">Groq</option>
+              <option value="gemini">Google Gemini</option>
+              <option value="openrouter">OpenRouter</option>
+              <option value="custom">Custom / FreeLLMAPI (OpenAI-compatible)</option>
+              <option value="anthropic">Anthropic Claude</option>
+              <option value="local">Ollama Local</option>
+            </select>
+          </label>
+          <label id="ide-cfg-baseurl-wrap" class="hidden">URL Base OpenAI (/v1 ou /v1/chat/completions)
+            <input id="ide-cfg-baseurl" type="text" placeholder="http://localhost:3001/v1" />
+          </label>
+          <label>Modèle (optionnel)
+            <input id="ide-cfg-model" type="text" placeholder="Ex: codestral-latest, auto, llama-3.3-70b-versatile" />
+          </label>
+          <label>Clé API (laisser vide pour conserver l'actuelle)
+            <input id="ide-cfg-key" type="password" placeholder="sk-... ou freellmapi-..." />
+          </label>
+        </div>
         <div class="ide-modal-actions">
           <button type="submit" class="ide-btn-sm ide-btn-accent">Appliquer</button>
         </div>

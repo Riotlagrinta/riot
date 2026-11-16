@@ -31,18 +31,53 @@ from core.config import dossier_projets
 DOSSIER_PROJETS_DEFAUT = dossier_projets()
 
 
+_RACINE_RIOT = Path(__file__).resolve().parent.parent
+
+
+def _projet_actif_courant() -> Optional[Path]:
+    """Retourne le projet actif selectionne dans le CLI ou RIOT IDE."""
+    try:
+        from core.cli import _SESSION_CTX
+        p = _SESSION_CTX.get("projet_actif")
+        if isinstance(p, Path) and p.exists() and p.is_dir():
+            return p.resolve()
+    except Exception:
+        pass
+    return None
+
+
+def _verifier_acces_source_interne(cible: Path) -> None:
+    """Empeche la lecture ou modification du code source de RIOT sans autorisation createur."""
+    try:
+        from core.llm import est_createur
+        if est_createur():
+            return
+    except Exception:
+        pass
+    try:
+        cible.resolve().relative_to(_RACINE_RIOT.resolve())
+        raise PermissionError("Acces refuse : le code source interne de RIOT est protege (mode createur requis).")
+    except ValueError:
+        return
+
+
 def _resoudre_chemin(chemin: str, dossier_base: Optional[str] = None) -> Path:
-    """Résout un chemin absolu ou relatif avec gestion des alias et lettres de lecteur."""
+    """Resout un chemin absolu ou relatif en priorisant le projet actif courant."""
     p_str = chemin.strip().strip('"').strip("'")
     p = Path(p_str)
     if not p.is_absolute():
+        actif = _projet_actif_courant()
         if dossier_base and os.path.isdir(dossier_base):
             p = Path(dossier_base) / p
+        elif actif is not None:
+            p = actif / p
         elif (DOSSIER_PROJETS_DEFAUT / p).exists():
             p = DOSSIER_PROJETS_DEFAUT / p
         else:
             p = Path.cwd() / p
-    return p.resolve()
+    res = p.resolve()
+    _verifier_acces_source_interne(res)
+    return res
 
 
 @outil(
@@ -417,7 +452,8 @@ def chercher_dans_code(terme: str, dossier: str = "", extensions: str = ".py,.ts
 )
 def executer_test_ou_commande(commande: str, dossier: str = "", timeout: int = 60) -> str:
     """Exécute une commande système avec capture exacte des codes de retour (multiplateforme)."""
-    racine = _resoudre_chemin(dossier or str(DOSSIER_PROJETS_DEFAUT))
+    base = dossier or str(_projet_actif_courant() or DOSSIER_PROJETS_DEFAUT)
+    racine = _resoudre_chemin(base)
     if not racine.exists():
         return f"[ERREUR] Le dossier de travail '{racine}' est introuvable."
 

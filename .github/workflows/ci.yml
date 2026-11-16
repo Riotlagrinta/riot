@@ -1,0 +1,30 @@
+name: RIOT CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install dependencies and pytest
+        run: |
+          uv pip install --system -e . pytest httpx
+      - name: Compile Python modules
+        run: |
+          python -m py_compile riot.py overlay.py core/*.py tools/*.py proxy/server.py
+      - name: Run automated test suite
+        run: |
+          pytest -q tests/
+      - name: Verify web package assets in built wheel
+        run: |
+          uv build --wheel --out-dir dist_check
+          python -c "import pathlib, zipfile; whl=next(pathlib.Path('dist_check').glob('*.whl')); names=zipfile.ZipFile(whl).namelist(); assert 'web/ide.html' in names and 'web/theme.css' in names and 'web/riot-logo.svg' in names"

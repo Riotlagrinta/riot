@@ -79,6 +79,57 @@ def _recuperer_liste_cles(val_config, env_nom=""):
     return cles
 
 
+_PROFILS_PUBLICS = {
+    "auto": ("RIOT Auto", "mistral"),
+    "fast": ("RIOT Fast", "groq"),
+    "code": ("RIOT Code", "mistral"),
+    "deep": ("RIOT Deep", "openrouter"),
+}
+
+
+def est_createur() -> bool:
+    """Retourne True uniquement pour les createurs (RIOT_ADMIN=1 ou admin_mode: true)."""
+    import os
+    return os.environ.get("RIOT_ADMIN", "").strip() == "1" or bool(reglage("admin_mode", False))
+
+
+def identite_publique(provider=None) -> dict:
+    """Masque le vrai modele/fournisseur pour les utilisateurs finaux (mode boite noire)."""
+    if provider is None:
+        provider = llm()
+    if est_createur():
+        return {
+            "nom": getattr(provider, "nom", "-"),
+            "modele": getattr(provider, "modele", "-"),
+            "profil": str(reglage("riot.profil", "auto") or "auto"),
+            "opaque": False,
+            "admin": True,
+        }
+    profil = str(reglage("riot.profil", "auto") or "auto").lower().strip()
+    label = _PROFILS_PUBLICS.get(profil, ("RIOT Auto", "mistral"))[0]
+    return {
+        "nom": "RIOT Engine",
+        "modele": label,
+        "profil": profil if profil in _PROFILS_PUBLICS else "auto",
+        "opaque": True,
+        "admin": False,
+    }
+
+
+def definir_profil_public(profil: str) -> dict:
+    """Permet a un utilisateur de choisir un profil opaque (auto/fast/code/deep) sans voir le fournisseur."""
+    import os
+    from core import config
+    p = (profil or "auto").lower().strip()
+    if p not in _PROFILS_PUBLICS:
+        p = "auto"
+    config.definir("riot.profil", p)
+    if not (os.environ.get("RIOT_GATEWAY_URL") or reglage("gateway.url", "")):
+        config.definir("mode", _PROFILS_PUBLICS[p][1])
+    reinitialiser()
+    return identite_publique()
+
+
 # --------------------------------------------------------------- Groq (cloud rapide)
 
 class GroqProvider(ProviderLLM):
@@ -875,19 +926,23 @@ _LLM = None
 
 
 def llm():
-    """Provider LLM courant selon le mode (groq | local | hybride | qualite).
-
-    - groq    : GroqProvider (ultra-rapide, Llama 3.3 / GPT-OSS).
-    - local   : Ollama.
-    - hybride : Claude, modele economique (anthropic.modele) ou Groq si configure.
-    - qualite : Claude, modele fort (anthropic.modele_qualite)."""
+    """Provider LLM courant selon le mode (gateway | groq | mistral | gemini | openrouter | custom | local | hybride | qualite)."""
     global _LLM
     if _LLM is None:
+        import os
         from core.routage import mode_actuel
+        gw_url = (os.environ.get("RIOT_GATEWAY_URL", "") or str(reglage("gateway.url", "") or "")).strip()
+        gw_tok = (os.environ.get("RIOT_GATEWAY_TOKEN", "") or str(reglage("gateway.token", "") or "")).strip()
         m = mode_actuel()
         fournisseur = (reglage("llm.fournisseur", "") or "").lower()
 
-        if m == "groq" or fournisseur == "groq":
+        if gw_url and not est_createur():
+            _LLM = CustomOpenAIProvider(modele=f"riot-{reglage('riot.profil', 'auto')}")
+            _LLM.api_url = _normaliser_url_chat(gw_url)
+            _LLM.cles = [gw_tok or "riot-public-client"]
+            _LLM.nom = "RIOT Engine"
+            _LLM.nom_affiche = "RIOT Engine"
+        elif m == "groq" or fournisseur == "groq":
             _LLM = GroqProvider()
         elif m == "mistral" or fournisseur == "mistral":
             _LLM = MistralProvider()

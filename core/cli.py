@@ -138,9 +138,11 @@ def afficher_banniere_claude():
     sec = p["cli_secondary"]
     warn = p["cli_warn"]
 
+    from core.llm import identite_publique
     provider = llm()
-    nom_modele = getattr(provider, "modele", "-")
-    fournisseur_nom = provider.nom
+    pub = identite_publique(provider)
+    nom_modele = pub["modele"]
+    fournisseur_nom = pub["nom"]
 
     projet = _SESSION_CTX["projet_actif"]
     branche = _recup_branche_git(projet)
@@ -149,8 +151,10 @@ def afficher_banniere_claude():
     vm = psutil.virtual_memory()
     ram_str = f"{round(vm.used / (1024 ** 3), 1)}/{round(vm.total / (1024 ** 3), 1)} Go"
 
-    # Context window estimate
-    ctx_taille = "32k" if "codestral" in nom_modele.lower() else ("128k" if "llama" in nom_modele.lower() or "groq" in fournisseur_nom.lower() else "1M")
+    if pub["opaque"]:
+        ctx_taille = "Auto"
+    else:
+        ctx_taille = "32k" if "codestral" in nom_modele.lower() else ("128k" if "llama" in nom_modele.lower() or "groq" in fournisseur_nom.lower() else "1M")
 
     mode_label = f"[bold {acc}]⚡ RIOT Coder[/bold {acc}]" if _SESSION_CTX["mode_code"] else f"[bold {sec}]⚡ RIOT Copilot[/bold {sec}]"
     th_id = p["id"]
@@ -580,9 +584,19 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
 
 
 def _verifier_configuration_initiale():
-    """Assistant d'onboarding rapide si aucune cle API n'est configuree sur cette machine."""
+    """Assistant d'onboarding rapide (mode createur uniquement ; les utilisateurs n'entrent jamais de cle tierce)."""
     from core import llm as llm_mod
     if llm().disponible():
+        return
+    if not llm_mod.est_createur():
+        p = _pal()
+        console.print(Panel(
+            f"[bold {p['cli_accent']}]Moteur RIOT Engine[/bold {p['cli_accent']}]\n"
+            "Aucun serveur passerelle configure sur ce poste.\n"
+            "[dim]Connectez ce client au proxy RIOT officiel (RIOT_GATEWAY_URL) ou passez en mode createur (RIOT_ADMIN=1).[/dim]",
+            border_style=p["cli_accent"],
+            box=ROUNDED,
+        ))
         return
     p = _pal()
     console.print(Panel(
@@ -826,6 +840,16 @@ def lancer_terminal_interactif():
                 from core import llm as llm_mod
                 parties = texte.split(maxsplit=1)
                 provider = llm()
+                if not llm_mod.est_createur():
+                    if len(parties) > 1:
+                        pub = llm_mod.definir_profil_public(parties[1].strip())
+                        console.print(f"  [bold {_pal()['cli_accent']}]✓ Profil RIOT actif :[/bold {_pal()['cli_accent']}] [bold white]{pub['modele']}[/bold white] ({pub['nom']})")
+                    else:
+                        pub = llm_mod.identite_publique(provider)
+                        console.print(f"  ⚡ Moteur actif : [bold {_pal()['cli_warn']}]{pub['modele']}[/bold {_pal()['cli_warn']}] ({pub['nom']})")
+                        console.print("  [dim]Profils disponibles : auto · fast · code · deep[/dim]")
+                    continue
+
                 fournisseurs_ok = ("groq", "mistral", "gemini", "openrouter", "custom", "freellmapi", "anthropic", "local")
                 if len(parties) > 1:
                     cible = parties[1].strip()

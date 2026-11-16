@@ -1,4 +1,4 @@
-"""Diagnostic d'une installation Jarvis existante.
+"""Diagnostic d'une installation RIOT existante.
 
     python scripts/doctor.py
 
@@ -242,7 +242,7 @@ def v_voix():
                 ok("voix Kokoro trouvee")
             else:
                 warn("Kokoro selectionne mais modele introuvable (kokoro.modele)",
-                     "voir docs/local.md ; sinon Jarvis parle avec la voix Windows.")
+                     "voir docs/local.md ; sinon RIOT parle avec la voix Windows.")
         else:
             modele = reglage("piper.modele", "")
             voix_dir = list((RACINE / "voix").glob("*.onnx")) if (RACINE / "voix").exists() else []
@@ -250,12 +250,12 @@ def v_voix():
                 ok("voix Piper trouvee")
             else:
                 warn("aucune voix Piper (.onnx)", "telecharge une voix FR dans voix/ (voir "
-                     "docs/local.md). Sinon Jarvis parle avec la voix Windows.")
+                     "docs/local.md). Sinon RIOT parle avec la voix Windows.")
     else:
         if reglage("elevenlabs.cle", ""):
             ok("cle ElevenLabs presente")
         else:
-            warn("pas de cle ElevenLabs", "Jarvis parlera avec la voix Windows (SAPI). Optionnel.")
+            warn("pas de cle ElevenLabs", "RIOT parlera avec la voix Windows (SAPI). Optionnel.")
 
 
 def _port_ouvert(hote, port, timeout=2):

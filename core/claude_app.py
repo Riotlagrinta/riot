@@ -1166,7 +1166,9 @@ def monter_routes(app):
 
 
 
+        from core.llm import identite_publique
         provider = llm()
+        pub = identite_publique(provider)
 
 
 
@@ -1214,11 +1216,11 @@ def monter_routes(app):
 
 
 
-                "modele": getattr(provider, "modele", "-"),
+                "modele": pub["modele"],
 
 
 
-                "fournisseur": provider.nom,
+                "fournisseur": pub["nom"],
 
 
 

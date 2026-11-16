@@ -25,7 +25,7 @@
       "ide-tabs", "ide-breadcrumb", "ide-empty-state", "ide-code-wrap",
       "ide-cm-host", "ide-fallback-host", "ide-gutter", "ide-editor",
       "ide-preview-wrap", "ide-diff-wrap", "ide-diff-title", "ide-diff-body",
-      "ide-diff-close", "ide-btn-preview", "ide-btn-diff", "ide-btn-save", "ide-btn-term-toggle",
+      "ide-diff-close", "ide-btn-revert", "ide-btn-preview", "ide-btn-diff", "ide-btn-save", "ide-btn-term-toggle",
       "ide-patch-bar", "ide-patch-file", "ide-patch-stats", "ide-patch-accept", "ide-patch-reject",
       "ide-terminal-panel", "ide-term-cwd", "ide-term-output", "ide-term-form",
       "ide-term-input", "ide-term-clear", "ide-agent-feed", "ide-agent-form",
@@ -33,6 +33,7 @@
       "ide-review-mode", "ide-pending-count",
       "ide-quickopen-modal", "ide-quickopen-input", "ide-quickopen-list",
       "ide-model-modal", "ide-modal-close", "ide-model-form",
+      "ide-cfg-profil-wrap", "ide-cfg-profil", "ide-admin-model-fields",
       "ide-cfg-mode", "ide-cfg-baseurl-wrap", "ide-cfg-baseurl", "ide-cfg-model", "ide-cfg-key"
     ].forEach(function (id) { els[id] = q(id); });
   }
@@ -319,8 +320,14 @@
     }
     if (d.fournisseur) {
       els["ide-model-label"].textContent = d.fournisseur.nom + " · " + d.fournisseur.modele;
-      els["ide-cfg-mode"].value = d.fournisseur.mode || "mistral";
-      els["ide-cfg-baseurl-wrap"].classList.toggle("hidden", els["ide-cfg-mode"].value !== "custom");
+      state.isAdmin = Boolean(d.fournisseur.admin);
+      els["ide-cfg-profil"].value = d.fournisseur.profil || "auto";
+      els["ide-cfg-profil-wrap"].classList.toggle("hidden", state.isAdmin);
+      els["ide-admin-model-fields"].classList.toggle("hidden", !state.isAdmin);
+      if (state.isAdmin) {
+        els["ide-cfg-mode"].value = d.fournisseur.mode || "mistral";
+        els["ide-cfg-baseurl-wrap"].classList.toggle("hidden", els["ide-cfg-mode"].value !== "custom");
+      }
     }
     if (d.custom_base_url) els["ide-cfg-baseurl"].value = d.custom_base_url;
     await loadTree();
@@ -588,12 +595,27 @@
       state.pendingPatches = state.pendingPatches.filter(function (x) { return x.id !== pid; });
       if (d.ok) {
         state.lastAcceptedPatch = { id: pid, chemin: d.chemin };
+        els["ide-btn-revert"].classList.remove("hidden");
         els["ide-diff-wrap"].classList.add("hidden");
         await loadTree();
         await openFile(d.chemin, true);
         appendAgentMsg("system", "✓ Patch #" + pid + " appliqué sur " + d.chemin + ".");
       }
       renderPendingPatches();
+    });
+
+    els["ide-btn-revert"].addEventListener("click", async function () {
+      if (!state.lastAcceptedPatch) return;
+      var pid = state.lastAcceptedPatch.id;
+      var r = await fetch("/api/ide/patch/" + pid + "/revert", { method: "POST" });
+      var d = await r.json();
+      if (d.ok) {
+        appendAgentMsg("system", "↶ Patch #" + pid + " annulé sur " + d.chemin + ".");
+        state.lastAcceptedPatch = null;
+        els["ide-btn-revert"].classList.add("hidden");
+        await loadTree();
+        if (!d.supprime) await openFile(d.chemin, true);
+      }
     });
 
     els["ide-patch-reject"].addEventListener("click", async function () {
@@ -671,15 +693,18 @@
     });
     els["ide-model-form"].addEventListener("submit", async function (ev) {
       ev.preventDefault();
+      var payload = state.isAdmin ? {
+        mode: els["ide-cfg-mode"].value,
+        base_url: els["ide-cfg-baseurl"].value,
+        modele: els["ide-cfg-model"].value,
+        cle: els["ide-cfg-key"].value
+      } : {
+        profil: els["ide-cfg-profil"].value
+      };
       var r = await fetch("/api/ide/modele", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode: els["ide-cfg-mode"].value,
-          base_url: els["ide-cfg-baseurl"].value,
-          modele: els["ide-cfg-model"].value,
-          cle: els["ide-cfg-key"].value
-        })
+        body: JSON.stringify(payload)
       });
       var d = await r.json();
       if (d.ok) {

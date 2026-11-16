@@ -18,7 +18,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 from core import config, memoire, registre
 from core.cli import _SESSION_CTX, _recup_branche_git
 from core.config import dossier_projets, reglage
-from core.llm import llm, reinitialiser as reinit_llm
+from core.llm import definir_profil_public, est_createur, identite_publique, llm, reinitialiser as reinit_llm
 from core.panneau import _local_seulement
 
 LOG = logging.getLogger("riot.ide")
@@ -152,7 +152,7 @@ def _arborescence(projet: Path, max_noeuds: int = 600, max_profondeur: int = 5) 
 def _lister_projets_disponibles() -> List[Dict[str, str]]:
     racine = dossier_projets()
     res: List[Dict[str, str]] = []
-    if _RACINE.exists():
+    if est_createur() and _RACINE.exists():
         res.append({"nom": _RACINE.name, "chemin": str(_RACINE)})
     if racine.exists() and racine.is_dir():
         try:
@@ -347,19 +347,26 @@ def monter_routes(app) -> None:
         from core.routage import mode_actuel
         projet = _projet_courant()
         prov = llm()
-        return {
+        pub = identite_publique(prov)
+        payload = {
             "ok": True,
             "projet": {"nom": projet.name, "chemin": str(projet), "branche": _recup_branche_git(projet)},
             "projets": _lister_projets_disponibles(),
             "fournisseur": {
-                "mode": mode_actuel(),
-                "nom": getattr(prov, "nom", "-"),
-                "modele": getattr(prov, "modele", "-"),
+                "mode": mode_actuel() if pub["admin"] else pub.get("profil", "auto"),
+                "nom": pub["nom"],
+                "modele": pub["modele"],
+                "profil": pub.get("profil", "auto"),
+                "admin": pub["admin"],
+                "opaque": pub["opaque"],
                 "disponible": bool(prov.disponible()) if hasattr(prov, "disponible") else True,
             },
-            "modes_llm": ["groq", "mistral", "gemini", "openrouter", "custom", "anthropic", "local"],
-            "custom_base_url": reglage("custom.base_url", "http://localhost:3001/v1"),
+            "profils_publics": ["auto", "fast", "code", "deep"],
         }
+        if pub["admin"]:
+            payload["modes_llm"] = ["groq", "mistral", "gemini", "openrouter", "custom", "anthropic", "local"]
+            payload["custom_base_url"] = reglage("custom.base_url", "http://localhost:3001/v1")
+        return payload
 
     @app.post("/api/ide/projet")
     async def api_ide_projet(request: Request):
@@ -369,6 +376,12 @@ def monter_routes(app) -> None:
         chemin = Path(str((body or {}).get("chemin", "")).strip())
         if not chemin.exists() or not chemin.is_dir():
             return JSONResponse({"ok": False, "erreur": "Dossier projet introuvable."}, status_code=404)
+        if not est_createur():
+            try:
+                chemin.resolve().relative_to(_RACINE.resolve())
+                return JSONResponse({"ok": False, "erreur": "Acces au code source RIOT reserve aux createurs."}, status_code=403)
+            except ValueError:
+                pass
         _SESSION_CTX["projet_actif"] = chemin.resolve()
         return {"ok": True, "nom": chemin.name, "chemin": str(chemin.resolve()), "branche": _recup_branche_git(chemin)}
 
@@ -510,6 +523,17 @@ def monter_routes(app) -> None:
         if (r := garde(request)):
             return r
         body = await request.json() or {}
+        if not est_createur():
+            profil = str(body.get("profil") or body.get("mode") or "auto").strip().lower()
+            pub = definir_profil_public(profil)
+            return {
+                "ok": True,
+                "mode": pub.get("profil", "auto"),
+                "nom": pub["nom"],
+                "modele": pub["modele"],
+                "admin": False,
+            }
+
         mode = str(body.get("mode", "")).strip().lower()
         base_url = str(body.get("base_url", "")).strip()
         modele = str(body.get("modele", "")).strip()
@@ -526,12 +550,13 @@ def monter_routes(app) -> None:
         if mode:
             config.definir("mode", mode)
         reinit_llm()
-        prov = llm()
+        pub = identite_publique(llm())
         return {
             "ok": True,
             "mode": mode or reglage("mode", "mistral"),
-            "nom": getattr(prov, "nom", "-"),
-            "modele": getattr(prov, "modele", "-"),
+            "nom": pub["nom"],
+            "modele": pub["modele"],
+            "admin": True,
         }
 
     @app.post("/api/ide/chat")

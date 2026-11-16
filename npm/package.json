@@ -19,7 +19,8 @@
     "kelvix"
   ],
   "author": "Kelvix",
-  "license": "MIT",
+  "license": "UNLICENSED",
+  "private": false,
   "engines": {
     "node": ">=18.0.0"
   },
