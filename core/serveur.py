@@ -67,6 +67,20 @@ def app():
                 return Response("", media_type="image/svg+xml", status_code=404)
             return Response(f.read_text(encoding="utf-8"), media_type="image/svg+xml")
 
+        @_APP.get("/icon-192.png")
+        def route_icon_192():
+            f = _RACINE / "web" / "icon-192.png"
+            if not f.exists():
+                return Response(b"", media_type="image/png", status_code=404)
+            return Response(f.read_bytes(), media_type="image/png")
+
+        @_APP.get("/icon-512.png")
+        def route_icon_512():
+            f = _RACINE / "web" / "icon-512.png"
+            if not f.exists():
+                return Response(b"", media_type="image/png", status_code=404)
+            return Response(f.read_bytes(), media_type="image/png")
+
         @_APP.get("/api/version")
         def route_get_version(forcer: bool = False):
             from core import updater
@@ -126,6 +140,11 @@ def app():
             monter_ide(_APP)                      # /ide + /api/ide/* (RIOT IDE style Antigravity, local)
         except Exception:
             LOG.exception("montage de RIOT IDE")
+        try:
+            from core.monitor import monter_routes as monter_monitor
+            monter_monitor(_APP)                  # /monitor + /api/monitor/* (Createur uniquement)
+        except Exception:
+            LOG.exception("montage de RIOT Monitor")
         try:
             from tools.appel_direct import monter_ws
             monter_ws(_APP)                        # /stream (Twilio Media Streams)

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="obsidian">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RIOT // Creator Monitor</title>
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+  <style>
+    :root {
+      --bg: #0b0c0e; --card: #13161b; --card2: #191d24; --border: #262c36;
+      --txt: #f3f4f6; --muted: #9ca3af; --acc: #10b981; --warn: #e8a838; --err: #f87171;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--txt); font: 13.5px/1.5 Inter, system-ui, sans-serif; }
+    header {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--card);
+      position: sticky; top: 0; z-index: 10;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+    .brand-badge {
+      font-size: 11px; padding: 2px 8px; border-radius: 999px;
+      background: rgba(16, 185, 129, 0.16); color: var(--acc); border: 1px solid var(--acc);
+    }
+    .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    input, select, button {
+      background: var(--card2); color: var(--txt); border: 1px solid var(--border);
+      border-radius: 7px; padding: 6px 10px; font-size: 12.5px;
+    }
+    button.primary { background: var(--acc); color: #062118; border-color: var(--acc); font-weight: 700; cursor: pointer; }
+    main { max-width: 1320px; margin: 0 auto; padding: 18px 20px 60px; display: flex; flex-direction: column; gap: 16px; }
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+    .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+    .kpi .v { font-size: 24px; font-weight: 700; }
+    .kpi .l { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+    .kpi.ok .v { color: var(--acc); }
+    .kpi.err .v { color: var(--err); }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1.6fr; gap: 16px; }
+    .panel { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+    .panel h2 { margin: 0; font-size: 12.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+    .log-list { display: flex; flex-direction: column; gap: 8px; max-height: 620px; overflow-y: auto; }
+    .log-card {
+      padding: 10px 12px; border-radius: 8px; background: var(--card2);
+      border: 1px solid var(--border); cursor: pointer;
+    }
+    .log-card:hover, .log-card.active { border-color: var(--acc); }
+    .log-meta { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+    .badge-ok { color: var(--acc); font-weight: 700; }
+    .badge-ko { color: var(--err); font-weight: 700; }
+    pre {
+      margin: 0; padding: 12px; border-radius: 8px; background: var(--bg);
+      border: 1px solid var(--border); white-space: pre-wrap; word-break: break-word;
+      font-family: ui-monospace, Consolas, monospace; font-size: 12px; max-height: 250px; overflow-y: auto;
+    }
+    .row-kv { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+    @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <svg width="24" height="24" viewBox="0 0 64 64" fill="none"><rect x="3" y="3" width="58" height="58" rx="15" fill="#13161B" stroke="#262C36" stroke-width="2"/><path d="M32 11C43.6 11 53 20.4 53 32C53 35.8 52 39.3 50.2 42.4C47.8 35.2 41.6 30.2 33.8 29.8C27.5 29.5 22.8 33.5 21.8 39C18.5 34.4 17.5 28.2 19.6 22.4C21.8 15.8 26.6 11 32 11Z" fill="#10B981"/><path d="M32 53C20.4 53 11 43.6 11 32C11 28.2 12 24.7 13.8 21.6C16.2 28.8 22.4 33.8 30.2 34.2C36.5 34.5 41.2 30.5 42.2 25C45.5 29.6 46.5 35.8 44.4 41.6C42.2 48.2 37.4 53 32 53Z" fill="#E8A838"/><circle cx="32" cy="32" r="4.5" fill="#F8FAFC"/></svg>
+      <span>RIOT Creator Monitor</span>
+      <span class="brand-badge">OBSERVABILITÉ</span>
+    </div>
+    <div class="controls">
+      <input id="f-token" type="password" placeholder="Admin Token (si proxy)" style="display:none;" />
+      <input id="f-q" type="search" placeholder="Filtrer prompt, réponse, erreur..." />
+      <select id="f-hours">
+        <option value="24">24 heures</option>
+        <option value="168">7 jours</option>
+        <option value="720">30 jours</option>
+      </select>
+      <label style="font-size:12px;display:flex;align-items:center;gap:5px;">
+        <input id="f-err" type="checkbox" /> Erreurs seules
+      </label>
+      <button id="btn-refresh" class="primary" type="button">Actualiser</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="kpis">
+      <div class="kpi"><div class="v" id="k-total">-</div><div class="l">Requêtes IA</div></div>
+      <div class="kpi ok"><div class="v" id="k-rate">-</div><div class="l">Taux de succès</div></div>
+      <div class="kpi err"><div class="v" id="k-err">-</div><div class="l">Erreurs / Échecs</div></div>
+      <div class="kpi"><div class="v" id="k-lat">-</div><div class="l">Latence moy / p95</div></div>
+      <div class="kpi"><div class="v" id="k-tok">-</div><div class="l">Tokens (In + Out)</div></div>
+    </section>
+
+    <section class="grid-2">
+      <div class="panel">
+        <h2>Répartition Providers &amp; Modèles</h2>
+        <div id="prov-list"></div>
+        <h2 style="margin-top:8px;">Journal des requêtes (<span id="log-count">0</span>)</h2>
+        <div id="log-list" class="log-list"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Inspecteur Prompt / Réponse IA / Erreur</h2>
+        <div id="insp-meta" style="font-size:12px;color:var(--muted);">Cliquez sur une requête à gauche pour voir le prompt utilisateur (secrets masqués) et la réponse exacte de l'IA.</div>
+        <div>
+          <strong style="font-size:12px;">Prompt Utilisateur :</strong>
+          <pre id="insp-prompt">-</pre>
+        </div>
+        <div>
+          <strong style="font-size:12px;">Réponse donnée par l'IA :</strong>
+          <pre id="insp-rep">-</pre>
+        </div>
+        <div id="insp-err-wrap" style="display:none;">
+          <strong style="font-size:12px;color:var(--err);">Erreur détectée :</strong>
+          <pre id="insp-err" style="border-color:var(--err);"></pre>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const isProxy = location.pathname.startsWith("/admin");
+    const apiBase = isProxy ? "/admin" : "/api/monitor";
+    const tokInput = document.getElementById("f-token");
+    if (isProxy) {
+      tokInput.style.display = "inline-block";
+      tokInput.value = sessionStorage.getItem("riot_admin_token") || "";
+      tokInput.addEventListener("change", () => sessionStorage.setItem("riot_admin_token", tokInput.value));
+    }
+
+    function hdrs() {
+      const h = {};
+      if (isProxy && tokInput.value) h["X-Admin-Token"] = tokInput.value;
+      return h;
+    }
+
+    async function charger() {
+      const h = document.getElementById("f-hours").value;
+      const q = encodeURIComponent(document.getElementById("f-q").value || "");
+      const onlyErr = document.getElementById("f-err").checked;
+      const [rm, rl] = await Promise.all([
+        fetch(`${apiBase}/metrics?heures=${h}`, { headers: hdrs() }),
+        fetch(`${apiBase}/logs?limit=100&only_errors=${onlyErr}&q=${q}`, { headers: hdrs() })
+      ]);
+      if (rm.status === 401 || rm.status === 403) {
+        document.getElementById("insp-meta").textContent = "Accès admin requis (renseignez RIOT_ADMIN_TOKEN ou lancez en mode créateur).";
+        return;
+      }
+      const m = await rm.json();
+      const l = await rl.json();
+
+      document.getElementById("k-total").textContent = m.total ?? 0;
+      document.getElementById("k-rate").textContent = (m.taux_succes_pct ?? 100) + "%";
+      document.getElementById("k-err").textContent = m.erreurs ?? 0;
+      document.getElementById("k-lat").textContent = `${m.latence_moy_ms || 0} / ${m.latence_p95_ms || 0} ms`;
+      document.getElementById("k-tok").textContent = ((m.tokens_in || 0) + (m.tokens_out || 0)).toLocaleString("fr-FR");
+
+      const pBox = document.getElementById("prov-list");
+      pBox.innerHTML = "";
+      Object.entries(m.par_provider || {}).forEach(([k, v]) => {
+        const div = document.createElement("div");
+        div.className = "row-kv";
+        div.innerHTML = `<span>${k}</span><span>${v.total} req · <b style="color:${v.erreurs ? 'var(--err)' : 'var(--acc)'}">${v.erreurs} err</b></span>`;
+        pBox.appendChild(div);
+      });
+
+      const logs = l.logs || [];
+      document.getElementById("log-count").textContent = logs.length;
+      const lBox = document.getElementById("log-list");
+      lBox.innerHTML = "";
+      logs.forEach((item) => {
+        const card = document.createElement("div");
+        card.className = "log-card";
+        const preview = (item.prompt || "(vide)").replace(/\s+/g, " ").slice(0, 88);
+        card.innerHTML =
+          `<div class="log-meta"><span class="${item.ok ? 'badge-ok' : 'badge-ko'}">${item.ok ? 'OK' : 'ERR ' + item.status_code}</span><span>${item.provider_reel || item.profil} · ${item.latence_ms}ms · ${item.iso}</span></div>` +
+          `<div style="font-size:12px;">${preview.replace(/</g, "&lt;")}</div>`;
+        card.addEventListener("click", () => {
+          document.querySelectorAll(".log-card").forEach(c => c.classList.remove("active"));
+          card.classList.add("active");
+          document.getElementById("insp-meta").textContent =
+            `#${item.id} · Source: ${item.source} · Client: ${item.client_id || 'local'} · Provider réel: ${item.provider_reel} / ${item.modele_reel} · Tokens: ${item.tokens_in}/${item.tokens_out}`;
+          document.getElementById("insp-prompt").textContent = item.prompt || "(aucun prompt)";
+          document.getElementById("insp-rep").textContent = item.reponse || "(aucune réponse)";
+          const ew = document.getElementById("insp-err-wrap");
+          ew.style.display = item.erreur ? "block" : "none";
+          document.getElementById("insp-err").textContent = item.erreur || "";
+        });
+        lBox.appendChild(card);
+      });
+    }
+
+    document.getElementById("btn-refresh").addEventListener("click", charger);
+    document.getElementById("f-hours").addEventListener("change", charger);
+    document.getElementById("f-err").addEventListener("change", charger);
+    document.getElementById("f-q").addEventListener("keydown", (e) => { if (e.key === "Enter") charger(); });
+    charger();
+  </script>
+</body>
+</html>

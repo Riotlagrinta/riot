@@ -99,3 +99,53 @@ def test_updater_and_proxy_health(monkeypatch):
     pc = TestClient(proxy_app)
     r = pc.get("/health")
     assert r.status_code == 200 and r.json()["ok"] is True
+
+
+def test_spiral_icons_and_creator_monitoring(monkeypatch, tmp_path):
+    from core import llm, serveur
+    from core.telemetry import TelemetryStore, masquer_secrets
+
+    # 1. Redaction automatique des secrets avant stockage
+    s = masquer_secrets("GROQ_API_KEY=gsk_1234567890abcdef12345 et sk-proj-abcdef1234567890abcd")
+    assert "gsk_123456" not in s and "sk-proj-abcdef" not in s
+
+    # 2. Enregistrement TelemetryStore + metriques + recherche
+    store = TelemetryStore(db_path=tmp_path / "mon.db")
+    store.enregistrer(
+        source="proxy", client_id="c1", profil="riot-auto",
+        provider_reel="Mistral", modele_reel="codestral-latest",
+        ok=True, status_code=200, latence_ms=145, tokens_in=20, tokens_out=40,
+        prompt="Cree une API FastAPI", reponse="Voici ton endpoint FastAPI.",
+    )
+    store.enregistrer(
+        source="proxy", client_id="c2", profil="riot-fast",
+        provider_reel="Groq", modele_reel="llama-3.3",
+        ok=False, status_code=429, latence_ms=80,
+        prompt="Test erreur quota", erreur="HTTP 429 rate limit",
+    )
+    met = store.metriques(heures=24)
+    assert met["total"] == 2 and met["erreurs"] == 1 and met["taux_succes_pct"] == 50.0
+    errs = store.lister_logs(only_errors=True)
+    assert len(errs) == 1 and errs[0]["status_code"] == 429
+
+    # 3. Garde /monitor locale + icones PWA Spiral
+    client = TestClient(serveur.app(), base_url="http://127.0.0.1:8790", client=("127.0.0.1", 50000))
+    for asset in ("/logo.svg", "/icon-192.png", "/icon-512.png", "/claude/manifest.json", "/mobile/manifest.json"):
+        assert client.get(asset).status_code == 200
+
+    monkeypatch.delenv("RIOT_ADMIN", raising=False)
+    monkeypatch.setattr(llm, "reglage", lambda k, d=None: False if k == "admin_mode" else d)
+    assert client.get("/monitor").status_code == 403
+
+    monkeypatch.setenv("RIOT_ADMIN", "1")
+    assert client.get("/monitor").status_code == 200
+    assert client.get("/api/monitor/metrics").status_code == 200
+
+    # 4. Garde /admin sur proxy/server.py
+    from proxy.server import app as proxy_app
+    monkeypatch.setenv("RIOT_ADMIN_TOKEN", "secret_creator_tok")
+    pc = TestClient(proxy_app)
+    assert pc.get("/admin/metrics").status_code == 401
+    assert pc.get("/admin/metrics", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
+    assert pc.get("/admin/logs", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
+

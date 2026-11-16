@@ -88,7 +88,7 @@ include-package-data = true
 include = ["core*", "tools*", "musique*", "gestes*", "jarvis*", "web*"]
 
 [tool.setuptools.package-data]
-web = ["*.html", "*.css", "*.js", "*.svg", "*.json"]
+web = ["*.html", "*.css", "*.js", "*.svg", "*.png", "*.json"]
 
 [tool.uv]
 package = true

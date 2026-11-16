@@ -272,13 +272,23 @@ def monter_routes(app):
             "short_name": "RIOT",
             "start_url": "/mobile",
             "display": "standalone",
-            "background_color": "#080b10",
-            "theme_color": "#00d2ff",
-            "description": "Contrôle à distance et assistant vocal pour PC",
+            "background_color": "#0B0C0E",
+            "theme_color": "#10B981",
+            "description": "RIOT Mobile — Contrôle à distance et assistant IA",
             "icons": [
                 {
-                    "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%23080b10' stroke='%2300d2ff' stroke-width='6'/><circle cx='50' cy='50' r='20' fill='%23ff9d00'/></svg>",
-                    "sizes": "192x192 512x512",
+                    "src": "/icon-192.png",
+                    "sizes": "192x192",
+                    "type": "image/png"
+                },
+                {
+                    "src": "/icon-512.png",
+                    "sizes": "512x512",
+                    "type": "image/png"
+                },
+                {
+                    "src": "/logo.svg",
+                    "sizes": "any",
                     "type": "image/svg+xml"
                 }
             ]

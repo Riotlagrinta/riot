@@ -1070,7 +1070,7 @@ def monter_routes(app):
 
 
 
-                    "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23181816'/><circle cx='50' cy='50' r='30' fill='%23d97757'/><path d='M35 50 L45 60 L65 40' stroke='%23ffffff' stroke-width='6' fill='none' stroke-linecap='round'/></svg>",
+                    "src": "/logo.svg",
 
 
 

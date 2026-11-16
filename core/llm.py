@@ -51,11 +51,98 @@ class Reponse:
 class ProviderLLM:
     nom = "?"
 
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        orig = cls.__dict__.get("repondre")
+        if orig and not getattr(orig, "_riot_monitored", False):
+            def _wrapped(self, systeme, historique, outils, visites=None, **kw):
+                import os, time as _t
+                if visites is not None or os.environ.get("RIOT_DISABLE_TELEMETRY") == "1":
+                    return orig(self, systeme, historique, outils, visites=visites, **kw)
+                t0 = _t.time()
+                prompt_txt = _extraire_prompt_historique(historique)
+                try:
+                    rep = orig(self, systeme, historique, outils, visites=visites, **kw)
+                    rep_txt = _resumer_reponse_llm(rep)
+                    echec = "tous les fournisseurs ia ont" in rep_txt.lower()
+                    _journaliser_telemetrie(
+                        provider=self,
+                        ok=not echec,
+                        latence_ms=int((_t.time() - t0) * 1000),
+                        prompt=prompt_txt,
+                        reponse=rep_txt,
+                        erreur=rep_txt if echec else "",
+                    )
+                    return rep
+                except Exception as exc:
+                    _journaliser_telemetrie(
+                        provider=self,
+                        ok=False,
+                        latence_ms=int((_t.time() - t0) * 1000),
+                        prompt=prompt_txt,
+                        erreur=str(exc),
+                    )
+                    raise
+            _wrapped._riot_monitored = True
+            cls.repondre = _wrapped
+
     def disponible(self):
         return True
 
     def repondre(self, systeme, historique, outils, visites=None, **kwargs):
         raise NotImplementedError
+
+
+def _extraire_prompt_historique(historique) -> str:
+    for m in reversed(historique or []):
+        if isinstance(m, dict) and m.get("role") == "user":
+            c = m.get("content")
+            if isinstance(c, str):
+                return c
+            if isinstance(c, list):
+                partes = [str(x.get("text", "")) for x in c if isinstance(x, dict) and x.get("text")]
+                if partes:
+                    return " ".join(partes)
+    return ""
+
+
+def _resumer_reponse_llm(rep) -> str:
+    blocs = getattr(rep, "content", None) or []
+    textes = [b.text for b in blocs if getattr(b, "type", None) == "text" and getattr(b, "text", None)]
+    outils = [b.name for b in blocs if getattr(b, "type", None) == "tool_use" and getattr(b, "name", None)]
+    morceaux = []
+    if textes:
+        morceaux.append("\n".join(textes))
+    if outils:
+        morceaux.append(f"[tools: {', '.join(outils)}]")
+    return "\n".join(morceaux).strip()
+
+
+def _journaliser_telemetrie(provider, ok: bool, latence_ms: int, prompt: str = "", reponse: str = "", erreur: str = "") -> None:
+    try:
+        from core.telemetry import envoyer_alerte_webhook, store_defaut
+        store_defaut().enregistrer(
+            source="local",
+            profil=str(reglage("riot.profil", "auto") or "auto"),
+            provider_reel=getattr(provider, "nom", "-"),
+            modele_reel=getattr(provider, "modele", "-"),
+            ok=ok,
+            status_code=200 if ok else 500,
+            latence_ms=latence_ms,
+            prompt=prompt,
+            reponse=reponse,
+            erreur=erreur,
+        )
+        if not ok and erreur:
+            wh = str(reglage("telemetry.webhook_url", "") or "")
+            envoyer_alerte_webhook(
+                f"Erreur IA ({getattr(provider, 'nom', '?')})",
+                erreur,
+                cle_cooldown=f"llm_err_{getattr(provider, 'nom', 'x')}",
+                webhook_url=wh or None,
+            )
+    except Exception:
+        pass
 
 
 # --------------------------------------------------------------- Groq (cloud rapide)
