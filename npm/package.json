@@ -1,7 +1,7 @@
 {
   "name": "@riotlagrinta/riot",
-  "version": "0.2.1",
-  "description": "RIOT — Copilote développeur, système et agent IA multiplateforme en ligne de commande.",
+  "version": "0.3.0",
+  "description": "RIOT — IDE agentique, Studio Web & Copilote développeur multiplateforme en ligne de commande.",
   "bin": {
     "riot": "bin/riot.js"
   },
