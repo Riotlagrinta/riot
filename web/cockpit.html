@@ -3,13 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Jarvis — Cockpit</title>
+<title>RIOT — Cockpit</title>
+<link rel="stylesheet" href="/theme.css">
+<script src="/theme.js"></script>
 <style>
-  :root{--bg:#0d1017;--card:#151a22;--card2:#1c222c;--bord:#2a2f3a;--txt:#e6e8ec;
-    --dim:#9aa2b1;--acc:#5b8cff;--ok:#3ecf8e;--warn:#f5b942;--ko:#ff6b6b}
+  :root{--bg:var(--riot-bg);--card:var(--riot-card);--card2:var(--riot-card-2);--bord:var(--riot-border);--txt:var(--riot-text);
+    --dim:var(--riot-text-muted);--acc:var(--riot-accent);--ok:var(--riot-ok);--warn:var(--riot-warn);--ko:var(--riot-err)}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--txt);
-    font:14px/1.55 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    font:14px/1.55 var(--riot-font-sans, -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif)}
   header{padding:16px 22px;border-bottom:1px solid var(--bord);display:flex;
     align-items:center;gap:12px;position:sticky;top:0;background:var(--bg);z-index:5}
   header h1{font-size:16px;margin:0;font-weight:600}
@@ -44,9 +46,10 @@
 </head>
 <body>
 <header>
-  <h1>Jarvis — Cockpit</h1>
+  <h1>RIOT — Cockpit</h1>
   <span class="pill">local uniquement</span>
-  <span id="maj" class="muted" style="margin-left:auto;font-size:12px"></span>
+  <div data-riot-theme-switcher style="margin-left:auto"></div>
+  <span id="maj" class="muted" style="font-size:12px"></span>
 </header>
 <nav>
   <button data-t="finances" class="on">💶 Finances</button>
@@ -70,7 +73,7 @@
     <div class="card"><h2>Par catégorie (abonnements)</h2><div id="categories"></div></div>
 
     <div class="card"><h2>Ce mois — transactions</h2>
-      <div class="kpis" id="txkpis"><span class="muted">Importe un relevé : « Jarvis, importe mon relevé » (CSV dans finances/releves/).</span></div>
+      <div class="kpis" id="txkpis"><span class="muted">Importe un relevé : « RIOT, importe mon relevé » (CSV dans finances/releves/).</span></div>
       <div id="txcats" style="margin-top:10px"></div>
     </div>
     <div class="card"><h2>Abonnements repérés dans tes transactions</h2>

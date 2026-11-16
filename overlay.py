@@ -137,15 +137,24 @@ def _boucle():
     except Exception:
         pass
 
-    fond, accent, txtcol, dim = "#0d1017", "#5b8cff", "#e6e8ec", "#9aa2b1"
-    cadre = tk.Frame(root, bg=fond, highlightthickness=1, highlightbackground="#2a2f3a")
+    try:
+        from core import theme as _riot_theme
+        _pal = _riot_theme.palette()
+        fond = _pal["overlay_bg"]
+        accent = _pal["overlay_accent"]
+        txtcol = _pal["overlay_text"]
+        dim = _pal["overlay_dim"]
+        bordcol = _pal["overlay_border"]
+    except Exception:
+        fond, accent, txtcol, dim, bordcol = "#13151A", "#E8A838", "#F4F3EE", "#9A9890", "#272B34"
+    cadre = tk.Frame(root, bg=fond, highlightthickness=1, highlightbackground=bordcol)
     cadre.pack(fill="both", expand=True)
     bord = tk.Frame(cadre, bg=accent, width=4)
     bord.pack(side="left", fill="y")
     corps = tk.Frame(cadre, bg=fond)
     corps.pack(side="left", fill="both", expand=True, padx=14, pady=12)
 
-    lbl_tag = tk.Label(corps, text="JARVIS", bg=fond, fg=accent,
+    lbl_tag = tk.Label(corps, text="RIOT", bg=fond, fg=accent,
                        font=("Segoe UI Semibold", 9), anchor="w")
     lbl_tag.pack(fill="x")
     lbl_titre = tk.Label(corps, text="", bg=fond, fg=txtcol, justify="left",
@@ -267,7 +276,7 @@ def _duree_auto(texte):
 # ============================================================ cartes (extensible)
 
 def _carte_reponse(lab, texte, extra):
-    lab["tag"].config(text="JARVIS")
+    lab["tag"].config(text="RIOT")
     lab["corps"].config(text=texte)
     lab["corps"].pack(fill="x", pady=(4, 0))
 

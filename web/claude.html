@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Claude // RIOT Dev Studio</title>
+  <title>RIOT // Studio</title>
   <link rel="manifest" href="/claude/manifest.json">
-  <meta name="theme-color" content="#181816">
+  <meta name="theme-color" content="#0B0C0E">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
@@ -14,6 +14,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="/theme.css">
+  <script src="/theme.js"></script>
 
   <!-- Markdown-it, Highlight.js & Mermaid.js -->
   <script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.2/dist/markdown-it.min.js"></script>
@@ -23,25 +25,25 @@
 
   <style>
     :root {
-      --claude-bg: #181816;
-      --claude-sidebar: #131312;
-      --claude-card: #222220;
-      --claude-card-subtle: #1c1c1a;
-      --claude-border: #2e2e2a;
-      --claude-border-subtle: #242421;
+      --claude-bg: var(--riot-bg);
+      --claude-sidebar: var(--riot-sidebar);
+      --claude-card: var(--riot-card);
+      --claude-card-subtle: var(--riot-card-2);
+      --claude-border: var(--riot-border);
+      --claude-border-subtle: var(--riot-border-subtle);
       
-      --claude-coral: #d97757;
-      --claude-coral-hover: #c46445;
-      --claude-coral-dim: rgba(217, 119, 87, 0.15);
+      --claude-coral: var(--riot-accent);
+      --claude-coral-hover: var(--riot-accent-hover);
+      --claude-coral-dim: var(--riot-accent-dim);
       
-      --claude-text: #f5f4ef;
-      --claude-text-muted: #9e9d95;
-      --claude-text-dim: #6e6d66;
+      --claude-text: var(--riot-text);
+      --claude-text-muted: var(--riot-text-muted);
+      --claude-text-dim: var(--riot-text-dim);
 
-      --claude-green: #98c379;
-      --claude-gold: #e5c07b;
-      --claude-cyan: #56b6c2;
-      --claude-red: #e06c75;
+      --claude-green: var(--riot-ok);
+      --claude-gold: var(--riot-warn);
+      --claude-cyan: var(--riot-secondary);
+      --claude-red: var(--riot-err);
     }
 
     * {
@@ -1033,9 +1035,9 @@
     <div class="sidebar-header">
       <div class="brand">
         <div class="brand-icon">
-          <i data-lucide="sparkles" style="width: 15px; height: 15px;"></i>
+          <i data-lucide="zap" style="width: 15px; height: 15px;"></i>
         </div>
-        <span>Claude RIOT</span>
+        <span>RIOT Studio</span>
       </div>
       <button class="btn-icon" onclick="toggleSidebar()" title="Fermer la barre">
         <i data-lucide="chevron-left" style="width: 16px; height: 16px;"></i>
@@ -1124,7 +1126,8 @@
           <span id="label-branche-header">main</span>
         </div>
       </div>
-      <div class="header-right">
+      <div class="header-right" style="display:flex;align-items:center;gap:10px;">
+        <div data-riot-theme-switcher></div>
         <button class="btn-header" id="btn-toggle-artifacts" onclick="toggleArtifacts()">
           <i data-lucide="panel-right" style="width: 14px; height: 14px;"></i>
           <span>Artifacts</span>
@@ -1135,15 +1138,15 @@
     <!-- Fil de messages -->
     <div class="messages-scroll" id="messages-scroll">
       <div class="messages-track" id="messages-track">
-        <!-- Message d'accueil Claude -->
+        <!-- Message d'accueil RIOT -->
         <div class="msg-row">
           <div class="msg-avatar avatar-claude">
-            <i data-lucide="sparkles" style="width: 16px; height: 16px;"></i>
+            <i data-lucide="zap" style="width: 16px; height: 16px;"></i>
           </div>
           <div class="msg-content">
-            <p><strong>Bonjour, je suis Claude RIOT.</strong></p>
-            <p>Je suis connecté à ton environnement local et prêt à travailler sur tes projets (<strong>Trade App</strong>, <strong>medi_go</strong>, <strong>neuro-studio</strong>, etc.).</p>
-            <p>Tu peux me demander de modifier du code, concevoir une architecture, exécuter des tests unitaires ou lancer la chaîne <strong>Swarm Multi-Agents</strong>.</p>
+            <p><strong>Bonjour, je suis RIOT.</strong></p>
+            <p>Je suis connecté à votre environnement local et prêt à intervenir sur vos projets, votre système ou vos visuels.</p>
+            <p>Vous pouvez me demander de modifier du code, générer des maquettes/images, auditer une architecture ou lancer le pipeline <strong>Swarm Multi-Agents</strong>.</p>
           </div>
         </div>
       </div>
@@ -1165,7 +1168,7 @@
           id="prompt-input"
           class="input-textarea"
           rows="1"
-          placeholder="Demandez à Claude d'explorer, coder ou tester... (ou déposez vos fichiers ici)"
+          placeholder="Demandez à RIOT d'explorer, coder, tester ou générer une maquette... (ou déposez vos fichiers)"
           onkeydown="gererTouche(event)"
           oninput="autoResize(this)"
         ></textarea>
@@ -1749,7 +1752,7 @@
             <i data-lucide="sparkles" style="width: 16px; height: 16px;"></i>
           </div>
           <div class="msg-content">
-            <p><strong>Bonjour, je suis Claude RIOT.</strong></p>
+            <p><strong>Bonjour, je suis RIOT.</strong></p>
             <p style="margin-top: 6px; color: var(--claude-text-muted);">Nouvelle discussion ouverte ${contexteNom}. Posez vos questions, discutez librement ou joignez des fichiers.</p>
           </div>
         </div>
@@ -2133,7 +2136,7 @@
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            titre: "Document Kéranos RIOT",
+            titre: "Document RIOT Studio",
             texte: texte,
             theme: "moderne"
           })

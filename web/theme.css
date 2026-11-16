@@ -1,0 +1,156 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+:root,
+[data-theme="obsidian"] {
+  --riot-bg: #0B0C0E;
+  --riot-sidebar: #08090B;
+  --riot-card: #13151A;
+  --riot-card-2: #1B1E25;
+  --riot-border: #272B34;
+  --riot-border-subtle: #1D2028;
+  --riot-accent: #E8A838;
+  --riot-accent-hover: #D49528;
+  --riot-accent-dim: rgba(232, 168, 56, 0.14);
+  --riot-accent-ink: #0B0C0E;
+  --riot-secondary: #60A5FA;
+  --riot-secondary-dim: rgba(96, 165, 250, 0.14);
+  --riot-text: #F4F3EE;
+  --riot-text-muted: #9A9890;
+  --riot-text-dim: #68665F;
+  --riot-ok: #22C55E;
+  --riot-ok-dim: rgba(34, 197, 94, 0.14);
+  --riot-warn: #E8A838;
+  --riot-warn-dim: rgba(232, 168, 56, 0.14);
+  --riot-err: #EF4444;
+  --riot-err-dim: rgba(239, 68, 68, 0.14);
+  --riot-code-bg: #0E1014;
+  --riot-code-text: #E5E7EB;
+  --riot-font-display: 'Space Grotesk', 'Plus Jakarta Sans', system-ui, sans-serif;
+  --riot-font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --riot-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+[data-theme="paper"] {
+  --riot-bg: #F6F5F0;
+  --riot-sidebar: #ECEAE2;
+  --riot-card: #FFFFFF;
+  --riot-card-2: #F0EEE7;
+  --riot-border: #D8D5CB;
+  --riot-border-subtle: #E5E2D9;
+  --riot-accent: #059669;
+  --riot-accent-hover: #047857;
+  --riot-accent-dim: rgba(5, 150, 105, 0.12);
+  --riot-accent-ink: #FFFFFF;
+  --riot-secondary: #0F766E;
+  --riot-secondary-dim: rgba(15, 118, 110, 0.12);
+  --riot-text: #111315;
+  --riot-text-muted: #525660;
+  --riot-text-dim: #7C808B;
+  --riot-ok: #059669;
+  --riot-ok-dim: rgba(5, 150, 105, 0.12);
+  --riot-warn: #D97706;
+  --riot-warn-dim: rgba(217, 119, 6, 0.12);
+  --riot-err: #DC2626;
+  --riot-err-dim: rgba(220, 38, 38, 0.12);
+  --riot-code-bg: #EAE8E0;
+  --riot-code-text: #111315;
+}
+
+[data-theme="tactical"] {
+  --riot-bg: #090B0D;
+  --riot-sidebar: #06080A;
+  --riot-card: #11151B;
+  --riot-card-2: #181E27;
+  --riot-border: #1F2732;
+  --riot-border-subtle: #161C24;
+  --riot-accent: #4ADE80;
+  --riot-accent-hover: #22C55E;
+  --riot-accent-dim: rgba(74, 222, 128, 0.14);
+  --riot-accent-ink: #06080A;
+  --riot-secondary: #60A5FA;
+  --riot-secondary-dim: rgba(96, 165, 250, 0.14);
+  --riot-text: #E2E8F0;
+  --riot-text-muted: #8B9BB0;
+  --riot-text-dim: #5E6E82;
+  --riot-ok: #4ADE80;
+  --riot-ok-dim: rgba(74, 222, 128, 0.14);
+  --riot-warn: #F59E0B;
+  --riot-warn-dim: rgba(245, 158, 11, 0.14);
+  --riot-err: #F87171;
+  --riot-err-dim: rgba(248, 113, 113, 0.14);
+  --riot-code-bg: #0B0F14;
+  --riot-code-text: #E2E8F0;
+}
+
+/* Contraste code/markdown garanti en mode clair Encre & Emeraude */
+[data-theme="paper"] pre,
+[data-theme="paper"] pre code,
+[data-theme="paper"] .hljs {
+  background: var(--riot-code-bg) !important;
+  color: var(--riot-code-text) !important;
+  border-color: var(--riot-border) !important;
+}
+
+[data-theme="paper"] .hljs-keyword,
+[data-theme="paper"] .hljs-selector-tag { color: #047857 !important; font-weight: 600; }
+[data-theme="paper"] .hljs-string,
+[data-theme="paper"] .hljs-attr { color: #B45309 !important; }
+[data-theme="paper"] .hljs-title,
+[data-theme="paper"] .hljs-function { color: #1D4ED8 !important; }
+[data-theme="paper"] .hljs-comment { color: #6B7280 !important; }
+
+/* Selecteur universel de theme */
+.riot-theme-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--riot-card-2);
+  border: 1px solid var(--riot-border);
+  font-family: var(--riot-font-sans);
+}
+
+.riot-theme-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: transparent;
+  color: var(--riot-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 5px 9px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+
+.riot-theme-btn:hover {
+  color: var(--riot-text);
+}
+
+.riot-theme-btn.active {
+  background: var(--riot-accent);
+  color: var(--riot-accent-ink);
+}
+
+.riot-theme-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .riot-theme-btn span.riot-theme-label {
+    display: none;
+  }
+  .riot-theme-btn {
+    padding: 6px 8px;
+  }
+}
+

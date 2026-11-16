@@ -735,6 +735,7 @@ def monter_routes(app):
 
 
     @app.get("/", response_class=HTMLResponse)
+    @app.get("/studio", response_class=HTMLResponse)
 
 
 
@@ -750,7 +751,7 @@ def monter_routes(app):
 
 
 
-            return HTMLResponse("<h1>Interface Claude RIOT en préparation.</h1>", status_code=404)
+            return HTMLResponse("<h1>Interface RIOT Studio en préparation.</h1>", status_code=404)
 
 
 
@@ -1033,11 +1034,11 @@ def monter_routes(app):
 
 
 
-            "name": "Claude RIOT",
+            "name": "RIOT Studio",
 
 
 
-            "short_name": "Claude",
+            "short_name": "RIOT",
 
 
 
@@ -1049,11 +1050,11 @@ def monter_routes(app):
 
 
 
-            "background_color": "#181816",
+            "background_color": "#0B0C0E",
 
 
 
-            "theme_color": "#d97757",
+            "theme_color": "#E8A838",
 
 
 

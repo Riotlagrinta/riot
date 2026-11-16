@@ -1,11 +1,6 @@
-"""Terminal RIOT : Interface CLI inspirée du design épuré et moderne de Claude Code.
+"""Terminal RIOT : Interface CLI épurée et multi-thèmes pour développeurs et système.
 
-Conçu pour les développeurs :
-- Palette de couleurs terracotta/anthracite (#d97757, #282c34, #abb2bf)
-- En-tête statut compact avec projet actif et branche git
-- Invite de commande interactive 'riot ❯' avec historique et auto-complétion
-- Rendu des appels d'outils style Claude Code (bullet tree, timing, diffs)
-- Mode Sous-Agent Coder (/code) spécialisé ingénierie logicielle
+Supporte 3 thèmes commutables via `/theme` (`obsidian`, `paper`, `tactical`).
 """
 import os
 import sys
@@ -33,7 +28,7 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 
-from core import auth, budget, config, etude, memoire, registre
+from core import auth, budget, config, etude, memoire, registre, theme
 from core.config import reglage, dossier_projets
 from core.llm import llm
 
@@ -52,26 +47,36 @@ _HISTORIQUE_FICHIER.parent.mkdir(parents=True, exist_ok=True)
 
 console = Console()
 
-# Couleurs inspirées de Claude Code
-CLAUDE_CORAL = "#d97757"
-CLAUDE_DIM = "#7f848e"
-CLAUDE_GREEN = "#98c379"
-CLAUDE_CYAN = "#56b6c2"
-CLAUDE_GOLD = "#e5c07b"
-CLAUDE_WHITE = "#e6edf3"
-CLAUDE_RED = "#e06c75"
-CLAUDE_BG = "#1e1e1e"
 
-# Style de l'invite prompt_toolkit
-_STYLE_PROMPT = PromptStyle.from_dict({
-    "prompt-brand": "#d97757 bold",
-    "prompt-project": "#e5c07b",
-    "prompt-arrow": "#d97757 bold",
-})
+def _pal():
+    """Retourne la palette du theme actif."""
+    return theme.palette()
+
+
+def _style_prompt_courant() -> PromptStyle:
+    p = _pal()
+    return PromptStyle.from_dict({
+        "prompt-brand": f"{p['cli_accent']} bold",
+        "prompt-project": p["cli_secondary"],
+        "prompt-arrow": f"{p['cli_accent']} bold",
+    })
+
+
+_P_INIT = _pal()
+CLAUDE_CORAL = _P_INIT["cli_accent"]
+CLAUDE_DIM = _P_INIT["cli_dim"]
+CLAUDE_GREEN = _P_INIT["cli_ok"]
+CLAUDE_CYAN = _P_INIT["cli_secondary"]
+CLAUDE_GOLD = _P_INIT["cli_warn"]
+CLAUDE_WHITE = _P_INIT["cli_text"]
+CLAUDE_RED = _P_INIT["cli_err"]
+CLAUDE_BG = _P_INIT["cli_bg"]
+_STYLE_PROMPT = _style_prompt_courant()
 
 _COMMANDES_INTERNES = [
     "/mcp",
-    "/app", "/claude",
+    "/theme",
+    "/app", "/studio", "/claude",
     "/file", "/fichier",
     "/trade", "/trader",
     "/swarm", "/pipeline",
@@ -120,11 +125,16 @@ def _recup_branche_git(dossier: Optional[Path]) -> str:
 
 
 def afficher_banniere_claude():
-    """Affiche l'en-tête épuré et moderne façon Claude Code."""
+    """Affiche l'en-tête compact et multi-thèmes de RIOT CLI."""
     import psutil
 
     if not registre.tous():
         registre.charger_outils()
+
+    p = _pal()
+    acc = p["cli_accent"]
+    sec = p["cli_secondary"]
+    warn = p["cli_warn"]
 
     provider = llm()
     nom_modele = getattr(provider, "modele", "-")
@@ -132,7 +142,7 @@ def afficher_banniere_claude():
 
     projet = _SESSION_CTX["projet_actif"]
     branche = _recup_branche_git(projet)
-    branche_str = f" │ [italic cyan]{branche}[/italic cyan]" if branche else ""
+    branche_str = f" │ [italic {sec}]{branche}[/italic {sec}]" if branche else ""
 
     vm = psutil.virtual_memory()
     ram_str = f"{round(vm.used / (1024 ** 3), 1)}/{round(vm.total / (1024 ** 3), 1)} Go"
@@ -140,31 +150,59 @@ def afficher_banniere_claude():
     # Context window estimate
     ctx_taille = "32k" if "codestral" in nom_modele.lower() else ("128k" if "llama" in nom_modele.lower() or "groq" in fournisseur_nom.lower() else "1M")
 
-    mode_label = "[bold #d97757]⚡ RIOT Coder v2.0[/bold #d97757]" if _SESSION_CTX["mode_code"] else "[bold cyan]⚡ RIOT Copilot v2.0[/bold cyan]"
+    mode_label = f"[bold {acc}]⚡ RIOT Coder[/bold {acc}]" if _SESSION_CTX["mode_code"] else f"[bold {sec}]⚡ RIOT Copilot[/bold {sec}]"
+    th_id = p["id"]
 
-    ligne1 = f"  {mode_label}  [dim]•[/dim]  Modèle: [bold white]{nom_modele}[/bold white] ({fournisseur_nom})  [dim]•[/dim]  Contexte: [yellow]{ctx_taille}[/yellow]"
+    ligne1 = f"  {mode_label}  [dim]•[/dim]  Modèle: [bold white]{nom_modele}[/bold white] ({fournisseur_nom})  [dim]•[/dim]  Ctx: [{warn}]{ctx_taille}[/{warn}]  [dim]•[/dim]  Thème: [bold {acc}]{th_id}[/bold {acc}]"
     if projet:
-        ligne2 = f"  📁 Projet : [bold #e5c07b]{projet.name}[/bold #e5c07b] ([dim]{projet}[/dim]){branche_str}  [dim]•[/dim]  RAM: [green]{ram_str}[/green]"
+        ligne2 = f"  📁 Projet : [bold {warn}]{projet.name}[/bold {warn}] ([dim]{projet}[/dim]){branche_str}  [dim]•[/dim]  RAM: [green]{ram_str}[/green]"
     else:
-        ligne2 = f"  💬 Mode : [bold #e5c07b]Discussion Libre[/bold #e5c07b] (Aucun projet/dossier fixé)  [dim]•[/dim]  RAM: [green]{ram_str}[/green]"
+        ligne2 = f"  💬 Mode : [bold {warn}]Discussion Libre[/bold {warn}] (Aucun projet/dossier fixé)  [dim]•[/dim]  RAM: [green]{ram_str}[/green]"
 
     console.print()
     console.print(Panel(
         f"{ligne1}\n{ligne2}",
-        border_style="#d97757",
+        border_style=acc,
         box=ROUNDED,
         padding=(0, 1),
     ))
-    console.print("[dim]  Astuce : Tapez votre ordre en français ou [bold white]/help[/bold white] pour la liste des raccourcis.[/dim]")
+    console.print("[dim]  Astuce : Tapez votre ordre en français, [bold white]/theme[/bold white] pour changer de design ou [bold white]/help[/bold white].[/dim]")
     console.print()
+
+
+def commande_theme(arg: str = ""):
+    """Affiche ou bascule le thème actif (`obsidian`, `paper`, `tactical`)."""
+    p = _pal()
+    acc = p["cli_accent"]
+    sec = p["cli_secondary"]
+    arg_clean = (arg or "").strip()
+    if not arg_clean:
+        table = Table(title="🎨 Thèmes RIOT disponibles", border_style=acc, box=ROUNDED)
+        table.add_column("ID", style=f"bold {acc}")
+        table.add_column("Nom", style="bold white")
+        table.add_column("Description", style="dim")
+        table.add_column("État", style=f"bold {sec}")
+        act = theme.theme_actif()
+        for t in theme.lister_themes():
+            etat = "● Actif" if t["id"] == act else "○"
+            table.add_row(t["id"], t["nom"], t["description"], etat)
+        console.print()
+        console.print(table)
+        console.print("[dim]  Usage : [bold white]/theme obsidian[/bold white] | [bold white]/theme paper[/bold white] | [bold white]/theme tactical[/bold white][/dim]\n")
+        return
+
+    nouveau = theme.definir_theme(arg_clean)
+    pal_new = theme.palette(nouveau)
+    console.print(f"[bold {pal_new['cli_accent']}]✓ Thème RIOT basculé sur :[/bold {pal_new['cli_accent']}] [bold white]{pal_new['nom']}[/bold white] ({nouveau})\n")
 
 
 def commande_outils():
     """Affiche la liste catégorisée des outils disponibles sans erreur d'attribut."""
+    p = _pal()
     outils = registre.tous()
-    table = Table(title=f"🛠️ Boîte à Outils RIOT ({len(outils)} disponibles)", border_style="#d97757", box=ROUNDED)
-    table.add_column("Nom Outil", style="bold #e5c07b")
-    table.add_column("Module", style="dim cyan")
+    table = Table(title=f"🛠️ Boîte à Outils RIOT ({len(outils)} disponibles)", border_style=p["cli_accent"], box=ROUNDED)
+    table.add_column("Nom Outil", style=f"bold {p['cli_warn']}")
+    table.add_column("Module", style=f"dim {p['cli_secondary']}")
     table.add_column("Description", style="white")
 
     for o in sorted(outils, key=lambda x: x.nom)[:40]:
@@ -180,10 +218,12 @@ def commande_outils():
 def commande_mcp(arg: str = ""):
     """Gère l'affichage et le rechargement des connexions Model Context Protocol (MCP)."""
     from core import mcp_client
+    p = _pal()
+    acc = p["cli_accent"]
     arg_clean = arg.strip().lower()
 
     if not mcp_client._STATUTS_SERVEURS or arg_clean in ("reload", "refresh", "r"):
-        with console.status(f"[bold {CLAUDE_CORAL}]Connexion aux serveurs MCP...[/bold {CLAUDE_CORAL}]"):
+        with console.status(f"[bold {acc}]Connexion aux serveurs MCP...[/bold {acc}]"):
             if arg_clean in ("reload", "refresh", "r"):
                 mcp_client.recharger_connexions_mcp()
             else:
@@ -195,13 +235,13 @@ def commande_mcp(arg: str = ""):
 
     table = Table(
         title=f"🔌 Connexions MCP (Model Context Protocol) · {len(serveurs)} serveurs ({total_outils} outils)",
-        border_style="#d97757",
+        border_style=acc,
         box=ROUNDED
     )
-    table.add_column("Serveur MCP", style="bold #e5c07b")
+    table.add_column("Serveur MCP", style=f"bold {p['cli_warn']}")
     table.add_column("Transport", style="dim")
     table.add_column("Statut", style="white")
-    table.add_column("Outils", style="cyan")
+    table.add_column("Outils", style=p["cli_secondary"])
     table.add_column("Détails / Description", style="dim")
 
     for nom, info in serveurs.items():
@@ -224,34 +264,37 @@ def commande_mcp(arg: str = ""):
 
 
 def commande_aide():
-    """Affiche le guide minimaliste façon Claude Code."""
+    """Affiche le guide minimaliste RIOT CLI."""
+    p = _pal()
+    acc = p["cli_accent"]
+    sec = p["cli_warn"]
     aide = (
-        "[bold #d97757]Multi-Agents & Spécialistes :[/bold #d97757]\n"
-        "  • [bold #e5c07b]/trade <crypto>[/bold #e5c07b]       : Invoque RIOT-Trader (Analyse quant, RSI, Carnet, Risk Management 1%)\n"
-        "  • [bold #e5c07b]/swarm <mission>[/bold #e5c07b]     : Lance la chaîne complète (Architecte ➔ Ingénieur ➔ Testeur ➔ Reviewer)\n"
-        "  • [bold #e5c07b]/architect <mission>[/bold #e5c07b] : Analyse la codebase et conçoit le plan d'action chirurgical\n"
-        "  • [bold #e5c07b]/engineer <mission>[/bold #e5c07b]  : Applique les modifications de code via patcher_code\n"
-        "  • [bold #e5c07b]/test <mission>[/bold #e5c07b]      : Exécute les tests unitaires et vérifie la qualité\n"
-        "  • [bold #e5c07b]/review <mission>[/bold #e5c07b]    : Audit de sécurité (secrets/tokens), typage et verdict final\n\n"
-        "[bold #d97757]Commandes Rapides & Session :[/bold #d97757]\n"
-        "  • [bold #e5c07b]/mcp [reload][/bold #e5c07b]         : Gère les connexions aux serveurs MCP externes (mcp_servers.json)\n"
-        "  • [bold #e5c07b]/app[/bold #e5c07b]                  : Lance l'Application Bureau & Web façon Claude (Artifacts)\n"
-        "  • [bold #e5c07b]/code[/bold #e5c07b]                 : Bascule le mode Développeur / Coder mono-agent\n"
-        "  • [bold #e5c07b]/project <nom>[/bold #e5c07b]         : Change de projet actif (ex: [italic]/project Trade App[/italic])\n"
-        "  • [bold #e5c07b]/model <nom>[/bold #e5c07b]           : Affiche ou bascule le modèle LLM actif\n"
-        "  • [bold #e5c07b]/tools[/bold #e5c07b]                 : Liste l'ensemble des outils de code et système\n"
-        "  • [bold #e5c07b]/tokens[/bold #e5c07b]                : Affiche le décompte de tokens de la session\n"
-        "  • [bold #e5c07b]/pc[/bold #e5c07b]                    : Jauge processeur, mémoire vive et disques\n"
-        "  • [bold #e5c07b]/remote[/bold #e5c07b]                : Affiche les URL web mobile et tunnel 4G/5G\n"
-        "  • [bold #e5c07b]/clear[/bold #e5c07b]                 : Nettoie l'écran du terminal\n"
-        "  • [bold #e5c07b]/exit[/bold #e5c07b]                  : Quitte le terminal RIOT\n\n"
-        "[bold #d97757]Exemples d'ordres :[/bold #d97757]\n"
-        "  • [italic]/trade Analyse BTCUSDT avec sizing pour 10 000$ de capital[/italic]\n"
+        f"[bold {acc}]Multi-Agents & Spécialistes :[/bold {acc}]\n"
+        f"  • [bold {sec}]/trade <crypto>[/bold {sec}]       : Invoque RIOT-Trader (Analyse quant, RSI, Carnet, Risk Management 1%)\n"
+        f"  • [bold {sec}]/swarm <mission>[/bold {sec}]     : Lance la chaîne complète (Architecte ➔ Ingénieur ➔ Testeur ➔ Reviewer)\n"
+        f"  • [bold {sec}]/architect <mission>[/bold {sec}] : Analyse la codebase et conçoit le plan d'action chirurgical\n"
+        f"  • [bold {sec}]/engineer <mission>[/bold {sec}]  : Applique les modifications de code via patcher_code\n"
+        f"  • [bold {sec}]/test <mission>[/bold {sec}]      : Exécute les tests unitaires et vérifie la qualité\n"
+        f"  • [bold {sec}]/review <mission>[/bold {sec}]    : Audit de sécurité (secrets/tokens), typage et verdict final\n\n"
+        f"[bold {acc}]Commandes Rapides & Design :[/bold {acc}]\n"
+        f"  • [bold {sec}]/theme [nom][/bold {sec}]         : Change le design (obsidian, paper, tactical)\n"
+        f"  • [bold {sec}]/mcp [reload][/bold {sec}]         : Gère les connexions aux serveurs MCP externes (mcp_servers.json)\n"
+        f"  • [bold {sec}]/app[/bold {sec}]                  : Lance RIOT Studio en application bureau & web\n"
+        f"  • [bold {sec}]/code[/bold {sec}]                 : Bascule le mode Développeur / Coder mono-agent\n"
+        f"  • [bold {sec}]/project <nom>[/bold {sec}]         : Change de projet actif (ex: [italic]/project Trade App[/italic])\n"
+        f"  • [bold {sec}]/model <nom>[/bold {sec}]           : Affiche ou bascule le modèle LLM actif\n"
+        f"  • [bold {sec}]/tools[/bold {sec}]                 : Liste l'ensemble des outils de code, image et système\n"
+        f"  • [bold {sec}]/tokens[/bold {sec}]                : Affiche le décompte de tokens de la session\n"
+        f"  • [bold {sec}]/pc[/bold {sec}]                    : Jauge processeur, mémoire vive et disques\n"
+        f"  • [bold {sec}]/remote[/bold {sec}]                : Affiche les URL web mobile et tunnel 4G/5G\n"
+        f"  • [bold {sec}]/clear[/bold {sec}]                 : Nettoie l'écran du terminal\n"
+        f"  • [bold {sec}]/exit[/bold {sec}]                  : Quitte le terminal RIOT\n\n"
+        f"[bold {acc}]Exemples d'ordres :[/bold {acc}]\n"
+        "  • [italic]/theme tactical[/italic]\n"
         "  • [italic]/swarm Ajoute la gestion du stop-loss 1% dans le module de trading[/italic]\n"
-        "  • [italic]/architect Analyse la structure de Trade App et propose des améliorations[/italic]\n"
-        "  • [italic]« Vérifie la santé de Trade App et donne le prix du Bitcoin »[/italic]"
+        "  • [italic]« Génère une maquette visuelle de dashboard fintech en thème sombre »[/italic]"
     )
-    console.print(Panel(aide, title="[bold #d97757]CLAUDE CODE STYLE · GUIDE RIOT[/bold #d97757]", border_style="#d97757", box=ROUNDED))
+    console.print(Panel(aide, title=f"[bold {acc}]RIOT CLI · GUIDE DES COMMANDES[/bold {acc}]", border_style=acc, box=ROUNDED))
 
 
 def commande_changer_projet(arg: str):
@@ -382,7 +425,7 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
         )
     else:
         systeme = (
-            "Tu es Claude RIOT, un assistant d'élite, ingénieur de pointe et partenaire de réflexion.\n"
+            "Tu es RIOT, un assistant d'élite, ingénieur de pointe et partenaire de réflexion.\n"
             f"Tu es connecté sur la machine locale de l'utilisateur sous Windows. Date réelle : {str_date}.\n"
             "Mode : DISCUSSION LIBRE (aucun projet ou dossier spécifique imposé).\n"
             "RÈGLES D'OR ABSOLUES :\n"
@@ -423,6 +466,7 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
             "surveiller_marche_crypto", "recueillir_veille_web", "generer_bulletin_veille",
             "lister_competences", "charger_competence", "lire_reference",
             "capturer_page", "capturer_frames",
+            "generer_image", "lister_images_generees",
             "lancer_navigateur_chrome", "browser_open", "browser_current_page",
             "browser_tabs", "browser_close_tabs", "browser_interact",
             "browser_click", "browser_type", "browser_scroll",
@@ -433,10 +477,12 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
     else:
         schemas = tous_schemas
 
+    p = _pal()
+    acc = p["cli_accent"]
     for tour in range(6):
         t0 = time.time()
         try:
-            with console.status(f"[bold {CLAUDE_CORAL}]⠋ Réflexion en cours...[/bold {CLAUDE_CORAL}]", spinner="dots"):
+            with console.status(f"[bold {acc}]⠋ Réflexion en cours...[/bold {acc}]", spinner="dots"):
                 rep = provider.repondre(systeme, historique_conversation, schemas)
         except Exception as e:
             console.print(f"[bold red]❌ Erreur LLM : {e}[/bold red]")
@@ -470,7 +516,7 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
 
             # Style visuel Claude Code pour l'exécution d'outils
             arg_str = ", ".join(f"{k}='{str(v)[:50]}'" for k, v in args.items())
-            console.print(f"[bold {CLAUDE_CORAL}]● Executing[/bold {CLAUDE_CORAL}] [bold white]{nom_outil}[/bold white]([dim]{arg_str}[/dim])...")
+            console.print(f"[bold {acc}]● Executing[/bold {acc}] [bold white]{nom_outil}[/bold white]([dim]{arg_str}[/dim])...")
 
             t_outil = time.time()
             try:
@@ -505,11 +551,12 @@ def _verifier_configuration_initiale():
     from core import llm as llm_mod
     if llm().disponible():
         return
+    p = _pal()
     console.print(Panel(
-        "[bold #e5c07b]Premiere configuration de RIOT sur cette machine[/bold #e5c07b]\n"
+        f"[bold {p['cli_warn']}]Premiere configuration de RIOT sur cette machine[/bold {p['cli_warn']}]\n"
         f"[dim]Fichier cible : {config.FICHIER}[/dim]\n"
         "Fournisseurs supportes : [bold]groq[/bold], [bold]mistral[/bold], [bold]gemini[/bold], [bold]openrouter[/bold], [bold]anthropic[/bold]",
-        border_style="#d97757",
+        border_style=p["cli_accent"],
         box=ROUNDED,
     ))
     try:
@@ -565,29 +612,35 @@ def lancer_terminal_interactif():
                 ("class:prompt-arrow", " ❯ "),
             ]
 
-            texte = session.prompt(invite).strip()
+            texte = session.prompt(invite, style=_style_prompt_courant()).strip()
             if not texte:
                 continue
 
             cmd = texte.lower()
             if cmd in ("/exit", "/quit", "/q"):
-                console.print(f"[bold {CLAUDE_CORAL}]Session RIOT terminée. Bon code ![/bold {CLAUDE_CORAL}]\n")
+                console.print(f"[bold {_pal()['cli_accent']}]Session RIOT terminée. Bon code ![/bold {_pal()['cli_accent']}]\n")
                 break
             elif cmd in ("/clear", "/cls"):
                 os.system("cls" if os.name == "nt" else "clear")
                 afficher_banniere_claude()
+                continue
+            elif cmd.startswith("/theme"):
+                parties = texte.split(maxsplit=1)
+                arg_th = parties[1] if len(parties) > 1 else ""
+                commande_theme(arg_th)
                 continue
             elif cmd.startswith("/mcp"):
                 parties = texte.split(maxsplit=1)
                 arg_mcp = parties[1] if len(parties) > 1 else ""
                 commande_mcp(arg_mcp)
                 continue
-            elif cmd in ("/app", "/claude"):
+            elif cmd in ("/app", "/studio", "/claude"):
                 from core import serveur, claude_app
                 serveur.demarrer()
                 claude_app.lancer_app_desktop()
-                console.print(f"  [bold #d97757]⚡ Application Claude RIOT ouverte en fenêtre de bureau.[/bold #d97757]")
-                console.print(f"  [dim]Accès Web : http://localhost:8790/ ou http://localhost:8790/claude[/dim]")
+                console.print(f"  [bold {_pal()['cli_accent']}]⚡ Application RIOT Studio ouverte en fenêtre de bureau.[/bold {_pal()['cli_accent']}]")
+                console.print(f"  [dim]Accès Web : http://localhost:8790/ (Studio) · http://localhost:8790/mobile[/dim]")
+                continue
             elif cmd.startswith("/raw") or cmd.startswith("/uncensored"):
                 from core import agents
                 parties = texte.split(maxsplit=1)
@@ -662,7 +715,7 @@ def lancer_terminal_interactif():
                         f"=== FIN DU FICHIER ===\n\n"
                         f"Consigne de l'utilisateur :\n{question}"
                     )
-                    console.print(f"  [dim]Fichier joint : [bold #e5c07b]{p_cible.name}[/bold #e5c07b] ({len(contenu.splitlines())} lignes)[/dim]")
+                    console.print(f"  [dim]Fichier joint : [bold {_pal()['cli_warn']}]{p_cible.name}[/bold {_pal()['cli_warn']}] ({len(contenu.splitlines())} lignes)[/dim]")
                     executer_ordre(prompt_enrichi, [])
                 except Exception as e:
                     console.print(f"[bold red]✕ Erreur lecture fichier : {e}[/bold red]")
@@ -675,7 +728,7 @@ def lancer_terminal_interactif():
             elif cmd in ("/code", "/coder", "/dev"):
                 _SESSION_CTX["mode_code"] = not _SESSION_CTX["mode_code"]
                 statut = "ACTIVÉ (Focus ingénierie logicielle)" if _SESSION_CTX["mode_code"] else "DÉSACTIVÉ (Mode généraliste)"
-                console.print(f"[bold {CLAUDE_CORAL}]⚡ Mode Sous-Agent Coder :[/bold {CLAUDE_CORAL}] [bold white]{statut}[/bold white]")
+                console.print(f"[bold {_pal()['cli_accent']}]⚡ Mode Sous-Agent Coder :[/bold {_pal()['cli_accent']}] [bold white]{statut}[/bold white]")
                 continue
             elif cmd in ("/pc", "/status", "/system"):
                 import psutil
@@ -687,7 +740,7 @@ def lancer_terminal_interactif():
                 msg_disques = f" │ Disque : [green]{round(disk_main.free/1024**3,1)} Go lib.[/green]" if disk_main else ""
                 if disk_e:
                     msg_disques += f" │ E: [green]{round(disk_e.free/1024**3,1)} Go lib.[/green]"
-                console.print(f"  [bold #d97757]Système :[/bold #d97757] CPU [green]{cpu}%[/green] │ RAM [green]{vm.percent}%[/green] ({round(vm.available/1024**3,1)} Go lib.){msg_disques}")
+                console.print(f"  [bold {_pal()['cli_accent']}]Système :[/bold {_pal()['cli_accent']}] CPU [green]{cpu}%[/green] │ RAM [green]{vm.percent}%[/green] ({round(vm.available/1024**3,1)} Go lib.){msg_disques}")
                 continue
             elif cmd in ("/tools", "/outils"):
                 commande_outils()
@@ -708,7 +761,7 @@ def lancer_terminal_interactif():
                     nouveau = parties[1].strip()
                     console.print(f"[yellow]Bascule de modèle : {nouveau} (rechargez la session pour persister).[/yellow]")
                 else:
-                    console.print(f"  ⚡ Modèle actuel : [bold #e5c07b]{getattr(provider, 'modele', '-')}[/bold #e5c07b] ({provider.nom})")
+                    console.print(f"  ⚡ Modèle actuel : [bold {_pal()['cli_warn']}]{getattr(provider, 'modele', '-')}[/bold {_pal()['cli_warn']}] ({provider.nom})")
                 continue
             elif cmd in ("/help", "/aide"):
                 commande_aide()
@@ -718,7 +771,7 @@ def lancer_terminal_interactif():
             executer_ordre(texte, historique_conv)
 
         except (KeyboardInterrupt, EOFError):
-            console.print(f"\n[bold {CLAUDE_CORAL}]Fermeture du terminal RIOT.[/bold {CLAUDE_CORAL}]")
+            console.print(f"\n[bold {_pal()['cli_accent']}]Fermeture du terminal RIOT.[/bold {_pal()['cli_accent']}]")
             break
         except Exception as e:
             console.print(f"[bold red]Erreur inattendue : {e}[/bold red]")

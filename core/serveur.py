@@ -40,8 +40,40 @@ def app():
     """Construit (une fois) l'app FastAPI avec toutes les routes montees."""
     global _APP
     if _APP is None:
-        from fastapi import FastAPI
-        _APP = FastAPI(title="Jarvis")
+        from pathlib import Path
+        from fastapi import FastAPI, Request
+        from fastapi.responses import JSONResponse, Response
+        _APP = FastAPI(title="RIOT")
+        _RACINE = Path(__file__).resolve().parent.parent
+
+        @_APP.get("/theme.css")
+        def route_theme_css():
+            f = _RACINE / "web" / "theme.css"
+            if not f.exists():
+                return Response("", media_type="text/css", status_code=404)
+            return Response(f.read_text(encoding="utf-8"), media_type="text/css")
+
+        @_APP.get("/theme.js")
+        def route_theme_js():
+            f = _RACINE / "web" / "theme.js"
+            if not f.exists():
+                return Response("", media_type="application/javascript", status_code=404)
+            return Response(f.read_text(encoding="utf-8"), media_type="application/javascript")
+
+        @_APP.get("/api/theme")
+        def route_get_theme():
+            from core import theme
+            return {"ok": True, "theme": theme.theme_actif(), "themes": theme.lister_themes()}
+
+        @_APP.post("/api/theme")
+        async def route_set_theme(request: Request):
+            from core import theme
+            try:
+                body = await request.json()
+            except Exception:
+                body = {}
+            t = theme.definir_theme((body or {}).get("theme", ""))
+            return JSONResponse({"ok": True, "theme": t})
         from core.pont_iphone import monter_routes
         monter_routes(_APP)                       # /api/inbox, /api/ping
         try:

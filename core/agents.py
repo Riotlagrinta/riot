@@ -18,15 +18,21 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
-from core import auth, registre
+from core import auth, registre, theme
 from core.llm import llm
 
-CLAUDE_CORAL = "#d97757"
-CLAUDE_GOLD = "#e5c07b"
-CLAUDE_GREEN = "#98c379"
-CLAUDE_CYAN = "#56b6c2"
-CLAUDE_RED = "#e06c75"
-CLAUDE_DIM = "#7f848e"
+
+def _pal():
+    return theme.palette()
+
+
+_P_DEF = _pal()
+CLAUDE_CORAL = _P_DEF["cli_accent"]
+CLAUDE_GOLD = _P_DEF["cli_warn"]
+CLAUDE_GREEN = _P_DEF["cli_ok"]
+CLAUDE_CYAN = _P_DEF["cli_secondary"]
+CLAUDE_RED = _P_DEF["cli_err"]
+CLAUDE_DIM = _P_DEF["cli_dim"]
 
 
 def _charger_conventions_projet(dossier: Path) -> str:
@@ -69,9 +75,10 @@ def _executer_boucle_agent(
     historique = [{"role": "user", "content": mission}]
     reponse_texte = ""
 
+    acc = _pal()["cli_accent"]
     for tour in range(max_tours):
         try:
-            with console.status(f"[bold {CLAUDE_CORAL}]⠋ {nom_agent} est au travail...[/bold {CLAUDE_CORAL}]", spinner="dots"):
+            with console.status(f"[bold {acc}]⠋ {nom_agent} est au travail...[/bold {acc}]", spinner="dots"):
                 rep = provider.repondre(system_prompt, historique, schemas, prefill=prefill if tour == 0 else None)
         except Exception as e:
             return f"[ERREUR] Échec de {nom_agent} : {e}"
@@ -364,7 +371,7 @@ def executer_pipeline_dev(instruction: str, dossier_projet: Optional[Path], cons
         conventions = _charger_conventions_projet(dossier_projet) if dossier_projet else ""
         if dossier_projet:
             prompt_coord = (
-                "Tu es Claude RIOT, Coordinateur en chef de l'équipe Multi-Agents.\n"
+                "Tu es RIOT, Coordinateur en chef de l'équipe Multi-Agents.\n"
                 f"Projet actif : {dossier_projet.name} ({dossier_projet}).\n"
                 "Réponds directement, clairement et sans détour à la demande de l'utilisateur en UNE SEULE réponse complète.\n"
                 "N'utilise les outils du projet que si la question porte spécifiquement sur les fichiers du projet."
@@ -372,28 +379,30 @@ def executer_pipeline_dev(instruction: str, dossier_projet: Optional[Path], cons
             )
         else:
             prompt_coord = (
-                "Tu es Claude RIOT, Coordinateur et assistant d'élite.\n"
+                "Tu es RIOT, Coordinateur et assistant d'élite.\n"
                 "Mode actuel : DISCUSSION LIBRE (aucun projet ou dossier spécifique imposé).\n"
                 "Réponds directement, clairement et sans détour à la demande de l'utilisateur en UNE SEULE réponse complète."
             )
         rep = _executer_boucle_agent(
-            nom_agent="Claude RIOT (Coordinateur)",
+            nom_agent="RIOT (Coordinateur)",
             system_prompt=prompt_coord,
             mission=instruction,
-            outils_autorises={"explorer_projet", "lire_code", "chercher_dans_code", "generer_pdf", "extraire_texte_pdf", "fusionner_pdfs", "generer_excel", "lire_excel", "generer_powerpoint", "lire_powerpoint", "generer_graphique", "generer_diagramme", "creer_produit_digital", "auditer_schema_sql", "optimiser_requete_postgis", "generer_politiques_rls", "generer_composant_mobile", "scaffolder_app_mobile_expo", "surveiller_marche_crypto", "recueillir_veille_web", "generer_bulletin_veille"},
+            outils_autorises={"explorer_projet", "lire_code", "chercher_dans_code", "generer_pdf", "extraire_texte_pdf", "fusionner_pdfs", "generer_excel", "lire_excel", "generer_powerpoint", "lire_powerpoint", "generer_graphique", "generer_diagramme", "generer_image", "lister_images_generees", "creer_produit_digital", "auditer_schema_sql", "optimiser_requete_postgis", "generer_politiques_rls", "generer_composant_mobile", "scaffolder_app_mobile_expo", "surveiller_marche_crypto", "recueillir_veille_web", "generer_bulletin_veille"},
             console=console,
             max_tours=3,
         )
-        console.print(Panel(Markdown(rep or "Réponse générée."), title="[bold #d97757]⚡ Claude RIOT[/bold #d97757]", border_style="#d97757", box=ROUNDED))
+        p = _pal()
+        console.print(Panel(Markdown(rep or "Réponse générée."), title=f"[bold {p['cli_accent']}]⚡ RIOT[/bold {p['cli_accent']}]", border_style=p["cli_accent"], box=ROUNDED))
         return rep
 
+    p = _pal()
     nom_cible = dossier_projet.name if dossier_projet else "Discussion Libre"
     console.print()
     console.print(Panel(
-        f"[bold #d97757]⚡ PIPELINE MULTI-AGENTS DEV · RIOT SWARM[/bold #d97757]\n"
-        f"[bold white]Projet cible :[/bold white] [bold #e5c07b]{nom_cible}[/bold #e5c07b] ([dim]{dossier_projet or 'Libre'}[/dim])\n"
+        f"[bold {p['cli_accent']}]⚡ PIPELINE MULTI-AGENTS DEV · RIOT SWARM[/bold {p['cli_accent']}]\n"
+        f"[bold white]Projet cible :[/bold white] [bold {p['cli_warn']}]{nom_cible}[/bold {p['cli_warn']}] ([dim]{dossier_projet or 'Libre'}[/dim])\n"
         f"[bold white]Mission :[/bold white] {instruction}",
-        border_style="#d97757",
+        border_style=p["cli_accent"],
         box=ROUNDED,
         padding=(0, 1),
     ))

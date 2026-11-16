@@ -30,30 +30,34 @@ def main():
         keranos.main()
         return
 
-    # Mode Application Bureau Claude (Windowed Chromium)
-    if "--app" in args or "-a" in args or (args and args[0].lower() in ("/app", "app", "/claude", "claude")):
-        from core import serveur, claude_app
+    # Mode Application Bureau RIOT Studio (Windowed Chromium)
+    if "--app" in args or "-a" in args or (args and args[0].lower() in ("/app", "app", "/studio", "studio", "/claude", "claude")):
+        from core import serveur, claude_app, theme
         serveur.demarrer()
         claude_app.lancer_app_desktop()
         from core import cli
-        cli.console.print("  [bold #d97757]⚡ Application Claude RIOT lancée en mode bureau.[/bold #d97757]")
-        cli.console.print("  [dim]Accès Web direct : http://localhost:8790/ ou http://localhost:8790/claude[/dim]")
+        acc = theme.palette()["cli_accent"]
+        cli.console.print(f"  [bold {acc}]⚡ Application RIOT Studio lancée en mode bureau.[/bold {acc}]")
+        cli.console.print("  [dim]Accès Web direct : http://localhost:8790/ (Studio) · http://localhost:8790/mobile[/dim]")
         cli.console.print("  [dim]Serveur actif en continu. Appuyez sur Ctrl+C pour quitter.[/dim]")
         try:
             import time
             while True:
                 time.sleep(1)
         except KeyboardInterrupt:
-            cli.console.print("\n[dim]Arrêt du serveur web Claude RIOT.[/dim]")
+            cli.console.print("\n[dim]Arrêt du serveur web RIOT Studio.[/dim]")
         return
 
     # Mode 2 : Exécution d'un ordre unique en ligne de commande ou commande directe
     if args and not args[0].startswith("-"):
-        from core import cli, registre
+        from core import cli, registre, theme
         if not registre.tous():
             registre.charger_outils()
         
         cmd = args[0].lower()
+        if cmd == "/theme":
+            cli.commande_theme(" ".join(args[1:]))
+            return
         if cmd in ("/tools", "/outils"):
             cli.commande_outils()
             return
@@ -73,7 +77,8 @@ def main():
             racine_disque = "C:\\" if sys.platform == "win32" else "/"
             disk_main = psutil.disk_usage(racine_disque)
             label = "C:" if sys.platform == "win32" else "/"
-            cli.console.print(f"  [bold #d97757]Système :[/bold #d97757] CPU [green]{cpu}%[/green] │ RAM [green]{vm.percent}%[/green] ({round(vm.available/1024**3,1)} Go lib.) │ {label} [green]{round(disk_main.free/1024**3,1)} Go lib.[/green]")
+            acc = theme.palette()["cli_accent"]
+            cli.console.print(f"  [bold {acc}]Système :[/bold {acc}] CPU [green]{cpu}%[/green] │ RAM [green]{vm.percent}%[/green] ({round(vm.available/1024**3,1)} Go lib.) │ {label} [green]{round(disk_main.free/1024**3,1)} Go lib.[/green]")
             return
 
         if cmd == "/mcp":

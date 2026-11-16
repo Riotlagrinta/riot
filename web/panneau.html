@@ -3,16 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Jarvis — Panneau</title>
+<title>RIOT — Panneau</title>
+<link rel="stylesheet" href="/theme.css">
+<script src="/theme.js"></script>
 <style>
   :root{
-    --bg:#0f1115; --card:#171a21; --card2:#1d222b; --bord:#2a2f3a;
-    --txt:#e6e8ec; --dim:#9aa2b1; --acc:#5b8cff; --ok:#3ecf8e; --ko:#ff6b6b;
-    --warn:#f5b942; --lock:#c9a227;
+    --bg:var(--riot-bg); --card:var(--riot-card); --card2:var(--riot-card-2); --bord:var(--riot-border);
+    --txt:var(--riot-text); --dim:var(--riot-text-muted); --acc:var(--riot-accent); --ok:var(--riot-ok); --ko:var(--riot-err);
+    --warn:var(--riot-warn); --lock:var(--riot-accent);
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--txt);
-    font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    font:14px/1.5 var(--riot-font-sans, -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif)}
   header{padding:16px 20px;border-bottom:1px solid var(--bord);
     display:flex;align-items:center;gap:12px;position:sticky;top:0;background:var(--bg);z-index:5}
   header h1{font-size:16px;margin:0;font-weight:600}
@@ -65,9 +67,10 @@
 </head>
 <body>
 <header>
-  <h1>Jarvis — Panneau de configuration</h1>
+  <h1>RIOT — Panneau de configuration</h1>
   <span class="pill local">local uniquement</span>
-  <span id="hdr" class="muted" style="margin-left:auto;font-size:12px"></span>
+  <div data-riot-theme-switcher style="margin-left:auto"></div>
+  <span id="hdr" class="muted" style="font-size:12px"></span>
 </header>
 <nav>
   <button data-t="modeles" class="on">Modèles</button>
@@ -94,7 +97,7 @@
 
   <section id="reglages" class="tab">
     <div class="card"><h2>Mode de routage</h2>
-      <div class="fld"><div class="lab"><b>Où réfléchit Jarvis</b>
+      <div class="fld"><div class="lab"><b>Où réfléchit RIOT</b>
         <small>Local = tout sur ta machine (gratuit, privé). Cloud = Claude (plus fin, payant).</small></div>
         <div class="seg" id="seg-mode">
           <button data-v="local">🖥️ Local</button>
@@ -107,7 +110,7 @@
     <div class="card"><h2>Audio</h2>
       <div class="fld"><div class="lab"><b>Microphone</b><small>Entrée utilisée pour t'écouter.</small></div>
         <select class="txt" id="sel-micro" onchange="setReglage('audio.micro',this.value,this)"></select></div>
-      <div class="fld"><div class="lab"><b>Haut-parleur</b><small>Sortie pour la voix de Jarvis.</small></div>
+      <div class="fld"><div class="lab"><b>Haut-parleur</b><small>Sortie pour la voix de RIOT.</small></div>
         <select class="txt" id="sel-hp" onchange="setReglage('audio.haut_parleur',this.value,this)"></select></div>
       <div id="audio-msg" class="msg"></div>
     </div>

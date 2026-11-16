@@ -3,38 +3,40 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>RIOT // Copilote Autonome</title>
+  <title>RIOT // Mobile</title>
   <link rel="manifest" href="/mobile/manifest.json">
-  <meta name="theme-color" content="#06080c">
+  <meta name="theme-color" content="#0B0C0E">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="stylesheet" href="/theme.css">
+  <script src="/theme.js"></script>
   <style>
     :root {
-      --bg-base: #06080c;
-      --bg-surface: #0a0e17;
-      --bg-card: rgba(14, 20, 32, 0.78);
-      --bg-card-hover: rgba(20, 28, 46, 0.9);
-      --border-subtle: rgba(255, 255, 255, 0.08);
-      --border-card: rgba(36, 52, 78, 0.6);
-      --border-active: rgba(0, 240, 255, 0.5);
+      --bg-base: var(--riot-bg);
+      --bg-surface: var(--riot-sidebar);
+      --bg-card: var(--riot-card);
+      --bg-card-hover: var(--riot-card-2);
+      --border-subtle: var(--riot-border-subtle);
+      --border-card: var(--riot-border);
+      --border-active: var(--riot-accent);
       
-      --cyan: #00f0ff;
-      --cyan-dim: rgba(0, 240, 255, 0.15);
-      --cyan-glow: 0 0 16px rgba(0, 240, 255, 0.35);
-      --green: #10b981;
-      --green-dim: rgba(16, 185, 129, 0.15);
-      --amber: #f59e0b;
-      --amber-dim: rgba(245, 158, 11, 0.15);
-      --red: #ef4444;
-      --red-dim: rgba(239, 68, 68, 0.15);
-      --purple: #a855f7;
-      --purple-dim: rgba(168, 85, 247, 0.15);
+      --cyan: var(--riot-accent);
+      --cyan-dim: var(--riot-accent-dim);
+      --cyan-glow: none;
+      --green: var(--riot-ok);
+      --green-dim: var(--riot-ok-dim);
+      --amber: var(--riot-warn);
+      --amber-dim: var(--riot-warn-dim);
+      --red: var(--riot-err);
+      --red-dim: var(--riot-err-dim);
+      --purple: var(--riot-secondary);
+      --purple-dim: var(--riot-secondary-dim);
 
-      --text-main: #f8fafc;
-      --text-muted: #94a3b8;
-      --text-dim: #64748b;
-      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --text-main: var(--riot-text);
+      --text-muted: var(--riot-text-muted);
+      --text-dim: var(--riot-text-dim);
+      --font-sans: var(--riot-font-sans);
+      --font-mono: var(--riot-font-mono);
     }
 
     * {
@@ -57,17 +59,9 @@
       -webkit-font-smoothing: antialiased;
     }
 
-    /* Halo lumineux d'ambiance */
+    /* Fond sobre sans blur GPU couteux */
     .ambient-glow {
-      position: fixed;
-      top: -120px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 360px;
-      height: 260px;
-      background: radial-gradient(circle, rgba(0, 240, 255, 0.12) 0%, rgba(168, 85, 247, 0.05) 50%, transparent 75%);
-      pointer-events: none;
-      z-index: 0;
+      display: none;
     }
 
     /* Header */
@@ -77,9 +71,7 @@
       align-items: center;
       justify-content: space-between;
       border-bottom: 1px solid var(--border-card);
-      background: rgba(8, 12, 18, 0.85);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
+      background: var(--bg-surface);
       z-index: 20;
     }
 
@@ -90,22 +82,17 @@
     }
     .brand-arc {
       position: relative;
-      width: 14px;
-      height: 14px;
+      width: 10px;
+      height: 10px;
       border-radius: 50%;
       background: var(--cyan);
-      box-shadow: 0 0 12px var(--cyan);
-      animation: pulse-brand 2.8s infinite;
-    }
-    @keyframes pulse-brand {
-      0%, 100% { transform: scale(1); opacity: 1; box-shadow: 0 0 12px var(--cyan); }
-      50% { transform: scale(0.85); opacity: 0.65; box-shadow: 0 0 4px var(--cyan); }
     }
     .brand-title {
+      font-family: var(--riot-font-display, var(--font-sans));
       font-size: 15px;
       font-weight: 800;
       letter-spacing: 1px;
-      color: #fff;
+      color: var(--text-main);
       display: flex;
       align-items: center;
       gap: 6px;
@@ -839,7 +826,8 @@
       <div class="brand-title">RIOT</div>
       <div class="brand-subtitle">AUTONOMOUS</div>
     </div>
-    <div class="header-actions">
+    <div class="header-actions" style="display:flex;align-items:center;gap:8px;">
+      <div data-riot-theme-switcher></div>
       <div class="status-badge" id="badge-ws">
         <div class="status-dot"></div>
         <span id="label-ws">LIVE</span>

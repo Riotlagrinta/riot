@@ -3,15 +3,29 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KERANOS · Reacteur arc</title>
+<title>RIOT · Reacteur</title>
 <style>
-  :root {
-    --fond: #04070a;
-    --texte: #9fb6c0;
-    --texte-faible: #4c626d;
-    --vous: #6fe3ff;
-    --jarvis: #ffb23e;
-    --mono: "Consolas", "SF Mono", "Menlo", "DejaVu Sans Mono", monospace;
+  :root, [data-theme="obsidian"] {
+    --fond: #0B0C0E;
+    --texte: #F4F3EE;
+    --texte-faible: #9A9890;
+    --vous: #60A5FA;
+    --jarvis: #E8A838;
+    --mono: "JetBrains Mono", "Consolas", "SF Mono", "Menlo", monospace;
+  }
+  [data-theme="paper"] {
+    --fond: #F6F5F0;
+    --texte: #111315;
+    --texte-faible: #5A5D65;
+    --vous: #0F766E;
+    --jarvis: #059669;
+  }
+  [data-theme="tactical"] {
+    --fond: #090B0D;
+    --texte: #E2E8F0;
+    --texte-faible: #8B9BB0;
+    --vous: #60A5FA;
+    --jarvis: #4ADE80;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -253,14 +267,29 @@ const LIBELLES = {
   muet: "MICRO COUPE",
 };
 
-// Couleur dominante par etat : cyan sourd, cyan vif, bleu-violet, ambre.
-const COULEURS = {
-  veille:    { r: 42,  g: 112, b: 130 },
-  ecoute:    { r: 46,  g: 224, b: 255 },
-  reflexion: { r: 138, g: 108, b: 255 },
-  parole:    { r: 255, g: 176, b: 62  },
-  muet:      { r: 255, g: 107, b: 107 },
-};
+const _THEME_HUD = new URLSearchParams(location.search).get("theme") || (function(){ try { return localStorage.getItem("riot_theme"); } catch(e) { return null; } })() || "obsidian";
+document.documentElement.setAttribute("data-theme", _THEME_HUD);
+
+// Couleur dominante par etat selon le theme actif.
+const COULEURS = _THEME_HUD === "paper" ? {
+  veille:    { r: 5,   g: 150, b: 105 },
+  ecoute:    { r: 15,  g: 118, b: 110 },
+  reflexion: { r: 17,  g: 19,  b: 21  },
+  parole:    { r: 5,   g: 150, b: 105 },
+  muet:      { r: 220, g: 38,  b: 38  },
+} : (_THEME_HUD === "tactical" ? {
+  veille:    { r: 74,  g: 222, b: 128 },
+  ecoute:    { r: 96,  g: 165, b: 250 },
+  reflexion: { r: 139, g: 155, b: 176 },
+  parole:    { r: 74,  g: 222, b: 128 },
+  muet:      { r: 248, g: 113, b: 113 },
+} : {
+  veille:    { r: 154, g: 152, b: 144 },
+  ecoute:    { r: 96,  g: 165, b: 250 },
+  reflexion: { r: 232, g: 168, b: 56  },
+  parole:    { r: 232, g: 168, b: 56  },
+  muet:      { r: 239, g: 68,  b: 68  },
+});
 
 let couleur = Object.assign({}, COULEURS.veille);  // couleur affichee, lissee
 
@@ -524,7 +553,7 @@ function appliquer(ev) {
       ajouterLigne(`<span class="qui">Vous</span>${echap(ev.texte)}`, "vous");
       break;
     case "jarvis":
-      ajouterLigne(`<span class="qui">Keranos</span>${echap(ev.texte)}`, "jarvis");
+      ajouterLigne(`<span class="qui">RIOT</span>${echap(ev.texte)}`, "jarvis");
       break;
     case "outil":
       ajouterLigne(
