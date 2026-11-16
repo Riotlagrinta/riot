@@ -258,6 +258,13 @@ def admin_logs(request: Request, limit: int = 80, only_errors: bool = False, q: 
     return {"ok": True, "logs": _STORE.lister_logs(limit=limit, only_errors=only_errors, q=q)}
 
 
+@app.get("/admin/keys")
+def admin_keys(request: Request, sonder: bool = True):
+    _verifier_admin(request)
+    from core.key_quota import inspecter_cles
+    return inspecter_cles(sonder=sonder)
+
+
 @app.post("/admin/releases")
 async def admin_publish_release(request: Request):
     _verifier_admin(request)

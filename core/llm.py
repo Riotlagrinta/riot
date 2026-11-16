@@ -329,6 +329,11 @@ class GroqProvider(ProviderLLM):
 
                 try:
                     r = requests.post(self.api_url, headers=headers, json=payload, timeout=25)
+                    try:
+                        from core.key_quota import capturer_reponse
+                        capturer_reponse(self.nom, cle_courante, modele_courant, r.status_code, dict(r.headers))
+                    except Exception:
+                        pass
                     if r.status_code == 413:
                         LOG.warning("groq: payload/outils trop volumineux (HTTP 413 TPM limite atteinte)")
                         raise RuntimeError("Groq TPM limite atteinte (413): outils trop volumineux pour le tier gratuit")
@@ -451,6 +456,11 @@ class GeminiProvider(ProviderLLM):
 
                 try:
                     r = requests.post(self.api_url, headers=headers, json=payload, timeout=25)
+                    try:
+                        from core.key_quota import capturer_reponse
+                        capturer_reponse(self.nom, cle_courante, modele_courant, r.status_code, dict(r.headers))
+                    except Exception:
+                        pass
                     if r.status_code == 429 or r.status_code == 503 or r.status_code >= 500:
                         LOG.warning("gemini: cle %s... modele %s statut %s, bascule...",
                                     cle_courante[:8], modele_courant, r.status_code)
@@ -546,6 +556,11 @@ class OpenRouterProvider(ProviderLLM):
 
                 try:
                     r = requests.post(self.api_url, headers=headers, json=payload, timeout=25)
+                    try:
+                        from core.key_quota import capturer_reponse
+                        capturer_reponse(self.nom, cle_courante, modele_courant, r.status_code, dict(r.headers))
+                    except Exception:
+                        pass
                     if r.status_code == 429 or r.status_code == 503 or r.status_code >= 500:
                         LOG.warning("openrouter: cle %s... modele %s statut %s, bascule...",
                                     cle_courante[:8], modele_courant, r.status_code)
@@ -637,6 +652,11 @@ class MistralProvider(ProviderLLM):
 
                 try:
                     r = requests.post(self.api_url, headers=headers, json=payload, timeout=25)
+                    try:
+                        from core.key_quota import capturer_reponse
+                        capturer_reponse(self.nom, cle_courante, modele_courant, r.status_code, dict(r.headers))
+                    except Exception:
+                        pass
                     if r.status_code == 429 or r.status_code == 503 or r.status_code >= 500:
                         LOG.warning("mistral: cle %s... modele %s statut %s, bascule...",
                                     cle_courante[:8], modele_courant, r.status_code)

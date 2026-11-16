@@ -231,6 +231,46 @@ def commande_update(arg: str = ""):
         console.print(f"  [bold {p['cli_err']}]✕ {res.get('message', 'Échec de mise à jour.')}[/bold {p['cli_err']}]")
 
 
+def commande_keys(arg: str = ""):
+    """Affiche l'etat des cles API et quotas restants (reserve au createur)."""
+    from core import key_quota
+    from core.llm import est_createur
+    p = _pal()
+    if not est_createur():
+        console.print(f"  [bold {p['cli_err']}]✕ Commande réservée au mode créateur (admin_mode / RIOT_ADMIN=1).[/bold {p['cli_err']}]")
+        return
+
+    sonder = (arg or "").strip().lower() not in ("cache", "cached", "fast")
+    with console.status(f"[bold {p['cli_accent']}]Vérification des clés API & quotas...[/bold {p['cli_accent']}]"):
+        data = key_quota.inspecter_cles(sonder=sonder)
+
+    acc = p["cli_accent"]
+    sec = p["cli_secondary"]
+    table = Table(title="🔑 État & Quotas des Clés API (Mode Créateur)", border_style=acc, box=ROUNDED)
+    table.add_column("Provider", style=f"bold {acc}")
+    table.add_column("Clé", style="dim")
+    table.add_column("Modèle", style="white")
+    table.add_column("État", style="bold")
+    table.add_column("Requêtes rest.", style=f"bold {sec}")
+    table.add_column("Tokens rest.", style="cyan")
+    table.add_column("Reset / Notes", style="dim")
+
+    for row in data.get("cles", []):
+        etat = row.get("etat", "-")
+        etat_fmt = f"[green]● {etat}[/green]" if etat == "OK" else (f"[yellow]⚠ {etat}[/yellow]" if "429" in etat else f"[red]✕ {etat}[/red]")
+        req_str = f"{row['req_remaining']} / {row['req_limit']}" if row.get("req_remaining") is not None else "-"
+        tok_str = f"{row['tok_remaining']} / {row['tok_limit']}" if row.get("tok_remaining") is not None else "-"
+        note = f"{row.get('reset', '-')} · {row.get('note', '')}".strip(" ·")
+        table.add_row(row["provider"], row["cle_masquee"], row["modele"], etat_fmt, req_str, tok_str, note[:48])
+
+    console.print()
+    console.print(table)
+    bj = data.get("budget_jour") or {}
+    if bj:
+        res_jour = " │ ".join(f"{k}: {v.get('appels', 0)} req / {v.get('tin', 0) + v.get('tout', 0)} tok" for k, v in bj.items())
+        console.print(f"  [dim]Conso locale du jour : {res_jour}[/dim]\n")
+
+
 def commande_outils():
     """Affiche la liste catégorisée des outils disponibles sans erreur d'attribut."""
     p = _pal()
@@ -699,6 +739,11 @@ def lancer_terminal_interactif():
                 parties = texte.split(maxsplit=1)
                 arg_up = parties[1] if len(parties) > 1 else ""
                 commande_update(arg_up)
+                continue
+            elif cmd.startswith("/keys") or cmd.startswith("/quota"):
+                parties = texte.split(maxsplit=1)
+                arg_kq = parties[1] if len(parties) > 1 else ""
+                commande_keys(arg_kq)
                 continue
             elif cmd in ("/ide", "/editeur"):
                 from core import serveur, claude_app

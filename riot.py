@@ -81,6 +81,9 @@ def main():
         if cmd in ("/update", "update"):
             cli.commande_update(" ".join(args[1:]))
             return
+        if cmd in ("/keys", "keys", "/quota", "/quotas"):
+            cli.commande_keys(" ".join(args[1:]))
+            return
         if cmd in ("/tools", "/outils"):
             cli.commande_outils()
             return
