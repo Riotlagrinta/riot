@@ -11,6 +11,7 @@ import os
 import subprocess
 import threading
 import time
+import uuid
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
@@ -24,6 +25,8 @@ LOG = logging.getLogger("riot.ide")
 
 _RACINE = Path(__file__).resolve().parent.parent
 _WEB_DIR = _RACINE / "web"
+_PENDING_PATCHES: Dict[str, Dict[str, Any]] = {}
+_CHECKPOINTS: Dict[str, Dict[str, Any]] = {}
 
 _DOSSIERS_IGNORES = {
     ".git",
@@ -224,6 +227,81 @@ def _construire_prompt_ide(mode: str, projet: Path, fichier_actif: Optional[Dict
         "Reponds toujours en francais, de maniere dense, structuree et verifiable."
         f"{ctx_fichier}"
     )
+
+
+def _resoudre_pour_patch(projet: Path, brut: str) -> Optional[Path]:
+    """Resout un chemin absolu ou relatif et garantit qu'il reste dans `projet`."""
+    try:
+        base = projet.resolve()
+        s = (brut or "").strip().strip('"').strip("'")
+        if not s:
+            return None
+        p = Path(s)
+        cible = p.resolve() if p.is_absolute() else (base / s.lstrip("/\\")).resolve()
+        cible.relative_to(base)
+        return cible
+    except Exception:
+        return None
+
+
+def _simuler_et_stager_patch(projet: Path, nom_outil: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Calcule un diff complet sans ecrire sur disque et le place dans _PENDING_PATCHES."""
+    fichier_arg = str(args.get("fichier") or args.get("chemin") or args.get("chemin_fichier") or "").strip()
+    cible = _resoudre_pour_patch(projet, fichier_arg)
+    if not cible:
+        return {"ok": False, "erreur": f"Chemin invalide ou hors workspace : {fichier_arg}"}
+
+    ancien = cible.read_text(encoding="utf-8", errors="replace") if (cible.exists() and cible.is_file()) else ""
+    if nom_outil == "ecrire_code":
+        nouveau = str(args.get("contenu", "")).replace("\r\n", "\n")
+    else:
+        if not cible.exists():
+            return {"ok": False, "erreur": f"Fichier inexistant : {fichier_arg}"}
+        ancien_norm = ancien.replace("\r\n", "\n")
+        ancien_bloc = str(args.get("ancien_bloc", "")).replace("\r\n", "\n")
+        nouveau_bloc = str(args.get("nouveau_bloc", "")).replace("\r\n", "\n")
+        nb = ancien_norm.count(ancien_bloc)
+        if nb == 0:
+            return {"ok": False, "erreur": f"Bloc cible introuvable dans {cible.name}."}
+        if nb > 1:
+            return {"ok": False, "erreur": f"Bloc cible ambigu ({nb} occurrences) dans {cible.name}."}
+        nouveau = ancien_norm.replace(ancien_bloc, nouveau_bloc, 1)
+
+    rel = str(cible.relative_to(projet.resolve())).replace("\\", "/")
+    diff_lignes = list(difflib.unified_diff(
+        ancien.replace("\r\n", "\n").splitlines(),
+        nouveau.splitlines(),
+        fromfile=f"a/{rel}",
+        tofile=f"b/{rel}",
+        lineterm="",
+    ))
+    plus = sum(1 for l in diff_lignes if l.startswith("+") and not l.startswith("+++"))
+    moins = sum(1 for l in diff_lignes if l.startswith("-") and not l.startswith("---"))
+
+    patch_id = uuid.uuid4().hex[:10]
+    patch_obj = {
+        "id": patch_id,
+        "chemin": rel,
+        "abs_path": str(cible),
+        "outil": nom_outil,
+        "ancien": ancien,
+        "nouveau": nouveau,
+        "existait": cible.exists(),
+        "diff": "\n".join(diff_lignes[:350]),
+        "plus": plus,
+        "moins": moins,
+        "statut": "pending",
+    }
+    _PENDING_PATCHES[patch_id] = patch_obj
+    return {"ok": True, "patch": {
+        "id": patch_id,
+        "chemin": rel,
+        "outil": nom_outil,
+        "diff": patch_obj["diff"],
+        "plus": plus,
+        "moins": moins,
+        "statut": "pending",
+    }}
 
 
 def monter_routes(app) -> None:
@@ -463,6 +541,7 @@ def monter_routes(app) -> None:
         body = await request.json() or {}
         message = str(body.get("message", "")).strip()
         mode = str(body.get("mode", "code")).lower()
+        review_mode = bool(body.get("review_mode", True))
         fichier_actif = body.get("fichier_actif") if isinstance(body.get("fichier_actif"), dict) else None
         historique_client = body.get("historique") if isinstance(body.get("historique"), list) else []
 
@@ -509,16 +588,34 @@ def monter_routes(app) -> None:
                         nom = appel.name
                         args = appel.input or {}
                         _emit({"type": "tool", "statut": "running", "nom": nom, "args": args})
-                        outil_obj = registre.get(nom)
-                        if outil_obj is None:
-                            out_str = f"Erreur: outil '{nom}' inconnu."
-                        elif registre.est_n3(nom):
-                            out_str = f"Action critique '{nom}' bloquee en execution automatique."
+
+                        if review_mode and nom in ("ecrire_code", "patcher_code") and isinstance(args, dict):
+                            staged = _simuler_et_stager_patch(projet, nom, args)
+                            if staged.get("ok"):
+                                pinfo = staged["patch"]
+                                out_str = (
+                                    f"Proposition de patch #{pinfo['id']} sur `{pinfo['chemin']}` "
+                                    f"(+{pinfo['plus']} / -{pinfo['moins']} lignes) mise en attente de validation utilisateur."
+                                )
+                                _emit({"type": "pending_patch", "patch": pinfo})
+                            else:
+                                out_str = f"[ERREUR] {staged.get('erreur', 'Echec staging patch')}"
                         else:
-                            try:
-                                out_str = str(outil_obj.fonction(**args))
-                            except Exception as ex:
-                                out_str = f"Erreur execution '{nom}': {ex}"
+                            outil_obj = registre.get(nom)
+                            if outil_obj is None:
+                                out_str = f"Erreur: outil '{nom}' inconnu."
+                            elif registre.est_n3(nom):
+                                out_str = f"Action critique '{nom}' bloquee en execution automatique."
+                            else:
+                                try:
+                                    out_str = str(outil_obj.fonction(**args))
+                                except Exception as ex:
+                                    out_str = f"Erreur execution '{nom}': {ex}"
+                            if nom in ("ecrire_code", "patcher_code", "supprimer_fichier") and isinstance(args, dict):
+                                ch = args.get("chemin") or args.get("fichier") or args.get("chemin_fichier") or ""
+                                if ch:
+                                    _emit({"type": "file_changed", "chemin": str(ch)})
+
                         _emit({
                             "type": "tool",
                             "statut": "done",
@@ -526,10 +623,6 @@ def monter_routes(app) -> None:
                             "args": args,
                             "extrait": out_str[:400],
                         })
-                        if nom in ("ecrire_code", "patcher_code", "supprimer_fichier") and isinstance(args, dict):
-                            ch = args.get("chemin") or args.get("fichier") or args.get("chemin_fichier") or ""
-                            if ch:
-                                _emit({"type": "file_changed", "chemin": str(ch)})
                         if nom == "generer_image" and "/captures/" in out_str:
                             _emit({"type": "artifact", "kind": "image", "detail": out_str})
                         res_blocs.append({"type": "tool_result", "tool_use_id": appel.id, "content": out_str[:6000]})
@@ -552,3 +645,90 @@ def monter_routes(app) -> None:
                 yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
 
         return StreamingResponse(_stream(), media_type="text/event-stream")
+
+    @app.get("/api/ide/patches")
+    def api_ide_patches(request: Request):
+        if (r := garde(request)):
+            return r
+        return {
+            "ok": True,
+            "patches": [
+                {
+                    "id": p["id"],
+                    "chemin": p["chemin"],
+                    "outil": p["outil"],
+                    "plus": p["plus"],
+                    "moins": p["moins"],
+                    "diff": p["diff"],
+                }
+                for p in _PENDING_PATCHES.values()
+            ],
+        }
+
+    @app.post("/api/ide/patch/{patch_id}/accept")
+    def api_ide_patch_accept(request: Request, patch_id: str):
+        if (r := garde(request)):
+            return r
+        patch = _PENDING_PATCHES.pop(patch_id, None)
+        if not patch:
+            return JSONResponse({"ok": False, "erreur": "Patch introuvable ou deja traite."}, status_code=404)
+        cible = Path(patch["abs_path"])
+        cible.parent.mkdir(parents=True, exist_ok=True)
+        _CHECKPOINTS[patch_id] = {
+            "abs_path": patch["abs_path"],
+            "chemin": patch["chemin"],
+            "ancien": patch["ancien"],
+            "existait": patch["existait"],
+        }
+        cible.write_text(patch["nouveau"], encoding="utf-8")
+        return {
+            "ok": True,
+            "id": patch_id,
+            "chemin": patch["chemin"],
+            "contenu": patch["nouveau"],
+            "diff": patch["diff"],
+        }
+
+    @app.post("/api/ide/patch/{patch_id}/reject")
+    def api_ide_patch_reject(request: Request, patch_id: str):
+        if (r := garde(request)):
+            return r
+        patch = _PENDING_PATCHES.pop(patch_id, None)
+        if not patch:
+            return JSONResponse({"ok": False, "erreur": "Patch introuvable."}, status_code=404)
+        return {"ok": True, "id": patch_id, "chemin": patch["chemin"]}
+
+    @app.post("/api/ide/patch/{patch_id}/revert")
+    def api_ide_patch_revert(request: Request, patch_id: str):
+        if (r := garde(request)):
+            return r
+        cp = _CHECKPOINTS.pop(patch_id, None)
+        if not cp:
+            return JSONResponse({"ok": False, "erreur": "Checkpoint introuvable."}, status_code=404)
+        cible = Path(cp["abs_path"])
+        if not cp["existait"]:
+            if cible.exists():
+                cible.unlink()
+            return {"ok": True, "chemin": cp["chemin"], "supprime": True}
+        cible.write_text(cp["ancien"], encoding="utf-8")
+        return {"ok": True, "chemin": cp["chemin"], "contenu": cp["ancien"]}
+
+    @app.get("/api/ide/chemins")
+    def api_ide_chemins(request: Request):
+        if (r := garde(request)):
+            return r
+        projet = _projet_courant()
+        liste: List[str] = []
+        for root, dirs, files in os.walk(projet):
+            dirs[:] = [d for d in dirs if d not in _DOSSIERS_IGNORES and not d.startswith(".")]
+            for fn in sorted(files):
+                p = Path(root) / fn
+                if p.suffix.lower() in _EXT_BINAIRES:
+                    continue
+                try:
+                    liste.append(str(p.relative_to(projet)).replace("\\", "/"))
+                    if len(liste) >= 500:
+                        return {"ok": True, "chemins": liste}
+                except Exception:
+                    continue
+        return {"ok": True, "chemins": liste}

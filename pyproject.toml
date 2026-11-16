@@ -82,9 +82,13 @@ riot-cli = "core.cli:main"
 
 [tool.setuptools]
 py-modules = ["riot", "keranos", "hud", "overlay"]
+include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["core*", "tools*", "musique*", "gestes*", "jarvis*"]
+include = ["core*", "tools*", "musique*", "gestes*", "jarvis*", "web*"]
+
+[tool.setuptools.package-data]
+web = ["*.html", "*.css", "*.js", "*.svg", "*.json"]
 
 [tool.uv]
 package = true

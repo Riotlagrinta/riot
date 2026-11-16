@@ -1,26 +1,37 @@
 (function () {
   var state = {
-    tabs: [], // { path, name, content, savedContent, dirty, diff }
+    tabs: [], // { path, name, ext, content, savedContent, dirty, diff }
     activePath: null,
     agentMode: "code",
     history: [],
-    treeNodes: []
+    treeNodes: [],
+    pendingPatches: [],
+    activePatchId: null,
+    lastAcceptedPatch: null, // { id, chemin }
+    allPaths: []
   };
 
+  var cm = null;
+  var suppressCmChange = false;
   var els = {};
   function q(id) { return document.getElementById(id); }
 
   function bindEls() {
     [
-      "ide-project-select", "ide-branch-pill", "ide-btn-model", "ide-model-label",
+      "ide-sidebar", "ide-agent", "ide-resizer-left", "ide-resizer-right", "ide-resizer-term",
+      "ide-project-select", "ide-branch-pill", "ide-btn-quickopen", "ide-btn-model", "ide-model-label",
       "ide-tree", "ide-tree-filter", "ide-btn-newfile", "ide-btn-refresh",
       "ide-search-form", "ide-search-input", "ide-search-results",
       "ide-tabs", "ide-breadcrumb", "ide-empty-state", "ide-code-wrap",
-      "ide-gutter", "ide-editor", "ide-diff-wrap", "ide-diff-pre",
-      "ide-diff-close", "ide-btn-diff", "ide-btn-save", "ide-btn-term-toggle",
+      "ide-cm-host", "ide-fallback-host", "ide-gutter", "ide-editor",
+      "ide-preview-wrap", "ide-diff-wrap", "ide-diff-title", "ide-diff-body",
+      "ide-diff-close", "ide-btn-preview", "ide-btn-diff", "ide-btn-save", "ide-btn-term-toggle",
+      "ide-patch-bar", "ide-patch-file", "ide-patch-stats", "ide-patch-accept", "ide-patch-reject",
       "ide-terminal-panel", "ide-term-cwd", "ide-term-output", "ide-term-form",
       "ide-term-input", "ide-term-clear", "ide-agent-feed", "ide-agent-form",
       "ide-agent-input", "ide-agent-send", "ide-attach-active", "ide-active-file-chip",
+      "ide-review-mode", "ide-pending-count",
+      "ide-quickopen-modal", "ide-quickopen-input", "ide-quickopen-list",
       "ide-model-modal", "ide-modal-close", "ide-model-form",
       "ide-cfg-mode", "ide-cfg-baseurl-wrap", "ide-cfg-baseurl", "ide-cfg-model", "ide-cfg-key"
     ].forEach(function (id) { els[id] = q(id); });
@@ -32,6 +43,54 @@
     });
   }
 
+  function cmModeForExt(ext) {
+    var e = (ext || "").toLowerCase();
+    if (e === "py") return "python";
+    if (e === "js" || e === "ts" || e === "tsx" || e === "jsx" || e === "json") return "javascript";
+    if (e === "css" || e === "scss") return "css";
+    if (e === "html" || e === "htm" || e === "svg" || e === "xml") return "htmlmixed";
+    if (e === "md" || e === "markdown") return "markdown";
+    if (e === "yaml" || e === "yml") return "yaml";
+    return "text/plain";
+  }
+
+  function ensureCodeMirror() {
+    if (cm || typeof window.CodeMirror === "undefined") return cm;
+    els["ide-cm-host"].classList.remove("hidden");
+    els["ide-fallback-host"].classList.add("hidden");
+    cm = window.CodeMirror(els["ide-cm-host"], {
+      value: "",
+      lineNumbers: true,
+      tabSize: 4,
+      indentUnit: 4,
+      mode: "python"
+    });
+    cm.on("change", function () {
+      if (suppressCmChange) return;
+      var tab = currentTab();
+      if (!tab) return;
+      tab.content = cm.getValue();
+      tab.dirty = tab.content !== tab.savedContent;
+      updateBreadcrumb(tab);
+    });
+    return cm;
+  }
+
+  function setEditorContent(text, ext) {
+    var instance = ensureCodeMirror();
+    if (instance) {
+      suppressCmChange = true;
+      instance.setOption("mode", cmModeForExt(ext));
+      instance.setValue(text || "");
+      instance.clearHistory();
+      suppressCmChange = false;
+      setTimeout(function () { instance.refresh(); }, 10);
+    } else {
+      els["ide-editor"].value = text || "";
+      updateGutter();
+    }
+  }
+
   function updateGutter() {
     var txt = els["ide-editor"].value || "";
     var count = txt.split("\n").length;
@@ -40,8 +99,50 @@
     els["ide-gutter"].textContent = nums.join("\n");
   }
 
+  function updateBreadcrumb(tab) {
+    if (!tab) return;
+    els["ide-breadcrumb"].textContent = tab.path + " · " + tab.content.split("\n").length + " lignes" + (tab.dirty ? " (modifié)" : "");
+  }
+
   function currentTab() {
     return state.tabs.find(function (t) { return t.path === state.activePath; }) || null;
+  }
+
+  function renderDiffLines(diffText, title) {
+    els["ide-diff-title"].textContent = title || "Inspecteur de Diff";
+    var box = els["ide-diff-body"];
+    box.innerHTML = "";
+    var lines = String(diffText || "Aucune différence enregistrée.").split("\n");
+    lines.forEach(function (ln) {
+      var div = document.createElement("div");
+      if (ln.startsWith("+") && !ln.startsWith("+++")) div.className = "ide-dline ide-dline-add";
+      else if (ln.startsWith("-") && !ln.startsWith("---")) div.className = "ide-dline ide-dline-del";
+      else if (ln.startsWith("@@") || ln.startsWith("---") || ln.startsWith("+++")) div.className = "ide-dline ide-dline-hunk";
+      else div.className = "ide-dline ide-dline-ctx";
+      div.textContent = ln;
+      box.appendChild(div);
+    });
+  }
+
+  function renderPendingPatches() {
+    var n = state.pendingPatches.length;
+    els["ide-pending-count"].textContent = n + (n > 1 ? " patches" : " patch");
+    els["ide-pending-count"].classList.toggle("hidden", n === 0);
+
+    var p = state.pendingPatches.find(function (x) { return x.id === state.activePatchId; }) || state.pendingPatches[0];
+    if (!p) {
+      els["ide-patch-bar"].classList.add("hidden");
+      state.activePatchId = null;
+      return;
+    }
+    state.activePatchId = p.id;
+    els["ide-patch-bar"].classList.remove("hidden");
+    els["ide-patch-file"].textContent = p.chemin;
+    els["ide-patch-stats"].textContent = "+" + p.plus + " / -" + p.moins + " lignes (" + p.outil + ")";
+    renderDiffLines(p.diff, "Revue avant écriture : " + p.chemin);
+    els["ide-empty-state"].classList.add("hidden");
+    els["ide-diff-wrap"].classList.remove("hidden");
+    els["ide-preview-wrap"].classList.add("hidden");
   }
 
   function renderTabs() {
@@ -54,11 +155,8 @@
         '<span>' + escapeHtml(tab.name) + (tab.dirty ? " •" : "") + '</span>' +
         '<button type="button" class="ide-tab-close" title="Fermer">×</button>';
       el.addEventListener("click", function (ev) {
-        if (ev.target.classList.contains("ide-tab-close")) {
-          closeTab(tab.path);
-        } else {
-          selectTab(tab.path);
-        }
+        if (ev.target.classList.contains("ide-tab-close")) closeTab(tab.path);
+        else selectTab(tab.path);
       });
       box.appendChild(el);
     });
@@ -67,14 +165,15 @@
     if (!act) {
       els["ide-empty-state"].classList.remove("hidden");
       els["ide-code-wrap"].classList.add("hidden");
-      els["ide-breadcrumb"].textContent = "Sélectionnez un fichier à gauche ou demandez à l'agent RIOT.";
+      els["ide-preview-wrap"].classList.add("hidden");
+      els["ide-breadcrumb"].textContent = "Sélectionnez un fichier à gauche, appuyez sur Ctrl+P ou pilotez l'agent RIOT.";
       els["ide-active-file-chip"].textContent = "Joindre onglet actif (aucun)";
     } else {
       els["ide-empty-state"].classList.add("hidden");
       els["ide-code-wrap"].classList.remove("hidden");
-      els["ide-editor"].value = act.content;
-      updateGutter();
-      els["ide-breadcrumb"].textContent = act.path + " · " + act.content.split("\n").length + " lignes" + (act.dirty ? " (modifié)" : "");
+      els["ide-preview-wrap"].classList.add("hidden");
+      setEditorContent(act.content, act.ext);
+      updateBreadcrumb(act);
       els["ide-active-file-chip"].textContent = "Joindre " + act.path;
     }
   }
@@ -82,6 +181,7 @@
   function selectTab(path) {
     state.activePath = path;
     els["ide-diff-wrap"].classList.add("hidden");
+    els["ide-preview-wrap"].classList.add("hidden");
     renderTabs();
     highlightActiveTree();
   }
@@ -112,11 +212,13 @@
       if (existing) {
         existing.content = d.contenu;
         existing.savedContent = d.contenu;
+        existing.ext = d.ext;
         existing.dirty = false;
       } else {
         state.tabs.push({
           path: d.chemin,
           name: d.nom,
+          ext: d.ext,
           content: d.contenu,
           savedContent: d.contenu,
           dirty: false,
@@ -132,25 +234,21 @@
   async function saveActiveFile() {
     var tab = currentTab();
     if (!tab) return;
-    try {
-      var r = await fetch("/api/ide/fichier", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chemin: tab.path, contenu: tab.content, creer: false })
-      });
-      var d = await r.json();
-      if (!d.ok) {
-        appendAgentMsg("system", "Echec sauvegarde : " + (d.erreur || ""));
-        return;
-      }
-      tab.savedContent = tab.content;
-      tab.dirty = false;
-      tab.diff = d.diff || "(aucune différence)";
-      renderTabs();
-      loadTree();
-    } catch (e) {
-      appendAgentMsg("system", "Erreur sauvegarde : " + e.message);
+    var r = await fetch("/api/ide/fichier", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chemin: tab.path, contenu: tab.content, creer: false })
+    });
+    var d = await r.json();
+    if (!d.ok) {
+      appendAgentMsg("system", "Échec sauvegarde : " + (d.erreur || ""));
+      return;
     }
+    tab.savedContent = tab.content;
+    tab.dirty = false;
+    tab.diff = d.diff || "(aucune différence)";
+    renderTabs();
+    loadTree();
   }
 
   function highlightActiveTree() {
@@ -165,18 +263,14 @@
         var wrapper = document.createElement("div");
         var childBox = document.createElement("div");
         renderTreeNodes(n.enfants || [], childBox, depth + 1, filter);
-        if (filter && childBox.children.length === 0 && n.nom.toLowerCase().indexOf(filter) === -1) {
-          return;
-        }
+        if (filter && childBox.children.length === 0 && n.nom.toLowerCase().indexOf(filter) === -1) return;
         var row = document.createElement("div");
         row.className = "ide-tree-row";
         row.style.paddingLeft = (6 + depth * 12) + "px";
         row.innerHTML = '<span>▸ ' + escapeHtml(n.nom) + '</span>';
         var open = Boolean(filter) || depth === 0;
         childBox.classList.toggle("hidden", !open);
-        row.addEventListener("click", function () {
-          childBox.classList.toggle("hidden");
-        });
+        row.addEventListener("click", function () { childBox.classList.toggle("hidden"); });
         wrapper.appendChild(row);
         wrapper.appendChild(childBox);
         container.appendChild(wrapper);
@@ -210,7 +304,6 @@
     var r = await fetch("/api/ide/etat");
     var d = await r.json();
     if (!d.ok) return;
-
     var sel = els["ide-project-select"];
     sel.innerHTML = "";
     (d.projets || []).forEach(function (p) {
@@ -229,9 +322,7 @@
       els["ide-cfg-mode"].value = d.fournisseur.mode || "mistral";
       els["ide-cfg-baseurl-wrap"].classList.toggle("hidden", els["ide-cfg-mode"].value !== "custom");
     }
-    if (d.custom_base_url) {
-      els["ide-cfg-baseurl"].value = d.custom_base_url;
-    }
+    if (d.custom_base_url) els["ide-cfg-baseurl"].value = d.custom_base_url;
     await loadTree();
   }
 
@@ -252,11 +343,11 @@
   async function runAgentChat(prompt) {
     appendAgentMsg("user", "[" + state.agentMode.toUpperCase() + "] " + prompt);
     els["ide-agent-send"].disabled = true;
-
     var tab = currentTab();
     var payload = {
       message: prompt,
       mode: state.agentMode,
+      review_mode: els["ide-review-mode"].checked,
       historique: state.history.slice(-8),
       fichier_actif: els["ide-attach-active"].checked && tab ? { chemin: tab.path, contenu: tab.content } : null
     };
@@ -271,8 +362,6 @@
       var reader = r.body.getReader();
       var decoder = new TextDecoder();
       var buffer = "";
-      var finalAnswer = "";
-
       while (true) {
         var chunk = await reader.read();
         if (chunk.done) break;
@@ -285,26 +374,23 @@
           var ev = JSON.parse(line.slice(5).trim());
           if (ev.type === "step") {
             statusEl.textContent = "⟳ " + ev.label;
+          } else if (ev.type === "pending_patch" && ev.patch) {
+            state.pendingPatches.push(ev.patch);
+            state.activePatchId = ev.patch.id;
+            renderPendingPatches();
+            appendAgentMsg("tool", "⧗ Patch #" + ev.patch.id + " en attente sur " + ev.patch.chemin + " (+" + ev.patch.plus + "/-" + ev.patch.moins + ")");
           } else if (ev.type === "tool") {
-            if (ev.statut === "running") {
-              appendAgentMsg("tool", "▸ " + ev.nom + "(" + JSON.stringify(ev.args || {}).slice(0, 120) + ")");
-            } else {
-              appendAgentMsg("tool", "✓ " + ev.nom + " -> " + (ev.extrait || "").slice(0, 180));
-            }
+            appendAgentMsg("tool", (ev.statut === "running" ? "▸ " : "✓ ") + ev.nom + (ev.extrait ? " -> " + ev.extrait.slice(0, 160) : ""));
           } else if (ev.type === "file_changed" && ev.chemin) {
             loadTree();
-            var opened = state.tabs.find(function (t) { return t.path === ev.chemin; });
-            if (opened) openFile(ev.chemin, true);
+            if (state.tabs.some(function (t) { return t.path === ev.chemin; })) openFile(ev.chemin, true);
           } else if (ev.type === "artifact" && ev.kind === "image" && ev.detail) {
             var m = ev.detail.match(/(\/captures\/[^\s`]+)/);
-            if (m) {
-              appendAgentMsg("system", "Maquette générée :", '<img class="ide-msg-img" src="' + escapeHtml(m[1]) + '" alt="Apercu" />');
-            }
+            if (m) appendAgentMsg("system", "Maquette générée :", '<img class="ide-msg-img" src="' + escapeHtml(m[1]) + '" alt="Apercu" />');
           } else if (ev.type === "done") {
-            finalAnswer = ev.texte || "";
             statusEl.remove();
-            appendAgentMsg("system", finalAnswer);
-            state.history.push({ role: "user", content: prompt }, { role: "assistant", content: finalAnswer });
+            appendAgentMsg("system", ev.texte || "");
+            state.history.push({ role: "user", content: prompt }, { role: "assistant", content: ev.texte || "" });
           } else if (ev.type === "error") {
             statusEl.remove();
             appendAgentMsg("system", "Erreur agent : " + ev.erreur);
@@ -316,6 +402,91 @@
     } finally {
       els["ide-agent-send"].disabled = false;
     }
+  }
+
+  function setupResizers() {
+    function persistWidths() {
+      try {
+        localStorage.setItem("riot_ide_layout", JSON.stringify({
+          left: els["ide-sidebar"].style.width,
+          right: els["ide-agent"].style.width,
+          term: els["ide-terminal-panel"].style.height
+        }));
+      } catch (_) {}
+    }
+    try {
+      var saved = JSON.parse(localStorage.getItem("riot_ide_layout") || "{}");
+      if (saved.left) els["ide-sidebar"].style.width = saved.left;
+      if (saved.right) els["ide-agent"].style.width = saved.right;
+      if (saved.term) els["ide-terminal-panel"].style.height = saved.term;
+    } catch (_) {}
+
+    function dragX(handle, target, invert) {
+      handle.addEventListener("mousedown", function (ev) {
+        ev.preventDefault();
+        handle.classList.add("active");
+        var startX = ev.clientX;
+        var startW = target.getBoundingClientRect().width;
+        function onMove(m) {
+          var dx = invert ? (startX - m.clientX) : (m.clientX - startX);
+          target.style.width = Math.max(180, Math.min(560, startW + dx)) + "px";
+        }
+        function onUp() {
+          handle.classList.remove("active");
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+          persistWidths();
+        }
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      });
+    }
+    dragX(els["ide-resizer-left"], els["ide-sidebar"], false);
+    dragX(els["ide-resizer-right"], els["ide-agent"], true);
+
+    els["ide-resizer-term"].addEventListener("mousedown", function (ev) {
+      ev.preventDefault();
+      els["ide-resizer-term"].classList.add("active");
+      var startY = ev.clientY;
+      var startH = els["ide-terminal-panel"].getBoundingClientRect().height;
+      function onMove(m) {
+        els["ide-terminal-panel"].style.height = Math.max(90, Math.min(440, startH + (startY - m.clientY))) + "px";
+      }
+      function onUp() {
+        els["ide-resizer-term"].classList.remove("active");
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        persistWidths();
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    });
+  }
+
+  async function openQuickOpen() {
+    els["ide-quickopen-modal"].classList.remove("hidden");
+    els["ide-quickopen-input"].value = "";
+    els["ide-quickopen-input"].focus();
+    var r = await fetch("/api/ide/chemins");
+    var d = await r.json();
+    state.allPaths = (d && d.chemins) ? d.chemins : [];
+    renderQuickOpen("");
+  }
+
+  function renderQuickOpen(filter) {
+    var f = (filter || "").trim().toLowerCase();
+    var list = els["ide-quickopen-list"];
+    list.innerHTML = "";
+    state.allPaths.filter(function (p) { return !f || p.toLowerCase().indexOf(f) !== -1; }).slice(0, 40).forEach(function (p) {
+      var item = document.createElement("div");
+      item.className = "ide-qo-item";
+      item.textContent = p;
+      item.addEventListener("click", function () {
+        els["ide-quickopen-modal"].classList.add("hidden");
+        openFile(p, false);
+      });
+      list.appendChild(item);
+    });
   }
 
   function wireEvents() {
@@ -353,12 +524,8 @@
         body: JSON.stringify({ chemin: rel, contenu: "", creer: true })
       });
       var d = await r.json();
-      if (d.ok) {
-        await loadTree();
-        await openFile(d.chemin, true);
-      } else {
-        window.alert(d.erreur || "Impossible de créer le fichier");
-      }
+      if (d.ok) { await loadTree(); await openFile(d.chemin, true); }
+      else window.alert(d.erreur || "Impossible de créer le fichier");
     });
 
     els["ide-project-select"].addEventListener("change", async function () {
@@ -379,9 +546,8 @@
       tab.content = els["ide-editor"].value;
       tab.dirty = tab.content !== tab.savedContent;
       updateGutter();
-      els["ide-breadcrumb"].textContent = tab.path + " · " + tab.content.split("\n").length + " lignes" + (tab.dirty ? " (modifié)" : "");
+      updateBreadcrumb(tab);
     });
-
     els["ide-editor"].addEventListener("scroll", function () {
       els["ide-gutter"].scrollTop = els["ide-editor"].scrollTop;
     });
@@ -389,19 +555,60 @@
     els["ide-btn-save"].addEventListener("click", saveActiveFile);
     els["ide-btn-diff"].addEventListener("click", function () {
       var tab = currentTab();
-      els["ide-diff-pre"].textContent = (tab && tab.diff) ? tab.diff : "Enregistrez d'abord une modification pour afficher le diff.";
+      renderDiffLines((tab && tab.diff) ? tab.diff : "Enregistrez d'abord une modification pour afficher le diff.", tab ? "Diff : " + tab.path : "Inspecteur de Diff");
+      var opening = els["ide-diff-wrap"].classList.contains("hidden");
       els["ide-diff-wrap"].classList.toggle("hidden");
+      if (opening) els["ide-empty-state"].classList.add("hidden");
+      else if (!tab) els["ide-empty-state"].classList.remove("hidden");
     });
     els["ide-diff-close"].addEventListener("click", function () {
       els["ide-diff-wrap"].classList.add("hidden");
+      if (!currentTab() && els["ide-preview-wrap"].classList.contains("hidden")) {
+        els["ide-empty-state"].classList.remove("hidden");
+      }
     });
 
-    els["ide-btn-term-toggle"].addEventListener("click", function () {
-      els["ide-terminal-panel"].classList.toggle("hidden");
+    els["ide-btn-preview"].addEventListener("click", function () {
+      var tab = currentTab();
+      if (!tab) return;
+      els["ide-preview-wrap"].classList.toggle("hidden");
+      if (!els["ide-preview-wrap"].classList.contains("hidden")) {
+        els["ide-empty-state"].classList.add("hidden");
+        els["ide-preview-wrap"].innerHTML = (typeof window.marked !== "undefined")
+          ? window.marked.parse(tab.content)
+          : "<pre>" + escapeHtml(tab.content) + "</pre>";
+      }
     });
-    els["ide-term-clear"].addEventListener("click", function () {
-      els["ide-term-output"].textContent = "";
+
+    els["ide-patch-accept"].addEventListener("click", async function () {
+      if (!state.activePatchId) return;
+      var pid = state.activePatchId;
+      var r = await fetch("/api/ide/patch/" + pid + "/accept", { method: "POST" });
+      var d = await r.json();
+      state.pendingPatches = state.pendingPatches.filter(function (x) { return x.id !== pid; });
+      if (d.ok) {
+        state.lastAcceptedPatch = { id: pid, chemin: d.chemin };
+        els["ide-diff-wrap"].classList.add("hidden");
+        await loadTree();
+        await openFile(d.chemin, true);
+        appendAgentMsg("system", "✓ Patch #" + pid + " appliqué sur " + d.chemin + ".");
+      }
+      renderPendingPatches();
     });
+
+    els["ide-patch-reject"].addEventListener("click", async function () {
+      if (!state.activePatchId) return;
+      var pid = state.activePatchId;
+      await fetch("/api/ide/patch/" + pid + "/reject", { method: "POST" });
+      state.pendingPatches = state.pendingPatches.filter(function (x) { return x.id !== pid; });
+      els["ide-diff-wrap"].classList.add("hidden");
+      appendAgentMsg("system", "✕ Patch #" + pid + " rejeté.");
+      renderPendingPatches();
+    });
+
+    els["ide-pending-count"].addEventListener("click", renderPendingPatches);
+    els["ide-btn-term-toggle"].addEventListener("click", function () { els["ide-terminal-panel"].classList.toggle("hidden"); });
+    els["ide-term-clear"].addEventListener("click", function () { els["ide-term-output"].textContent = ""; });
     els["ide-term-form"].addEventListener("submit", async function (ev) {
       ev.preventDefault();
       var cmd = (els["ide-term-input"].value || "").trim();
@@ -444,7 +651,6 @@
       els["ide-agent-input"].value = "";
       runAgentChat(msg);
     });
-
     els["ide-agent-input"].addEventListener("keydown", function (ev) {
       if ((ev.ctrlKey || ev.metaKey) && ev.key === "Enter") {
         ev.preventDefault();
@@ -452,12 +658,14 @@
       }
     });
 
-    els["ide-btn-model"].addEventListener("click", function () {
-      els["ide-model-modal"].classList.remove("hidden");
+    els["ide-btn-quickopen"].addEventListener("click", openQuickOpen);
+    els["ide-quickopen-input"].addEventListener("input", function () { renderQuickOpen(els["ide-quickopen-input"].value); });
+    els["ide-quickopen-modal"].addEventListener("click", function (ev) {
+      if (ev.target === els["ide-quickopen-modal"]) els["ide-quickopen-modal"].classList.add("hidden");
     });
-    els["ide-modal-close"].addEventListener("click", function () {
-      els["ide-model-modal"].classList.add("hidden");
-    });
+
+    els["ide-btn-model"].addEventListener("click", function () { els["ide-model-modal"].classList.remove("hidden"); });
+    els["ide-modal-close"].addEventListener("click", function () { els["ide-model-modal"].classList.add("hidden"); });
     els["ide-cfg-mode"].addEventListener("change", function () {
       els["ide-cfg-baseurl-wrap"].classList.toggle("hidden", els["ide-cfg-mode"].value !== "custom");
     });
@@ -484,17 +692,23 @@
       if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "s") {
         ev.preventDefault();
         saveActiveFile();
+      } else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "p") {
+        ev.preventDefault();
+        openQuickOpen();
       } else if ((ev.ctrlKey || ev.metaKey) && ev.key === "`") {
         ev.preventDefault();
         els["ide-terminal-panel"].classList.toggle("hidden");
+      } else if (ev.key === "Escape") {
+        els["ide-quickopen-modal"].classList.add("hidden");
+        els["ide-model-modal"].classList.add("hidden");
       }
     });
   }
 
   document.addEventListener("DOMContentLoaded", function () {
     bindEls();
+    setupResizers();
     wireEvents();
     loadState();
   });
 })();
-
