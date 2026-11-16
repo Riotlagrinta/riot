@@ -139,9 +139,27 @@ def _interroger_sources() -> Dict[str, Any]:
     commit_distant = ""
     npm_distante = ""
 
+    # 1. Portail officiel RIOT / Proxy releases (prioritaire quand le repo GitHub est prive)
+    portal_url = (
+        os.environ.get("RIOT_PORTAL_URL", "").strip()
+        or os.environ.get("RIOT_GATEWAY_URL", "").strip()
+    ).rstrip("/")
+    if portal_url:
+        try:
+            suffix = "/releases/latest" if "onrender" in portal_url or portal_url.endswith("/v1") else "/api/releases/latest"
+            url_rel = f"{portal_url[:-3] if portal_url.endswith('/v1') else portal_url}{suffix}"
+            r = requests.get(url_rel, timeout=2.5)
+            if r.ok:
+                rel = r.json()
+                v = str(rel.get("version") or (rel.get("release") or {}).get("version", "")).strip()
+                if v:
+                    ver_distante = v
+        except Exception as e:
+            LOG.debug("updater portal release: %s", e)
+
     try:
         r = requests.get(GITHUB_PYPROJECT_URL, timeout=2.5)
-        if r.ok:
+        if r.ok and not ver_distante:
             m = re.search(r'(?m)^version\s*=\s*"([^"]+)"', r.text)
             if m:
                 ver_distante = m.group(1).strip()

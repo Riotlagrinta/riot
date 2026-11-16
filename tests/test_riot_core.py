@@ -128,24 +128,28 @@ def test_spiral_icons_and_creator_monitoring(monkeypatch, tmp_path):
     errs = store.lister_logs(only_errors=True)
     assert len(errs) == 1 and errs[0]["status_code"] == 429
 
-    # 3. Garde /monitor locale + icones PWA Spiral
+    # 3. Absence de route /monitor dans le package client + icones PWA Spiral
     client = TestClient(serveur.app(), base_url="http://127.0.0.1:8790", client=("127.0.0.1", 50000))
     for asset in ("/logo.svg", "/icon-192.png", "/icon-512.png", "/claude/manifest.json", "/mobile/manifest.json"):
         assert client.get(asset).status_code == 200
+    assert client.get("/monitor").status_code == 404
 
-    monkeypatch.delenv("RIOT_ADMIN", raising=False)
-    monkeypatch.setattr(llm, "reglage", lambda k, d=None: False if k == "admin_mode" else d)
-    assert client.get("/monitor").status_code == 403
-
-    monkeypatch.setenv("RIOT_ADMIN", "1")
-    assert client.get("/monitor").status_code == 200
-    assert client.get("/api/monitor/metrics").status_code == 200
-
-    # 4. Garde /admin sur proxy/server.py
-    from proxy.server import app as proxy_app
+    # 4. Garde /admin + endpoints publics /releases /status/public sur proxy/server.py
+    from proxy import server as proxy_srv
+    monkeypatch.setattr(proxy_srv, "_STORE", store)
     monkeypatch.setenv("RIOT_ADMIN_TOKEN", "secret_creator_tok")
-    pc = TestClient(proxy_app)
+    pc = TestClient(proxy_srv.app)
+    assert pc.get("/status/public").status_code == 200
+    assert "prompt" not in pc.get("/status/public").text
+    assert pc.get("/releases").status_code == 200
+    assert pc.get("/releases/latest").json()["version"] == "0.3.1"
     assert pc.get("/admin/metrics").status_code == 401
     assert pc.get("/admin/metrics", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
     assert pc.get("/admin/logs", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
+    r_rel = pc.post(
+        "/admin/releases",
+        headers={"X-Admin-Token": "secret_creator_tok"},
+        json={"version": "0.3.2", "titre": "Test Release", "notes": "- Note 1"},
+    )
+    assert r_rel.status_code == 200 and pc.get("/releases/latest").json()["version"] == "0.3.2"
 

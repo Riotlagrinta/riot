@@ -97,6 +97,32 @@ class TelemetryStore:
                     """
                 )
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_llm_events_ts ON llm_events(ts DESC);")
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS releases (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        ts REAL NOT NULL,
+                        version TEXT UNIQUE NOT NULL,
+                        titre TEXT NOT NULL,
+                        notes TEXT NOT NULL,
+                        commande TEXT DEFAULT 'npm install -g @riotlagrinta/riot@latest'
+                    )
+                    """
+                )
+                cnt = conn.execute("SELECT COUNT(*) FROM releases").fetchone()[0]
+                if cnt == 0:
+                    conn.execute(
+                        "INSERT INTO releases (ts, version, titre, notes, commande) VALUES (?, ?, ?, ?, ?)",
+                        (
+                            time.time(),
+                            "0.3.1",
+                            "RIOT v0.3.1 — IDE Agentique, Mode Opaque & Logo Spirale",
+                            "• RIOT IDE multi-panneaux (CodeMirror, diff coloré Accepter/Rejeter, terminal, Ctrl+P)\n"
+                            "• 3 thèmes au choix (Obsidian & Ambre, Encre & Émeraude, Tactical Ops)\n"
+                            "• Moteur opaque RIOT Engine & passerelle Cloud dédiée",
+                            "npm install -g @riotlagrinta/riot@latest",
+                        ),
+                    )
                 conn.commit()
             finally:
                 conn.close()
@@ -266,6 +292,69 @@ class TelemetryStore:
             }
             for r in rows
         ]
+
+    def publier_release(self, version: str, titre: str, notes: str, commande: str = "") -> Dict[str, Any]:
+        ver = (version or "").strip().lstrip("v")
+        tit = (titre or "").strip() or f"RIOT v{ver}"
+        not_txt = (notes or "").strip()
+        cmd = (commande or "").strip() or "npm install -g @riotlagrinta/riot@latest"
+        if not ver:
+            raise ValueError("Numero de version requis.")
+        now = time.time()
+        with self._lock:
+            conn = self._connect()
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO releases (ts, version, titre, notes, commande)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(version) DO UPDATE SET
+                        ts=excluded.ts, titre=excluded.titre, notes=excluded.notes, commande=excluded.commande
+                    """,
+                    (now, ver[:32], tit[:160], not_txt[:8000], cmd[:200]),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+        return {"ok": True, "version": ver, "titre": tit, "notes": not_txt, "commande": cmd}
+
+    def lister_releases(self, limit: int = 20) -> List[Dict[str, Any]]:
+        with self._lock:
+            conn = self._connect()
+            try:
+                rows = conn.execute(
+                    "SELECT * FROM releases ORDER BY ts DESC, id DESC LIMIT ?",
+                    (min(max(1, int(limit)), 100),),
+                ).fetchall()
+            finally:
+                conn.close()
+        return [
+            {
+                "id": r["id"],
+                "version": r["version"],
+                "titre": r["titre"],
+                "notes": r["notes"],
+                "commande": r["commande"],
+                "date": datetime.fromtimestamp(r["ts"], tz=timezone.utc).strftime("%Y-%m-%d"),
+            }
+            for r in rows
+        ]
+
+    def derniere_release(self) -> Optional[Dict[str, Any]]:
+        rels = self.lister_releases(limit=1)
+        return rels[0] if rels else None
+
+    def statut_public(self, heures: int = 24) -> Dict[str, Any]:
+        m = self.metriques(heures=heures)
+        taux = float(m.get("taux_succes_pct", 100.0))
+        etat = "operational" if taux >= 95.0 else ("degraded" if taux >= 75.0 else "outage")
+        return {
+            "ok": True,
+            "etat": etat,
+            "disponibilite_pct": taux,
+            "latence_moy_ms": m.get("latence_moy_ms", 0),
+            "requetes_24h": m.get("total", 0),
+        }
 
 
 _DEFAULT_STORE: Optional[TelemetryStore] = None

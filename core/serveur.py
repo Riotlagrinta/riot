@@ -141,11 +141,6 @@ def app():
         except Exception:
             LOG.exception("montage de RIOT IDE")
         try:
-            from core.monitor import monter_routes as monter_monitor
-            monter_monitor(_APP)                  # /monitor + /api/monitor/* (Createur uniquement)
-        except Exception:
-            LOG.exception("montage de RIOT Monitor")
-        try:
             from tools.appel_direct import monter_ws
             monter_ws(_APP)                        # /stream (Twilio Media Streams)
         except Exception:

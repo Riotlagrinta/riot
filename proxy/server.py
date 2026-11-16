@@ -1,13 +1,19 @@
-"""Passerelle Cloud RIOT Engine (Proxy OpenAI-compatible avec monitoring createur).
+"""Passerelle Cloud RIOT Engine (Proxy OpenAI-compatible + API Releases/Monitoring pour Portail Externe).
 
 Toutes les cles fournisseurs (Groq, Mistral, Gemini, OpenRouter) restent uniquement
 dans les variables d'environnement du serveur. Les clients finaux ne connaissent ni
 les cles ni les modeles reels : le proxy renvoie toujours `"model": "riot-engine"`.
 
-Monitoring integre (pour les createurs uniquement via RIOT_ADMIN_TOKEN) :
-  - Journalisation SQLite WAL des prompts (secrets redactes), reponses IA, latences et erreurs.
-  - Alertes webhook temps reel (Discord / Slack / custom) via RIOT_ALERT_WEBHOOK_URL.
-  - Dashboard HTML /admin + API JSON /admin/metrics & /admin/logs.
+Endpoints publics :
+  - GET  /health           -> sante passerelle
+  - GET  /status/public    -> disponibilite + latence agregee (zero prompt/modele expose)
+  - GET  /releases         -> notes de versions publiees
+  - GET  /releases/latest  -> derniere version officielle (pour core/updater.py)
+
+Endpoints Createur (proteges par RIOT_ADMIN_TOKEN) :
+  - GET  /admin/metrics    -> KPIs detailles par provider/modele/erreur
+  - GET  /admin/logs       -> prompts (secrets redactes), reponses IA et erreurs
+  - POST /admin/releases   -> publier ou mettre a jour une release officielle
 """
 from __future__ import annotations
 
@@ -21,14 +27,22 @@ from typing import Any, Deque, Dict, List
 
 import requests
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from core.telemetry import TelemetryStore, envoyer_alerte_webhook
 
 app = FastAPI(title="RIOT Engine Gateway")
 
-_RACINE = Path(__file__).resolve().parent.parent
-_MONITOR_HTML = _RACINE / "web" / "monitor.html"
+_ORIGINS_RAW = os.environ.get("RIOT_PORTAL_ORIGIN", "*").strip()
+_ORIGINS = [o.strip() for o in _ORIGINS_RAW.split(",") if o.strip()] or ["*"]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_ORIGINS,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 _RATE_WINDOWS: Dict[str, Deque[float]] = defaultdict(deque)
 _MAX_REQ_PER_MIN = int(os.environ.get("RIOT_PROXY_RPM", "30"))
 _STORE = TelemetryStore(db_path=Path(os.environ.get("RIOT_TELEMETRY_DB", str(Path.home() / ".riot" / "proxy_telemetry.db"))))
@@ -131,6 +145,26 @@ def health():
     return {"ok": True, "service": "RIOT Engine Gateway", "routes_actives": actifs}
 
 
+@app.get("/status/public")
+def public_status(heures: int = 24):
+    st = _STORE.statut_public(heures=heures)
+    st["routes_actives"] = len(_routes_pour_profil("riot-auto")) > 0
+    return st
+
+
+@app.get("/releases")
+def public_releases(limit: int = 20):
+    return {"ok": True, "releases": _STORE.lister_releases(limit=limit)}
+
+
+@app.get("/releases/latest")
+def public_latest_release():
+    rel = _STORE.derniere_release()
+    if not rel:
+        return {"ok": True, "version": "0.3.1", "release": None}
+    return {"ok": True, "version": rel["version"], "release": rel}
+
+
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
     client_hash = _verifier_acces(request)
@@ -212,13 +246,6 @@ async def chat_completions(request: Request):
     raise HTTPException(status_code=502, detail=f"Moteur RIOT temporairement sature ({derniere_err}).")
 
 
-@app.get("/admin", response_class=HTMLResponse)
-def admin_dashboard():
-    if not _MONITOR_HTML.exists():
-        return HTMLResponse("<h1>RIOT Monitor</h1><p>web/monitor.html manquant.</p>", status_code=404)
-    return HTMLResponse(_MONITOR_HTML.read_text(encoding="utf-8"))
-
-
 @app.get("/admin/metrics")
 def admin_metrics(request: Request, heures: int = 24):
     _verifier_admin(request)
@@ -229,3 +256,19 @@ def admin_metrics(request: Request, heures: int = 24):
 def admin_logs(request: Request, limit: int = 80, only_errors: bool = False, q: str = ""):
     _verifier_admin(request)
     return {"ok": True, "logs": _STORE.lister_logs(limit=limit, only_errors=only_errors, q=q)}
+
+
+@app.post("/admin/releases")
+async def admin_publish_release(request: Request):
+    _verifier_admin(request)
+    body = await request.json() or {}
+    try:
+        res = _STORE.publier_release(
+            version=str(body.get("version", "")),
+            titre=str(body.get("titre", "")),
+            notes=str(body.get("notes", "")),
+            commande=str(body.get("commande", "")),
+        )
+        return JSONResponse(res)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
