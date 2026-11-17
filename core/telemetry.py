@@ -592,14 +592,87 @@ def store_defaut() -> TelemetryStore:
     return _DEFAULT_STORE
 
 
+def _ntfy_ascii_header(texte: str, max_len: int = 120) -> str:
+    """Nettoie une chaine pour les entetes HTTP ntfy (ASCII pur sans UnicodeEncodeError)."""
+    import unicodedata
+
+    norm = unicodedata.normalize("NFKD", str(texte or ""))
+    ascii_only = norm.encode("ascii", "ignore").decode("ascii")
+    return " ".join(ascii_only.split())[:max_len] or "RIOT Monitor"
+
+
+def envoyer_alerte_ntfy(
+    titre: str,
+    details: str,
+    *,
+    priority: str = "default",
+    tags: str = "bell",
+    cle_cooldown: str = "",
+    cooldown_sec: int = 0,
+    ntfy_url: Optional[str] = None,
+    ntfy_token: Optional[str] = None,
+    sync: bool = False,
+) -> Dict[str, Any]:
+    """Envoie une notification temps reel vers un topic ntfy (https://ntfy.sh/<topic>)."""
+    url = (ntfy_url or os.environ.get("RIOT_NTFY_URL", "")).strip()
+    if not url:
+        return {"ok": False, "sent": False, "detail": "RIOT_NTFY_URL non configuree."}
+
+    if cle_cooldown and cooldown_sec > 0:
+        now = time.time()
+        with _ALERT_LOCK:
+            prev = _LAST_ALERTS.get(f"ntfy:{cle_cooldown}", 0.0)
+            if now - prev < cooldown_sec:
+                return {"ok": True, "sent": False, "detail": "Cooldown actif."}
+            _LAST_ALERTS[f"ntfy:{cle_cooldown}"] = now
+
+    prio = priority if priority in ("min", "low", "default", "high", "urgent") else "default"
+    body_bytes = masquer_secrets(details or titre, 1800).encode("utf-8")
+    headers = {
+        "Title": _ntfy_ascii_header(titre),
+        "Priority": prio,
+        "Tags": _ntfy_ascii_header(tags, 80),
+        "Content-Type": "text/plain; charset=utf-8",
+        "User-Agent": "RIOT-Monitor/1.0",
+    }
+    tok = (ntfy_token or os.environ.get("RIOT_NTFY_TOKEN", "")).strip()
+    if tok:
+        headers["Authorization"] = f"Bearer {tok}"
+
+    def _dispatch() -> Dict[str, Any]:
+        try:
+            req = urllib.request.Request(url, data=body_bytes, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                return {"ok": True, "sent": True, "status": getattr(resp, "status", 200)}
+        except Exception as e:
+            return {"ok": False, "sent": False, "detail": str(e)}
+
+    if sync:
+        return _dispatch()
+
+    threading.Thread(target=_dispatch, daemon=True, name="riot-ntfy-alert").start()
+    return {"ok": True, "sent": True, "queued": True}
+
+
 def envoyer_alerte_webhook(
     titre: str,
     details: str,
     cle_cooldown: str = "generic",
     cooldown_sec: int = 60,
     webhook_url: Optional[str] = None,
+    priority: str = "high",
+    tags: str = "warning",
 ) -> None:
-    """Envoie une alerte non-bloquante vers Discord/Slack/Webhook custom (avec anti-spam)."""
+    """Envoie une alerte non-bloquante vers Discord/Slack/Webhook custom ET ntfy (avec anti-spam)."""
+    envoyer_alerte_ntfy(
+        titre,
+        details,
+        priority=priority,
+        tags=tags,
+        cle_cooldown=cle_cooldown,
+        cooldown_sec=cooldown_sec,
+    )
+
     url = (webhook_url or os.environ.get("RIOT_ALERT_WEBHOOK_URL", "")).strip()
     if not url:
         return

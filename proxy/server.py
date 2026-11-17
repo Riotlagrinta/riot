@@ -30,7 +30,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from core.telemetry import TelemetryStore, envoyer_alerte_webhook
+from core.telemetry import TelemetryStore, envoyer_alerte_ntfy, envoyer_alerte_webhook
 
 app = FastAPI(title="RIOT Engine Gateway")
 
@@ -46,6 +46,19 @@ app.add_middleware(
 _RATE_WINDOWS: Dict[str, Deque[float]] = defaultdict(deque)
 _MAX_REQ_PER_MIN = int(os.environ.get("RIOT_PROXY_RPM", "30"))
 _STORE = TelemetryStore(db_path=Path(os.environ.get("RIOT_TELEMETRY_DB", str(Path.home() / ".riot" / "proxy_telemetry.db"))))
+
+
+@app.on_event("startup")
+def _notifier_demarrage():
+    actifs = len(_routes_pour_profil("riot-auto"))
+    envoyer_alerte_ntfy(
+        "RIOT Proxy demarre",
+        f"Service en ligne ({_STORE.backend_name}) · {actifs} routes IA actives.",
+        priority="low",
+        tags="rocket,green_circle",
+        cle_cooldown="proxy_startup",
+        cooldown_sec=30,
+    )
 
 
 def _verifier_jeton_neon(raw_token: str) -> Optional[Dict[str, Any]]:
@@ -99,6 +112,14 @@ def _verifier_acces_detail(request: Request) -> Dict[str, Any]:
         else:
             row = _verifier_jeton_neon(token)
             if not row:
+                envoyer_alerte_ntfy(
+                    "RIOT Securite : acces refuse (401)",
+                    "Tentative de requete sans jeton valide sur RIOT Engine.",
+                    priority="high",
+                    tags="lock,warning",
+                    cle_cooldown="auth_401",
+                    cooldown_sec=60,
+                )
                 raise HTTPException(
                     status_code=401,
                     detail="Connexion RIOT requise. Créez un jeton sur https://riot-portal.vercel.app/account puis lancez `riot login`.",
@@ -133,6 +154,14 @@ def _verifier_acces_detail(request: Request) -> Dict[str, Any]:
 
     used_24h = _STORE.compter_requetes_utilisateur_24h(cle_hash)
     if used_24h >= identite["daily_quota"]:
+        envoyer_alerte_ntfy(
+            "RIOT Quota journalier atteint",
+            f"Utilisateur : {cle_hash} ({identite['plan']}) · {used_24h}/{identite['daily_quota']} requêtes sur 24h.",
+            priority="high",
+            tags="hourglass,warning",
+            cle_cooldown=f"quota_{cle_hash}",
+            cooldown_sec=120,
+        )
         raise HTTPException(
             status_code=429,
             detail=f"Quota journalier atteint ({used_24h}/{identite['daily_quota']} requêtes sur le plan {identite['plan']}).",
@@ -231,6 +260,14 @@ def health():
 @app.get("/auth/verify")
 def auth_verify(request: Request):
     identite = _verifier_acces_detail(request)
+    envoyer_alerte_ntfy(
+        "RIOT Auth : poste connecte",
+        f"Utilisateur : {identite['display_name']} ({identite['email']})\nPlan : {identite['plan']} · Quota : {identite['used_24h']}/{identite['daily_quota']} req/24h",
+        priority="default",
+        tags="key,white_check_mark",
+        cle_cooldown=f"verify_{identite['email']}",
+        cooldown_sec=30,
+    )
     return {
         "ok": True,
         "model": "riot-engine",
@@ -308,7 +345,8 @@ async def chat_completions(request: Request):
             r.raise_for_status()
             data = r.json()
             lat_ms = int((time.time() - t0) * 1000)
-            usage = data.get("usage") or {}
+            tin = usage.get("prompt_tokens", 0) or 0
+            tout = usage.get("completion_tokens", 0) or 0
             _STORE.enregistrer(
                 source="proxy",
                 client_id=client_hash,
@@ -318,11 +356,18 @@ async def chat_completions(request: Request):
                 ok=True,
                 status_code=200,
                 latence_ms=lat_ms,
-                tokens_in=usage.get("prompt_tokens", 0) or 0,
-                tokens_out=usage.get("completion_tokens", 0) or 0,
+                tokens_in=tin,
+                tokens_out=tout,
                 prompt=prompt_user,
                 reponse=_extraire_reponse_texte(data),
             )
+            if os.environ.get("RIOT_NTFY_ALL_REQUESTS", "1").strip() != "0":
+                envoyer_alerte_ntfy(
+                    f"RIOT IA : {c['provider']} ({lat_ms}ms)",
+                    f"Client : {client_hash}\nProfil : {profil} → {c['provider']} / {c['model']}\nTokens : {tin} in + {tout} out",
+                    priority="low",
+                    tags="zap,robot",
+                )
             data["model"] = "riot-engine"
             return JSONResponse(data)
         except Exception as e:
@@ -346,6 +391,8 @@ async def chat_completions(request: Request):
         "Panne critique Cascade IA (502)",
         f"Tous les providers ont echoue. Client={client_hash} | Profil={profil} | Erreur={derniere_err}",
         cle_cooldown="critical_502",
+        priority="urgent",
+        tags="rotating_light,skull",
     )
     raise HTTPException(status_code=502, detail=f"Moteur RIOT temporairement sature ({derniere_err}).")
 
@@ -366,7 +413,20 @@ def admin_logs(request: Request, limit: int = 80, only_errors: bool = False, q: 
 def admin_keys(request: Request, sonder: bool = True):
     _verifier_admin(request)
     from core.key_quota import inspecter_cles
-    return inspecter_cles(sonder=sonder)
+    res = inspecter_cles(sonder=sonder)
+    if sonder:
+        en_panne = [c for c in res.get("cles", []) if c.get("etat") not in ("OK", "Non sondée")]
+        if en_panne:
+            detail_err = "\n".join(f"• {c['provider']} ({c['cle_masquee']}) : {c['etat']}" for c in en_panne)
+            envoyer_alerte_ntfy(
+                "RIOT Cles API : alerte quota/erreur",
+                detail_err,
+                priority="high",
+                tags="key,warning",
+                cle_cooldown="keys_probe_warn",
+                cooldown_sec=30,
+            )
+    return res
 
 
 @app.post("/admin/releases")
@@ -380,6 +440,27 @@ async def admin_publish_release(request: Request):
             notes=str(body.get("notes", "")),
             commande=str(body.get("commande", "")),
         )
+        envoyer_alerte_ntfy(
+            f"RIOT Release v{res['version']} publiee",
+            f"{res['titre']}\n{res['notes'][:400]}",
+            priority="default",
+            tags="tada,package",
+        )
         return JSONResponse(res)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/admin/ntfy/test")
+def admin_ntfy_test(request: Request):
+    _verifier_admin(request)
+    res = envoyer_alerte_ntfy(
+        "RIOT Monitor : test en direct",
+        "Notification de test envoyée avec succès depuis la passerelle Render !",
+        priority="default",
+        tags="white_check_mark,bell",
+        sync=True,
+    )
+    if not res.get("sent"):
+        raise HTTPException(status_code=400, detail=res.get("detail") or "Envoi ntfy impossible.")
+    return res
