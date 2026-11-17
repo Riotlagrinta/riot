@@ -78,6 +78,12 @@ def main():
         if cmd == "/theme":
             cli.commande_theme(" ".join(args[1:]))
             return
+        if cmd in ("/login", "login"):
+            cli.commande_login(" ".join(args[1:]))
+            return
+        if cmd in ("/logout", "logout"):
+            cli.commande_logout()
+            return
         if cmd in ("/update", "update"):
             cli.commande_update(" ".join(args[1:]))
             return

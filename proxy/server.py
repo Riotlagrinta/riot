@@ -23,7 +23,7 @@ import os
 import time
 from collections import defaultdict, deque
 from pathlib import Path
-from typing import Any, Deque, Dict, List
+from typing import Any, Deque, Dict, List, Optional
 
 import requests
 from fastapi import FastAPI, HTTPException, Request
@@ -48,24 +48,101 @@ _MAX_REQ_PER_MIN = int(os.environ.get("RIOT_PROXY_RPM", "30"))
 _STORE = TelemetryStore(db_path=Path(os.environ.get("RIOT_TELEMETRY_DB", str(Path.home() / ".riot" / "proxy_telemetry.db"))))
 
 
-def _verifier_acces(request: Request) -> str:
+def _verifier_jeton_neon(raw_token: str) -> Optional[Dict[str, Any]]:
+    id_url = os.environ.get("RIOT_IDENTITY_DATABASE_URL", "").strip()
+    if not id_url or not raw_token:
+        return None
+    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    import psycopg
+    from psycopg.rows import dict_row
+
+    with psycopg.connect(id_url, autocommit=True, row_factory=dict_row, connect_timeout=8) as conn:
+        row = conn.execute(
+            """
+            SELECT u.id::text AS user_id, u.email, u.display_name, u.plan, u.daily_quota,
+                   u.is_active, t.id::text AS token_id
+            FROM client_tokens t
+            INNER JOIN users u ON u.id = t.user_id
+            WHERE t.token_hash = %s
+              AND t.revoked_at IS NULL
+              AND (t.expires_at IS NULL OR t.expires_at > NOW())
+              AND u.is_active = TRUE
+            LIMIT 1
+            """,
+            (token_hash,),
+        ).fetchone()
+        if not row:
+            return None
+        try:
+            conn.execute("UPDATE client_tokens SET last_used_at = NOW() WHERE id = %s::uuid", (row["token_id"],))
+        except Exception:
+            pass
+        return dict(row)
+
+
+def _verifier_acces_detail(request: Request) -> Dict[str, Any]:
     expected = os.environ.get("RIOT_PROXY_TOKEN", "").strip()
+    id_url = os.environ.get("RIOT_IDENTITY_DATABASE_URL", "").strip()
     auth = request.headers.get("authorization", "")
     token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
-    if expected and not hmac.compare_digest(token, expected):
-        raise HTTPException(status_code=401, detail="Jeton client RIOT invalide.")
 
-    raw_id = token or (request.client.host if request.client else "anon")
-    cle_hash = hashlib.sha256(raw_id.encode("utf-8")).hexdigest()[:12]
+    identite: Dict[str, Any]
+    if id_url:
+        if expected and token and hmac.compare_digest(token, expected):
+            identite = {
+                "user_ref": "creator-master",
+                "email": "creator@riot.local",
+                "display_name": "Créateur RIOT",
+                "plan": "team",
+                "daily_quota": 100000,
+            }
+        else:
+            row = _verifier_jeton_neon(token)
+            if not row:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Connexion RIOT requise. Créez un jeton sur https://riot-portal.vercel.app/account puis lancez `riot login`.",
+                )
+            identite = {
+                "user_ref": f"{row['email']} ({row['user_id'][:8]})",
+                "email": row["email"],
+                "display_name": row["display_name"] or row["email"],
+                "plan": row["plan"],
+                "daily_quota": int(row["daily_quota"] or 40),
+            }
+    else:
+        if expected and not hmac.compare_digest(token, expected):
+            raise HTTPException(status_code=401, detail="Jeton client RIOT invalide.")
+        raw_id = token or (request.client.host if request.client else "anon")
+        identite = {
+            "user_ref": hashlib.sha256(raw_id.encode("utf-8")).hexdigest()[:12],
+            "email": "local@riot",
+            "display_name": "Local",
+            "plan": "free",
+            "daily_quota": 10000,
+        }
 
+    cle_hash = identite["user_ref"]
     now = time.time()
     q = _RATE_WINDOWS[cle_hash]
     while q and now - q[0] > 60.0:
         q.popleft()
     if len(q) >= _MAX_REQ_PER_MIN:
-        raise HTTPException(status_code=429, detail="Quota de requetes minute depasse.")
+        raise HTTPException(status_code=429, detail="Quota de requêtes par minute dépassé.")
     q.append(now)
-    return cle_hash
+
+    used_24h = _STORE.compter_requetes_utilisateur_24h(cle_hash)
+    if used_24h >= identite["daily_quota"]:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Quota journalier atteint ({used_24h}/{identite['daily_quota']} requêtes sur le plan {identite['plan']}).",
+        )
+    identite["used_24h"] = used_24h
+    return identite
+
+
+def _verifier_acces(request: Request) -> str:
+    return _verifier_acces_detail(request)["user_ref"]
 
 
 def _verifier_admin(request: Request) -> None:
@@ -142,7 +219,29 @@ def _routes_pour_profil(model_req: str) -> List[Dict[str, str]]:
 @app.get("/health")
 def health():
     actifs = len(_routes_pour_profil("riot-auto"))
-    return {"ok": True, "service": "RIOT Engine Gateway", "routes_actives": actifs}
+    return {
+        "ok": True,
+        "service": "RIOT Engine Gateway",
+        "routes_actives": actifs,
+        "telemetry_backend": _STORE.backend_name,
+        "identity_auth": bool(os.environ.get("RIOT_IDENTITY_DATABASE_URL", "").strip()),
+    }
+
+
+@app.get("/auth/verify")
+def auth_verify(request: Request):
+    identite = _verifier_acces_detail(request)
+    return {
+        "ok": True,
+        "model": "riot-engine",
+        "user": {
+            "email": identite["email"],
+            "display_name": identite["display_name"],
+            "plan": identite["plan"],
+            "daily_quota": identite["daily_quota"],
+            "used_24h": identite["used_24h"],
+        },
+    }
 
 
 @app.get("/status/public")

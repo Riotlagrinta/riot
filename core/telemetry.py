@@ -1,12 +1,11 @@
 """Module de telemetrie, audit prompts/reponses et alertes temps reel pour RIOT.
 
-Concu 100% en bibliotheque standard Python (zéro dependance externe) afin d'etre
-utilisable autant cote client local (CLI / IDE / Studio) que sur la passerelle
-Cloud `proxy/server.py` (Render / Railway).
+Supporte deux backends transparents :
+  1. Neon PostgreSQL (RIOT_TELEMETRY_DATABASE_URL / RIOT_PORTAL_DATABASE_URL) pour la prod Render
+  2. SQLite WAL bornee (~/.riot/telemetry.db) en mode local hors ligne
 
 Securite & Confidentialite :
   - Masque automatiquement les cles API, tokens Bearer et secrets .env avant stockage.
-  - Stockage SQLite WAL borne (purge auto par retention/volume) pour eviter toute saturation disque.
 """
 from __future__ import annotations
 
@@ -17,7 +16,7 @@ import sqlite3
 import threading
 import time
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -27,6 +26,7 @@ _SECRET_PATTERNS = [
     (re.compile(r"\b(gsk_[A-Za-z0-9]{16,})\b"), "[GROQ_KEY]"),
     (re.compile(r"\b(npm_[A-Za-z0-9]{16,})\b"), "[NPM_TOKEN]"),
     (re.compile(r"\b(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b"), "[GH_TOKEN]"),
+    (re.compile(r"\b(riot_cli_[A-Za-z0-9]{16,})\b"), "[RIOT_TOKEN]"),
     (re.compile(r"(Bearer\s+)[A-Za-z0-9._-]{16,}", re.IGNORECASE), r"\1[REDACTED_TOKEN]"),
     (re.compile(r"((?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis)://[^:\s]+:)[^@\s]+(@)", re.IGNORECASE), r"\1[REDACTED]\2"),
     (re.compile(r"(?im)^([A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASS|DSN)\s*=\s*)(.+)$"), r"\1[REDACTED]"),
@@ -49,9 +49,30 @@ def masquer_secrets(texte: str, max_len: int = 4000) -> str:
 
 
 class TelemetryStore:
-    """Stockage SQLite WAL bornee pour logs LLM (prompts, reponses, latence, erreurs)."""
+    """Stockage Neon Postgres (si configure) ou SQLite WAL pour logs LLM et releases."""
 
-    def __init__(self, db_path: Optional[Path] = None, max_lignes: int = 5000, retention_jours: int = 30):
+    def __init__(
+        self,
+        db_path: Optional[Path] = None,
+        max_lignes: int = 5000,
+        retention_jours: int = 30,
+        telemetry_pg_url: Optional[str] = None,
+        portal_pg_url: Optional[str] = None,
+    ):
+        self.telemetry_pg_url = (
+            telemetry_pg_url
+            if telemetry_pg_url is not None
+            else os.environ.get("RIOT_TELEMETRY_DATABASE_URL", "")
+        ).strip()
+        self.portal_pg_url = (
+            portal_pg_url
+            if portal_pg_url is not None
+            else (
+                os.environ.get("RIOT_PORTAL_DATABASE_URL", "").strip()
+                or self.telemetry_pg_url
+            )
+        ).strip()
+
         env_db = os.environ.get("RIOT_TELEMETRY_DB", "").strip()
         if db_path is not None:
             self.db_path = Path(db_path)
@@ -59,20 +80,91 @@ class TelemetryStore:
             self.db_path = Path(env_db)
         else:
             self.db_path = Path.home() / ".riot" / "telemetry.db"
+
         self.max_lignes = max_lignes
         self.retention_jours = retention_jours
         self._lock = threading.Lock()
+        self._pg_ready = False
+        self.backend_name = "neon-postgres" if self.telemetry_pg_url else "sqlite"
         self._init_db()
 
-    def _connect(self) -> sqlite3.Connection:
+    # ------------------------------------------------------------------ connexions
+
+    def _connect_sqlite(self) -> sqlite3.Connection:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(str(self.db_path), timeout=5.0, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         return conn
 
+    def _connect_pg(self, url: str):
+        import psycopg
+        from psycopg.rows import dict_row
+
+        return psycopg.connect(url, autocommit=True, row_factory=dict_row, connect_timeout=8)
+
     def _init_db(self) -> None:
+        if self.telemetry_pg_url:
+            try:
+                with self._connect_pg(self.telemetry_pg_url) as conn:
+                    conn.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS llm_events (
+                            id              BIGSERIAL PRIMARY KEY,
+                            ts              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                            source          TEXT NOT NULL DEFAULT 'proxy',
+                            user_ref        TEXT NOT NULL DEFAULT '',
+                            profil          TEXT NOT NULL DEFAULT 'riot-auto',
+                            provider_reel   TEXT NOT NULL DEFAULT '',
+                            modele_reel     TEXT NOT NULL DEFAULT '',
+                            ok              BOOLEAN NOT NULL DEFAULT TRUE,
+                            status_code     INTEGER NOT NULL DEFAULT 200,
+                            latence_ms      INTEGER NOT NULL DEFAULT 0,
+                            tokens_in       INTEGER NOT NULL DEFAULT 0,
+                            tokens_out      INTEGER NOT NULL DEFAULT 0,
+                            prompt_extrait  TEXT NOT NULL DEFAULT '',
+                            reponse_extrait TEXT NOT NULL DEFAULT '',
+                            erreur          TEXT NOT NULL DEFAULT ''
+                        )
+                        """
+                    )
+                    conn.execute("CREATE INDEX IF NOT EXISTS idx_llm_events_ts ON llm_events (ts DESC)")
+                    conn.execute("CREATE INDEX IF NOT EXISTS idx_llm_events_user ON llm_events (user_ref, ts DESC)")
+
+                if self.portal_pg_url:
+                    with self._connect_pg(self.portal_pg_url) as pconn:
+                        pconn.execute(
+                            """
+                            CREATE TABLE IF NOT EXISTS releases (
+                                id           SERIAL PRIMARY KEY,
+                                version      TEXT NOT NULL UNIQUE,
+                                titre        TEXT NOT NULL,
+                                notes        TEXT NOT NULL,
+                                commande     TEXT NOT NULL DEFAULT 'npm install -g @riotlagrinta/riot@latest',
+                                is_published BOOLEAN NOT NULL DEFAULT TRUE,
+                                published_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                            )
+                            """
+                        )
+                        pconn.execute(
+                            """
+                            INSERT INTO releases (version, titre, notes, commande)
+                            VALUES (
+                                '0.3.1',
+                                'RIOT v0.3.1 — IDE Agentique, Mode Opaque & Logo Spirale',
+                                E'• RIOT IDE multi-panneaux (CodeMirror, diff coloré Accepter/Rejeter, terminal, Ctrl+P)\\n• 3 thèmes au choix (Obsidian & Ambre, Encre & Émeraude, Tactical Ops)\\n• Moteur opaque RIOT Engine & passerelle Cloud dédiée',
+                                'npm install -g @riotlagrinta/riot@latest'
+                            )
+                            ON CONFLICT (version) DO NOTHING
+                            """
+                        )
+                self._pg_ready = True
+                return
+            except Exception as e:
+                # Bascule de secours SQLite uniquement si Postgres injoignable au boot
+                self.backend_name = f"sqlite-fallback ({type(e).__name__})"
+
         with self._lock:
-            conn = self._connect()
+            conn = self._connect_sqlite()
             try:
                 conn.execute("PRAGMA journal_mode=WAL;")
                 conn.execute(
@@ -127,6 +219,8 @@ class TelemetryStore:
             finally:
                 conn.close()
 
+    # ------------------------------------------------------------------ ecriture
+
     def enregistrer(
         self,
         *,
@@ -148,10 +242,38 @@ class TelemetryStore:
         prompt_safe = masquer_secrets(prompt, 4000) if log_contenu else "[journalisation contenu desactivee]"
         rep_safe = masquer_secrets(reponse, 4000) if log_contenu else ""
         err_safe = masquer_secrets(erreur, 1200)
-        now = time.time()
 
+        if self._pg_ready and self.telemetry_pg_url:
+            with self._connect_pg(self.telemetry_pg_url) as conn:
+                conn.execute(
+                    """
+                    INSERT INTO llm_events (
+                        source, user_ref, profil, provider_reel, modele_reel,
+                        ok, status_code, latence_ms, tokens_in, tokens_out,
+                        prompt_extrait, reponse_extrait, erreur
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        source[:32],
+                        str(client_id)[:120],
+                        str(profil)[:48],
+                        str(provider_reel)[:48],
+                        str(modele_reel)[:96],
+                        bool(ok),
+                        int(status_code),
+                        int(latence_ms),
+                        int(tokens_in or 0),
+                        int(tokens_out or 0),
+                        prompt_safe,
+                        rep_safe,
+                        err_safe,
+                    ),
+                )
+            return
+
+        now = time.time()
         with self._lock:
-            conn = self._connect()
+            conn = self._connect_sqlite()
             try:
                 conn.execute(
                     """
@@ -164,7 +286,7 @@ class TelemetryStore:
                     (
                         now,
                         source[:32],
-                        str(client_id)[:64],
+                        str(client_id)[:120],
                         str(profil)[:48],
                         str(provider_reel)[:48],
                         str(modele_reel)[:96],
@@ -192,20 +314,53 @@ class TelemetryStore:
             finally:
                 conn.close()
 
-    def metriques(self, heures: int = 24) -> Dict[str, Any]:
-        depuis = time.time() - (max(1, heures) * 3600)
+    # ------------------------------------------------------------------ quotas & lecture
+
+    def compter_requetes_utilisateur_24h(self, user_ref: str) -> int:
+        if not user_ref:
+            return 0
+        if self._pg_ready and self.telemetry_pg_url:
+            with self._connect_pg(self.telemetry_pg_url) as conn:
+                row = conn.execute(
+                    "SELECT COUNT(*)::int AS total FROM llm_events WHERE user_ref = %s AND ts >= NOW() - INTERVAL '24 hours'",
+                    (user_ref,),
+                ).fetchone()
+                return int(row["total"]) if row else 0
+
+        depuis = time.time() - 86400
         with self._lock:
-            conn = self._connect()
+            conn = self._connect_sqlite()
             try:
-                rows = conn.execute(
-                    "SELECT * FROM llm_events WHERE ts >= ? ORDER BY ts DESC",
-                    (depuis,),
-                ).fetchall()
+                row = conn.execute(
+                    "SELECT COUNT(*) FROM llm_events WHERE client_id = ? AND ts >= ?",
+                    (user_ref, depuis),
+                ).fetchone()
+                return int(row[0]) if row else 0
             finally:
                 conn.close()
 
+    def metriques(self, heures: int = 24) -> Dict[str, Any]:
+        if self._pg_ready and self.telemetry_pg_url:
+            depuis_dt = datetime.now(timezone.utc) - timedelta(hours=max(1, heures))
+            with self._connect_pg(self.telemetry_pg_url) as conn:
+                rows = conn.execute(
+                    "SELECT * FROM llm_events WHERE ts >= %s ORDER BY ts DESC LIMIT 5000",
+                    (depuis_dt,),
+                ).fetchall()
+        else:
+            depuis = time.time() - (max(1, heures) * 3600)
+            with self._lock:
+                conn = self._connect_sqlite()
+                try:
+                    rows = conn.execute(
+                        "SELECT * FROM llm_events WHERE ts >= ? ORDER BY ts DESC",
+                        (depuis,),
+                    ).fetchall()
+                finally:
+                    conn.close()
+
         total = len(rows)
-        succes = sum(1 for r in rows if r["ok"] == 1)
+        succes = sum(1 for r in rows if bool(r["ok"]))
         erreurs = total - succes
         latences = sorted(int(r["latence_ms"] or 0) for r in rows if r["latence_ms"] is not None)
         moy_lat = int(sum(latences) / len(latences)) if latences else 0
@@ -220,12 +375,18 @@ class TelemetryStore:
             pk = f"{r['provider_reel'] or 'RIOT'} / {r['modele_reel'] or '-'}"
             st = par_provider.setdefault(pk, {"total": 0, "erreurs": 0})
             st["total"] += 1
-            if r["ok"] == 0:
+            if not bool(r["ok"]):
                 st["erreurs"] += 1
                 if len(err_list) < 12:
+                    ts_val = r["ts"]
+                    iso_str = (
+                        ts_val.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+                        if isinstance(ts_val, datetime)
+                        else datetime.fromtimestamp(float(ts_val), tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+                    )
                     err_list.append({
                         "id": r["id"],
-                        "iso": datetime.fromtimestamp(r["ts"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+                        "iso": iso_str,
                         "source": r["source"],
                         "provider": pk,
                         "status_code": r["status_code"],
@@ -236,6 +397,7 @@ class TelemetryStore:
 
         return {
             "ok": True,
+            "backend": self.backend_name,
             "fenetre_heures": heures,
             "total": total,
             "succes": succes,
@@ -252,32 +414,55 @@ class TelemetryStore:
 
     def lister_logs(self, limit: int = 80, only_errors: bool = False, q: str = "") -> List[Dict[str, Any]]:
         lim = min(max(1, int(limit)), 500)
-        clauses = []
-        params: List[Any] = []
-        if only_errors:
-            clauses.append("ok = 0")
-        if q.strip():
-            like = f"%{q.strip()}%"
-            clauses.append("(prompt_extrait LIKE ? OR reponse_extrait LIKE ? OR erreur LIKE ? OR modele_reel LIKE ? OR client_id LIKE ?)")
-            params.extend([like, like, like, like, like])
-        where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-        sql = f"SELECT * FROM llm_events {where_sql} ORDER BY id DESC LIMIT ?"
-        params.append(lim)
+        if self._pg_ready and self.telemetry_pg_url:
+            clauses = []
+            params: List[Any] = []
+            if only_errors:
+                clauses.append("ok = FALSE")
+            if q.strip():
+                like = f"%{q.strip()}%"
+                clauses.append("(prompt_extrait ILIKE %s OR reponse_extrait ILIKE %s OR erreur ILIKE %s OR modele_reel ILIKE %s OR user_ref ILIKE %s)")
+                params.extend([like, like, like, like, like])
+            where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+            sql = f"SELECT * FROM llm_events {where_sql} ORDER BY id DESC LIMIT %s"
+            params.append(lim)
+            with self._connect_pg(self.telemetry_pg_url) as conn:
+                rows = conn.execute(sql, tuple(params)).fetchall()
+        else:
+            clauses = []
+            params = []
+            if only_errors:
+                clauses.append("ok = 0")
+            if q.strip():
+                like = f"%{q.strip()}%"
+                clauses.append("(prompt_extrait LIKE ? OR reponse_extrait LIKE ? OR erreur LIKE ? OR modele_reel LIKE ? OR client_id LIKE ?)")
+                params.extend([like, like, like, like, like])
+            where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+            sql = f"SELECT * FROM llm_events {where_sql} ORDER BY id DESC LIMIT ?"
+            params.append(lim)
+            with self._lock:
+                conn = self._connect_sqlite()
+                try:
+                    rows = conn.execute(sql, params).fetchall()
+                finally:
+                    conn.close()
 
-        with self._lock:
-            conn = self._connect()
-            try:
-                rows = conn.execute(sql, params).fetchall()
-            finally:
-                conn.close()
-
-        return [
-            {
+        out: List[Dict[str, Any]] = []
+        for r in rows:
+            ts_val = r["ts"]
+            if isinstance(ts_val, datetime):
+                ts_num = ts_val.timestamp()
+                iso_str = ts_val.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                ts_num = float(ts_val)
+                iso_str = datetime.fromtimestamp(ts_num, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+            client_val = r["user_ref"] if isinstance(r, dict) and "user_ref" in r else r["client_id"]
+            out.append({
                 "id": r["id"],
-                "ts": r["ts"],
-                "iso": datetime.fromtimestamp(r["ts"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                "ts": ts_num,
+                "iso": iso_str,
                 "source": r["source"],
-                "client_id": r["client_id"],
+                "client_id": client_val,
                 "profil": r["profil"],
                 "provider_reel": r["provider_reel"],
                 "modele_reel": r["modele_reel"],
@@ -289,9 +474,10 @@ class TelemetryStore:
                 "prompt": r["prompt_extrait"],
                 "reponse": r["reponse_extrait"],
                 "erreur": r["erreur"],
-            }
-            for r in rows
-        ]
+            })
+        return out
+
+    # ------------------------------------------------------------------ releases
 
     def publier_release(self, version: str, titre: str, notes: str, commande: str = "") -> Dict[str, Any]:
         ver = (version or "").strip().lstrip("v")
@@ -300,9 +486,27 @@ class TelemetryStore:
         cmd = (commande or "").strip() or "npm install -g @riotlagrinta/riot@latest"
         if not ver:
             raise ValueError("Numero de version requis.")
+
+        if self._pg_ready and self.portal_pg_url:
+            with self._connect_pg(self.portal_pg_url) as conn:
+                conn.execute(
+                    """
+                    INSERT INTO releases (version, titre, notes, commande, is_published, published_at)
+                    VALUES (%s, %s, %s, %s, TRUE, NOW())
+                    ON CONFLICT (version) DO UPDATE SET
+                        titre = EXCLUDED.titre,
+                        notes = EXCLUDED.notes,
+                        commande = EXCLUDED.commande,
+                        is_published = TRUE,
+                        published_at = NOW()
+                    """,
+                    (ver[:32], tit[:160], not_txt[:8000], cmd[:200]),
+                )
+            return {"ok": True, "version": ver, "titre": tit, "notes": not_txt, "commande": cmd}
+
         now = time.time()
         with self._lock:
-            conn = self._connect()
+            conn = self._connect_sqlite()
             try:
                 conn.execute(
                     """
@@ -319,12 +523,33 @@ class TelemetryStore:
         return {"ok": True, "version": ver, "titre": tit, "notes": not_txt, "commande": cmd}
 
     def lister_releases(self, limit: int = 20) -> List[Dict[str, Any]]:
+        lim = min(max(1, int(limit)), 100)
+        if self._pg_ready and self.portal_pg_url:
+            with self._connect_pg(self.portal_pg_url) as conn:
+                rows = conn.execute(
+                    "SELECT id, version, titre, notes, commande, published_at FROM releases WHERE is_published = TRUE ORDER BY published_at DESC, id DESC LIMIT %s",
+                    (lim,),
+                ).fetchall()
+            return [
+                {
+                    "id": r["id"],
+                    "version": r["version"],
+                    "titre": r["titre"],
+                    "notes": r["notes"],
+                    "commande": r["commande"],
+                    "date": r["published_at"].astimezone(timezone.utc).strftime("%Y-%m-%d")
+                    if isinstance(r["published_at"], datetime)
+                    else str(r["published_at"])[:10],
+                }
+                for r in rows
+            ]
+
         with self._lock:
-            conn = self._connect()
+            conn = self._connect_sqlite()
             try:
                 rows = conn.execute(
                     "SELECT * FROM releases ORDER BY ts DESC, id DESC LIMIT ?",
-                    (min(max(1, int(limit)), 100),),
+                    (lim,),
                 ).fetchall()
             finally:
                 conn.close()

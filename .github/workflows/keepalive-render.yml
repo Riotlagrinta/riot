@@ -1,0 +1,16 @@
+name: Keep Render Proxy Warm
+
+on:
+  schedule:
+    # Ping toutes les 12 min pour eviter l'endormissement apres 15 min d'inactivite.
+    # Attention : Render Free est limite a 750h/mois au total sur le workspace.
+    - cron: "*/12 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping RIOT Engine Proxy /health
+        run: |
+          curl -fsS --max-time 35 https://riot-engine-proxy.onrender.com/health

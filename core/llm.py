@@ -1030,6 +1030,7 @@ def cascade_failover(systeme, historique, outils, visites: set, **kwargs):
 # --------------------------------------------------------------- fabrique
 
 _LLM = None
+DEFAULT_GATEWAY_URL = "https://riot-engine-proxy.onrender.com/v1"
 
 
 def llm():
@@ -1038,15 +1039,21 @@ def llm():
     if _LLM is None:
         import os
         from core.routage import mode_actuel
-        gw_url = (os.environ.get("RIOT_GATEWAY_URL", "") or str(reglage("gateway.url", "") or "")).strip()
+        gw_url = (
+            os.environ.get("RIOT_GATEWAY_URL", "")
+            or str(reglage("gateway.url", "") or "")
+            or DEFAULT_GATEWAY_URL
+        ).strip()
         gw_tok = (os.environ.get("RIOT_GATEWAY_TOKEN", "") or str(reglage("gateway.token", "") or "")).strip()
         m = mode_actuel()
         fournisseur = (reglage("llm.fournisseur", "") or "").lower()
 
-        if gw_url and not est_createur():
+        if not est_createur() and m != "local" and fournisseur != "ollama":
             _LLM = CustomOpenAIProvider(modele=f"riot-{reglage('riot.profil', 'auto')}")
             _LLM.api_url = _normaliser_url_chat(gw_url)
-            _LLM.cles = [gw_tok or "riot-public-client"]
+            _LLM.cles = [gw_tok] if gw_tok else []
+            _LLM.cle = gw_tok
+            _LLM.base_url_configuree = False
             _LLM.nom = "RIOT Engine"
             _LLM.nom_affiche = "RIOT Engine"
         elif m == "groq" or fournisseur == "groq":

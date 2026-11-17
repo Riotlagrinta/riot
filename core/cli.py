@@ -74,6 +74,7 @@ CLAUDE_BG = _P_INIT["cli_bg"]
 _STYLE_PROMPT = _style_prompt_courant()
 
 _COMMANDES_INTERNES = [
+    "/login", "/logout",
     "/mcp",
     "/theme",
     "/update",
@@ -269,6 +270,86 @@ def commande_keys(arg: str = ""):
     if bj:
         res_jour = " │ ".join(f"{k}: {v.get('appels', 0)} req / {v.get('tin', 0) + v.get('tout', 0)} tok" for k, v in bj.items())
         console.print(f"  [dim]Conso locale du jour : {res_jour}[/dim]\n")
+
+
+def commande_login(arg: str = ""):
+    """Connecte ce poste client à RIOT Engine via un jeton personnel Neon (`riot_cli_...`)."""
+    import requests
+    import webbrowser
+    from core import llm as llm_mod
+
+    p = _pal()
+    acc = p["cli_accent"]
+    gw_url = (
+        os.environ.get("RIOT_GATEWAY_URL", "")
+        or str(reglage("gateway.url", "") or "")
+        or getattr(llm_mod, "DEFAULT_GATEWAY_URL", "https://riot-engine-proxy.onrender.com/v1")
+    ).strip().rstrip("/")
+    verify_url = gw_url[:-3] if gw_url.endswith("/v1") else gw_url
+    portal_url = os.environ.get("RIOT_PORTAL_URL", "https://riot-portal.vercel.app/account").strip()
+
+    tok = (arg or "").strip()
+    if not tok:
+        console.print(Panel(
+            f"[bold {acc}]Connexion obligatoire à RIOT Engine[/bold {acc}]\n"
+            f"1. Crée un compte ou connecte-toi sur : [bold white]{portal_url}[/bold white]\n"
+            "2. Génère un jeton CLI/IDE ([cyan]riot_cli_...[/cyan]) et colle-le ci-dessous.",
+            border_style=acc,
+            box=ROUNDED,
+        ))
+        try:
+            webbrowser.open(portal_url)
+        except Exception:
+            pass
+        try:
+            tok = input("Jeton RIOT (riot_cli_...) : ").strip()
+        except (KeyboardInterrupt, EOFError):
+            console.print()
+            return
+
+    if not tok:
+        console.print("[yellow]Connexion annulée (aucun jeton saisi).[/yellow]")
+        return
+
+    with console.status(f"[bold {acc}]Vérification du jeton sur RIOT Engine...[/bold {acc}]"):
+        try:
+            r = requests.get(
+                f"{verify_url}/auth/verify",
+                headers={"Authorization": f"Bearer {tok}"},
+                timeout=35,
+            )
+        except Exception as e:
+            console.print(f"[bold red]✕ Serveur injoignable : {e}[/bold red]")
+            return
+
+    if r.status_code != 200:
+        detail = ""
+        try:
+            detail = r.json().get("detail", "")
+        except Exception:
+            detail = r.text[:160]
+        console.print(f"[bold red]✕ Jeton refusé (HTTP {r.status_code}) : {detail}[/bold red]")
+        return
+
+    data = r.json()
+    u = data.get("user") or {}
+    config.definir("gateway.url", gw_url)
+    config.definir("gateway.token", tok)
+    llm_mod.reinitialiser()
+    console.print(
+        f"[bold green]✓ Connecté ![/bold green] "
+        f"[white]{u.get('display_name') or u.get('email')}[/white] · "
+        f"Plan [bold {acc}]{str(u.get('plan', 'free')).upper()}[/bold {acc}] "
+        f"({u.get('used_24h', 0)}/{u.get('daily_quota', 40)} req/24h)\n"
+    )
+
+
+def commande_logout():
+    """Supprime le jeton local du poste client."""
+    from core import llm as llm_mod
+    config.definir("gateway.token", "")
+    llm_mod.reinitialiser()
+    console.print("[bold yellow]✓ Déconnecté de RIOT Engine. Utilisez /login pour vous reconnecter.[/bold yellow]\n")
 
 
 def commande_outils():
@@ -624,19 +705,21 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
 
 
 def _verifier_configuration_initiale():
-    """Assistant d'onboarding rapide (mode createur uniquement ; les utilisateurs n'entrent jamais de cle tierce)."""
+    """Assistant d'onboarding rapide : connexion obligatoire par jeton pour les clients finaux."""
     from core import llm as llm_mod
     if llm().disponible():
         return
     if not llm_mod.est_createur():
         p = _pal()
         console.print(Panel(
-            f"[bold {p['cli_accent']}]Moteur RIOT Engine[/bold {p['cli_accent']}]\n"
-            "Aucun serveur passerelle configure sur ce poste.\n"
-            "[dim]Connectez ce client au proxy RIOT officiel (RIOT_GATEWAY_URL) ou passez en mode createur (RIOT_ADMIN=1).[/dim]",
+            f"[bold {p['cli_accent']}]Connexion RIOT Engine requise[/bold {p['cli_accent']}]\n"
+            "Crée ton compte et ton jeton CLI sur : [bold white]https://riot-portal.vercel.app/account[/bold white]\n"
+            "[dim]Colle ton jeton `riot_cli_...` ci-dessous (ou tape `/login` plus tard).[/dim]",
             border_style=p["cli_accent"],
             box=ROUNDED,
         ))
+        if sys.stdin and sys.stdin.isatty():
+            commande_login("")
         return
     p = _pal()
     console.print(Panel(
@@ -734,6 +817,14 @@ def lancer_terminal_interactif():
                 parties = texte.split(maxsplit=1)
                 arg_th = parties[1] if len(parties) > 1 else ""
                 commande_theme(arg_th)
+                continue
+            elif cmd.startswith("/login"):
+                parties = texte.split(maxsplit=1)
+                arg_log = parties[1] if len(parties) > 1 else ""
+                commande_login(arg_log)
+                continue
+            elif cmd in ("/logout", "/deconnexion"):
+                commande_logout()
                 continue
             elif cmd.startswith("/update"):
                 parties = texte.split(maxsplit=1)
