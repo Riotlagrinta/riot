@@ -291,6 +291,11 @@ async def chat_completions(request: Request):
         }
         try:
             r = requests.post(c["url"], headers=headers, json=payload, timeout=35)
+            try:
+                from core.key_quota import capturer_reponse
+                capturer_reponse(c["provider"], c["key"], c["model"], r.status_code, dict(r.headers))
+            except Exception:
+                pass
             if r.status_code in (429, 503) or r.status_code >= 500:
                 derniere_err = f"{c['provider']} HTTP {r.status_code}"
                 dernier_statut = r.status_code

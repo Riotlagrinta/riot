@@ -132,11 +132,14 @@ def capturer_reponse(provider: str, cle: str, modele: str, status_code: int, hea
 
 
 def _cles_par_provider() -> List[Dict[str, Any]]:
-    from core.config import reglage
-    from core.llm import _recuperer_liste_cles
+    try:
+        from core.config import reglage
+    except Exception:
+        def reglage(_k, d=None):
+            return d
 
     specs = [
-        ("Groq", "groq", "GROQ_API_KEY", reglage("groq.modele", "openai/gpt-oss-120b")),
+        ("Groq", "groq", "GROQ_API_KEY", reglage("groq.modele", "llama-3.3-70b-versatile")),
         ("Mistral", "mistral", "MISTRAL_API_KEY", reglage("mistral.modele", "codestral-latest")),
         ("OpenRouter", "openrouter", "OPENROUTER_API_KEY", reglage("openrouter.modele", "openrouter/free")),
         ("Gemini", "gemini", "GEMINI_API_KEY", reglage("gemini.modele", "gemini-flash-latest")),
@@ -144,7 +147,17 @@ def _cles_par_provider() -> List[Dict[str, Any]]:
     ]
     res: List[Dict[str, Any]] = []
     for nom, sec, env_k, modele in specs:
-        cles = _recuperer_liste_cles(reglage(f"{sec}.cles", []) or reglage(f"{sec}.cle", ""), env_k)
+        brutes = reglage(f"{sec}.cles", []) or reglage(f"{sec}.cle", "")
+        cles: List[str] = []
+        if isinstance(brutes, list):
+            cles.extend(str(c).strip() for c in brutes if str(c).strip())
+        elif isinstance(brutes, str) and brutes.strip():
+            cles.extend(p.strip() for p in brutes.split(",") if p.strip())
+        env_val = os.environ.get(env_k, "").strip()
+        if env_val:
+            for p in env_val.split(","):
+                if p.strip() and p.strip() not in cles:
+                    cles.append(p.strip())
         for c in cles:
             res.append({"provider": nom, "section": sec, "cle": c, "modele": str(modele)})
     return res
