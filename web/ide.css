@@ -624,6 +624,14 @@
 .ide-qo-item { padding: 7px 9px; border-radius: 6px; font-family: var(--riot-font-mono); font-size: 12px; cursor: pointer; }
 .ide-qo-item:hover { background: var(--riot-accent-soft); color: var(--riot-accent); }
 
+.ide-folder-card { width: min(640px, 95vw); display: flex; flex-direction: column; gap: 10px; }
+.ide-folder-roots { display: flex; flex-wrap: wrap; gap: 6px; }
+.ide-folder-bar { display: flex; gap: 6px; align-items: center; }
+.ide-folder-bar .ide-input-sm { flex: 1; font-family: var(--riot-font-mono); }
+.ide-folder-list { max-height: 280px; overflow-y: auto; border: 1px solid var(--riot-border); border-radius: 8px; padding: 6px; background: var(--riot-bg); }
+.ide-folder-row { display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 6px; cursor: pointer; font-size: 12.5px; }
+.ide-folder-row:hover { background: var(--riot-accent-soft); color: var(--riot-accent); }
+
 .ide-modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .ide-modal-head h3 { margin: 0; font-size: 15px; }
 .ide-modal-form { display: flex; flex-direction: column; gap: 10px; font-size: 12px; }

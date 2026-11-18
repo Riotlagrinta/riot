@@ -63,7 +63,7 @@ def test_ide_security_guards_and_patch_lifecycle(monkeypatch, tmp_path):
         client = TestClient(serveur.app(), base_url="http://127.0.0.1:8790", client=("127.0.0.1", 50000))
 
         # Routes critiques en local -> 200
-        for p in ("/logo.svg", "/theme.css", "/theme.js", "/api/version", "/ide", "/api/ide/etat", "/api/ide/chemins"):
+        for p in ("/logo.svg", "/theme.css", "/theme.js", "/api/version", "/ide", "/api/ide/etat", "/api/ide/chemins", "/api/ide/naviguer-dossiers"):
             assert client.get(p).status_code == 200
 
         # Tunnel simulé -> 403

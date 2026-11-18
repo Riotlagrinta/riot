@@ -29,6 +29,9 @@
         <span class="ide-brand-badge">IDE</span>
       </a>
       <select id="ide-project-select" class="ide-select" title="Projet actif"></select>
+      <button id="ide-btn-openfolder" type="button" class="ide-pill ide-pill-btn" title="Ouvrir n'importe quel dossier (Ctrl+O)">
+        📁 Ouvrir un dossier…
+      </button>
       <span id="ide-branch-pill" class="ide-pill ide-pill-dim" title="Branche Git">-</span>
       <button id="ide-btn-quickopen" type="button" class="ide-pill ide-pill-btn" title="Ouvrir rapidement (Ctrl+P)">
         ⌘ Ctrl+P
@@ -198,6 +201,28 @@
     <div class="ide-modal-card ide-quickopen-card">
       <input id="ide-quickopen-input" class="ide-input-sm" type="text" placeholder="Tapez le nom d'un fichier du projet..." autocomplete="off" />
       <div id="ide-quickopen-list" class="ide-quickopen-list"></div>
+    </div>
+  </div>
+
+  <!-- MODAL EXPLORATEUR DE DOSSIERS (OUVRIR UN PROJET) -->
+  <div id="ide-folder-modal" class="ide-modal hidden">
+    <div class="ide-modal-card ide-folder-card">
+      <div class="ide-modal-head">
+        <h3>Ouvrir un dossier projet</h3>
+        <button type="button" id="ide-folder-close" class="ide-icon-btn">✕</button>
+      </div>
+      <div id="ide-folder-roots" class="ide-folder-roots"></div>
+      <div class="ide-folder-bar">
+        <button type="button" id="ide-folder-up" class="ide-btn-sm" title="Dossier parent">↑ Parent</button>
+        <input id="ide-folder-path" class="ide-input-sm" type="text" placeholder="Chemin du dossier..." />
+        <button type="button" id="ide-folder-go" class="ide-btn-sm">Aller</button>
+        <button type="button" id="ide-folder-os" class="ide-btn-sm" title="Ouvrir le sélecteur Windows/OS">🖥️ Parcourir OS</button>
+      </div>
+      <div id="ide-folder-list" class="ide-folder-list"></div>
+      <div class="ide-modal-actions" style="gap:8px;">
+        <button type="button" id="ide-folder-cancel" class="ide-btn-sm">Annuler</button>
+        <button type="button" id="ide-folder-open" class="ide-btn-sm ide-btn-accent">Ouvrir ce dossier</button>
+      </div>
     </div>
   </div>
 

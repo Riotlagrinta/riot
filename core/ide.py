@@ -385,6 +385,84 @@ def monter_routes(app) -> None:
         _SESSION_CTX["projet_actif"] = chemin.resolve()
         return {"ok": True, "nom": chemin.name, "chemin": str(chemin.resolve()), "branche": _recup_branche_git(chemin)}
 
+    @app.get("/api/ide/naviguer-dossiers")
+    def api_ide_naviguer_dossiers(request: Request, chemin: str = ""):
+        if (r := garde(request)):
+            return r
+        brut = (chemin or "").strip()
+        cible = Path(brut) if brut else _projet_courant()
+        if not cible.exists() or not cible.is_dir():
+            cible = Path.home()
+        cible = cible.resolve()
+
+        racines: List[Dict[str, str]] = []
+        if os.name == "nt":
+            import string
+            for lettre in string.ascii_uppercase:
+                drv = Path(f"{lettre}:\\")
+                if drv.exists():
+                    racines.append({"nom": f"{lettre}:\\", "chemin": str(drv)})
+        else:
+            racines.append({"nom": "/", "chemin": "/"})
+        home_dir = Path.home()
+        if home_dir.exists():
+            racines.append({"nom": f"Accueil ({home_dir.name})", "chemin": str(home_dir)})
+        dp = dossier_projets()
+        if dp.exists():
+            racines.append({"nom": f"Projets ({dp.name})", "chemin": str(dp)})
+
+        parent = str(cible.parent) if cible.parent != cible else ""
+        dossiers: List[Dict[str, str]] = []
+        try:
+            for item in sorted(cible.iterdir(), key=lambda x: x.name.lower()):
+                if not item.is_dir():
+                    continue
+                if item.name.startswith(".") or item.name in {"$RECYCLE.BIN", "System Volume Information"}:
+                    continue
+                if not est_createur() and item.resolve() == _RACINE.resolve():
+                    continue
+                dossiers.append({"nom": item.name, "chemin": str(item.resolve())})
+        except PermissionError:
+            return JSONResponse({"ok": False, "erreur": f"Accès refusé à {cible}"}, status_code=403)
+
+        return {
+            "ok": True,
+            "courant": str(cible),
+            "parent": parent,
+            "racines": racines,
+            "dossiers": dossiers[:200],
+        }
+
+    @app.post("/api/ide/choisir-dossier-os")
+    async def api_ide_choisir_dossier_os(request: Request):
+        if (r := garde(request)):
+            return r
+        import asyncio
+
+        def _ouvrir_dialogue() -> str:
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()
+            try:
+                root.attributes("-topmost", True)
+            except Exception:
+                pass
+            choisi = filedialog.askdirectory(
+                title="Ouvrir un dossier projet — RIOT IDE",
+                initialdir=str(_projet_courant()),
+            )
+            root.destroy()
+            return str(choisi or "").strip()
+
+        try:
+            choisi = await asyncio.to_thread(_ouvrir_dialogue)
+        except Exception as e:
+            return JSONResponse({"ok": False, "erreur": f"Sélecteur système indisponible : {e}"}, status_code=500)
+        if not choisi:
+            return {"ok": False, "annule": True, "erreur": "Sélection annulée."}
+        return {"ok": True, "chemin": str(Path(choisi).resolve())}
+
     @app.get("/api/ide/arborescence")
     def api_ide_arbo(request: Request):
         if (r := garde(request)):

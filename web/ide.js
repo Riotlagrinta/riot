@@ -19,7 +19,7 @@
   function bindEls() {
     [
       "ide-sidebar", "ide-agent", "ide-resizer-left", "ide-resizer-right", "ide-resizer-term",
-      "ide-project-select", "ide-branch-pill", "ide-btn-quickopen", "ide-btn-model", "ide-model-label",
+      "ide-project-select", "ide-btn-openfolder", "ide-branch-pill", "ide-btn-quickopen", "ide-btn-model", "ide-model-label",
       "ide-tree", "ide-tree-filter", "ide-btn-newfile", "ide-btn-refresh",
       "ide-search-form", "ide-search-input", "ide-search-results",
       "ide-tabs", "ide-breadcrumb", "ide-empty-state", "ide-code-wrap",
@@ -32,6 +32,9 @@
       "ide-agent-input", "ide-agent-send", "ide-attach-active", "ide-active-file-chip",
       "ide-review-mode", "ide-pending-count",
       "ide-quickopen-modal", "ide-quickopen-input", "ide-quickopen-list",
+      "ide-folder-modal", "ide-folder-close", "ide-folder-cancel", "ide-folder-roots",
+      "ide-folder-up", "ide-folder-path", "ide-folder-go", "ide-folder-os",
+      "ide-folder-list", "ide-folder-open",
       "ide-model-modal", "ide-modal-close", "ide-model-form",
       "ide-cfg-profil-wrap", "ide-cfg-profil", "ide-admin-model-fields",
       "ide-cfg-mode", "ide-cfg-baseurl-wrap", "ide-cfg-baseurl", "ide-cfg-model", "ide-cfg-key"
@@ -307,7 +310,11 @@
     if (!d.ok) return;
     var sel = els["ide-project-select"];
     sel.innerHTML = "";
-    (d.projets || []).forEach(function (p) {
+    var listProj = (d.projets || []).slice();
+    if (d.projet && !listProj.some(function (p) { return p.chemin === d.projet.chemin; })) {
+      listProj.unshift({ nom: d.projet.nom, chemin: d.projet.chemin });
+    }
+    listProj.forEach(function (p) {
       var opt = document.createElement("option");
       opt.value = p.chemin;
       opt.textContent = p.nom;
@@ -535,16 +542,112 @@
       else window.alert(d.erreur || "Impossible de créer le fichier");
     });
 
-    els["ide-project-select"].addEventListener("change", async function () {
-      await fetch("/api/ide/projet", {
+    var folderParent = "";
+    async function activateProjectFolder(chemin) {
+      var r = await fetch("/api/ide/projet", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chemin: els["ide-project-select"].value })
+        body: JSON.stringify({ chemin: chemin })
       });
+      var d = await r.json();
+      if (!r.ok || !d.ok) {
+        window.alert(d.erreur || "Impossible d'ouvrir ce dossier.");
+        return false;
+      }
       state.tabs = [];
       state.activePath = null;
       renderTabs();
       await loadState();
+      return true;
+    }
+
+    async function browseFolder(chemin) {
+      var qs = chemin ? ("?chemin=" + encodeURIComponent(chemin)) : "";
+      var r = await fetch("/api/ide/naviguer-dossiers" + qs);
+      var d = await r.json();
+      if (!r.ok || !d.ok) {
+        window.alert(d.erreur || "Dossier inaccessible.");
+        return;
+      }
+      els["ide-folder-path"].value = d.courant || "";
+      folderParent = d.parent || "";
+      els["ide-folder-up"].disabled = !folderParent;
+
+      var rootsEl = els["ide-folder-roots"];
+      rootsEl.innerHTML = "";
+      (d.racines || []).forEach(function (rt) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "ide-pill ide-pill-btn";
+        b.textContent = rt.nom;
+        b.addEventListener("click", function () { void browseFolder(rt.chemin); });
+        rootsEl.appendChild(b);
+      });
+
+      var listEl = els["ide-folder-list"];
+      listEl.innerHTML = "";
+      var subs = d.dossiers || [];
+      if (subs.length === 0) {
+        var empty = document.createElement("div");
+        empty.className = "ide-hint";
+        empty.style.padding = "10px";
+        empty.textContent = "Aucun sous-dossier ici. Cliquez sur « Ouvrir ce dossier » pour sélectionner le dossier courant.";
+        listEl.appendChild(empty);
+      } else {
+        subs.forEach(function (sub) {
+          var row = document.createElement("div");
+          row.className = "ide-folder-row";
+          row.textContent = "📁 " + sub.nom;
+          row.addEventListener("click", function () { void browseFolder(sub.chemin); });
+          listEl.appendChild(row);
+        });
+      }
+    }
+
+    function openFolderModal() {
+      els["ide-folder-modal"].classList.remove("hidden");
+      void browseFolder(els["ide-project-select"].value || "");
+    }
+
+    els["ide-btn-openfolder"].addEventListener("click", openFolderModal);
+    els["ide-folder-close"].addEventListener("click", function () { els["ide-folder-modal"].classList.add("hidden"); });
+    els["ide-folder-cancel"].addEventListener("click", function () { els["ide-folder-modal"].classList.add("hidden"); });
+    els["ide-folder-modal"].addEventListener("click", function (ev) {
+      if (ev.target === els["ide-folder-modal"]) els["ide-folder-modal"].classList.add("hidden");
+    });
+    els["ide-folder-up"].addEventListener("click", function () {
+      if (folderParent) void browseFolder(folderParent);
+    });
+    els["ide-folder-go"].addEventListener("click", function () {
+      void browseFolder(els["ide-folder-path"].value.trim());
+    });
+    els["ide-folder-path"].addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        void browseFolder(els["ide-folder-path"].value.trim());
+      }
+    });
+    els["ide-folder-open"].addEventListener("click", async function () {
+      var target = els["ide-folder-path"].value.trim();
+      if (!target) return;
+      if (await activateProjectFolder(target)) {
+        els["ide-folder-modal"].classList.add("hidden");
+      }
+    });
+    els["ide-folder-os"].addEventListener("click", async function () {
+      var r = await fetch("/api/ide/choisir-dossier-os", { method: "POST" });
+      var d = await r.json();
+      if (d.ok && d.chemin) {
+        if (await activateProjectFolder(d.chemin)) {
+          els["ide-folder-modal"].classList.add("hidden");
+        }
+      } else if (!d.annule) {
+        window.alert(d.erreur || "Sélecteur système indisponible.");
+      }
+    });
+
+    els["ide-project-select"].addEventListener("change", async function () {
+      await activateProjectFolder(els["ide-project-select"].value);
     });
 
     els["ide-editor"].addEventListener("input", function () {
@@ -717,6 +820,9 @@
       if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "s") {
         ev.preventDefault();
         saveActiveFile();
+      } else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "o") {
+        ev.preventDefault();
+        openFolderModal();
       } else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "p") {
         ev.preventDefault();
         openQuickOpen();
@@ -725,6 +831,7 @@
         els["ide-terminal-panel"].classList.toggle("hidden");
       } else if (ev.key === "Escape") {
         els["ide-quickopen-modal"].classList.add("hidden");
+        els["ide-folder-modal"].classList.add("hidden");
         els["ide-model-modal"].classList.add("hidden");
       }
     });
