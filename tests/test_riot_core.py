@@ -153,3 +153,43 @@ def test_spiral_icons_and_creator_monitoring(monkeypatch, tmp_path):
     )
     assert r_rel.status_code == 200 and pc.get("/releases/latest").json()["version"] == "0.3.2"
 
+
+def test_proxy_chat_completions_usage_and_opaque_model(monkeypatch, tmp_path):
+    from core.telemetry import TelemetryStore
+    from proxy import server as proxy_srv
+
+    store = TelemetryStore(db_path=tmp_path / "chat.db")
+    monkeypatch.setattr(proxy_srv, "_STORE", store)
+    monkeypatch.delenv("RIOT_IDENTITY_DATABASE_URL", raising=False)
+    monkeypatch.setenv("RIOT_PROXY_TOKEN", "proxy_tok_test")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_dummy")
+
+    class _FakeResp:
+        status_code = 200
+        headers = {"content-type": "application/json"}
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "id": "cmp_1",
+                "model": "llama-3.3-70b-versatile",
+                "choices": [{"index": 0, "message": {"role": "assistant", "content": "OK"}}],
+                "usage": {"prompt_tokens": 11, "completion_tokens": 4},
+            }
+
+    monkeypatch.setattr(proxy_srv.requests, "post", lambda *a, **kw: _FakeResp())
+    pc = TestClient(proxy_srv.app)
+    r = pc.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer proxy_tok_test"},
+        json={"model": "riot-fast", "messages": [{"role": "user", "content": "ping"}]},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["model"] == "riot-engine"
+    logs = store.lister_logs(limit=1)
+    assert len(logs) == 1 and logs[0]["tokens_in"] == 11 and logs[0]["tokens_out"] == 4
+
+

@@ -371,6 +371,7 @@ async def chat_completions(request: Request):
             r.raise_for_status()
             data = r.json()
             lat_ms = int((time.time() - t0) * 1000)
+            usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
             tin = usage.get("prompt_tokens", 0) or 0
             tout = usage.get("completion_tokens", 0) or 0
             _STORE.enregistrer(
