@@ -144,7 +144,7 @@ def _cles_par_provider() -> List[Dict[str, Any]]:
         ("Cerebras", "cerebras", "CEREBRAS_API_KEY", reglage("cerebras.modele", "gpt-oss-120b")),
         ("NVIDIA", "nvidia", "NVIDIA_API_KEY", reglage("nvidia.modele", "meta/llama-3.3-70b-instruct")),
         ("OpenRouter", "openrouter", "OPENROUTER_API_KEY", reglage("openrouter.modele", "openrouter/free")),
-        ("Gemini", "gemini", "GEMINI_API_KEY", reglage("gemini.modele", "gemini-flash-latest")),
+        ("Gemini", "gemini", "GEMINI_API_KEY", reglage("gemini.modele", "gemini-flash-lite-latest")),
         ("Anthropic", "anthropic", "ANTHROPIC_API_KEY", reglage("anthropic.modele", "claude-haiku-4-5")),
     ]
     res: List[Dict[str, Any]] = []

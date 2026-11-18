@@ -221,7 +221,7 @@ def _routes_pour_profil(model_req: str) -> List[Dict[str, str]]:
         "provider": "Groq",
         "url": "https://api.groq.com/openai/v1/chat/completions",
         "key": os.environ.get("GROQ_API_KEY", "").strip(),
-        "model": os.environ.get("RIOT_UPSTREAM_FAST_MODEL", "llama-3.3-70b-versatile"),
+        "model": os.environ.get("RIOT_UPSTREAM_FAST_MODEL", "openai/gpt-oss-20b" if "fast" in m else "openai/gpt-oss-120b"),
     }
     openrouter = {
         "provider": "OpenRouter",
@@ -233,7 +233,7 @@ def _routes_pour_profil(model_req: str) -> List[Dict[str, str]]:
         "provider": "Gemini",
         "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
         "key": os.environ.get("GEMINI_API_KEY", "").strip(),
-        "model": os.environ.get("RIOT_UPSTREAM_GEMINI_MODEL", "gemini-flash-latest"),
+        "model": os.environ.get("RIOT_UPSTREAM_GEMINI_MODEL", "gemini-flash-lite-latest"),
     }
     cerebras = {
         "provider": "Cerebras",
@@ -353,7 +353,7 @@ async def chat_completions(request: Request):
             "Content-Type": "application/json",
         }
         try:
-            r = requests.post(c["url"], headers=headers, json=payload, timeout=35)
+            r = requests.post(c["url"], headers=headers, json=payload, timeout=20)
             try:
                 from core.key_quota import capturer_reponse
                 capturer_reponse(c["provider"], c["key"], c["model"], r.status_code, dict(r.headers))
