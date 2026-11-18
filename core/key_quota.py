@@ -141,6 +141,8 @@ def _cles_par_provider() -> List[Dict[str, Any]]:
     specs = [
         ("Groq", "groq", "GROQ_API_KEY", reglage("groq.modele", "llama-3.3-70b-versatile")),
         ("Mistral", "mistral", "MISTRAL_API_KEY", reglage("mistral.modele", "codestral-latest")),
+        ("Cerebras", "cerebras", "CEREBRAS_API_KEY", reglage("cerebras.modele", "gpt-oss-120b")),
+        ("NVIDIA", "nvidia", "NVIDIA_API_KEY", reglage("nvidia.modele", "meta/llama-3.3-70b-instruct")),
         ("OpenRouter", "openrouter", "OPENROUTER_API_KEY", reglage("openrouter.modele", "openrouter/free")),
         ("Gemini", "gemini", "GEMINI_API_KEY", reglage("gemini.modele", "gemini-flash-latest")),
         ("Anthropic", "anthropic", "ANTHROPIC_API_KEY", reglage("anthropic.modele", "claude-haiku-4-5")),
@@ -207,12 +209,14 @@ def _sonder_cle(item: Dict[str, Any]) -> Dict[str, Any]:
                 "note": "Clé active (Google ne publie pas le solde chiffré en header)",
             }
 
-        if prov in ("Groq", "Mistral"):
-            url = (
-                "https://api.groq.com/openai/v1/chat/completions"
-                if prov == "Groq"
-                else "https://api.mistral.ai/v1/chat/completions"
-            )
+        if prov in ("Groq", "Mistral", "Cerebras", "NVIDIA"):
+            urls = {
+                "Groq": "https://api.groq.com/openai/v1/chat/completions",
+                "Mistral": "https://api.mistral.ai/v1/chat/completions",
+                "Cerebras": "https://api.cerebras.ai/v1/chat/completions",
+                "NVIDIA": "https://integrate.api.nvidia.com/v1/chat/completions",
+            }
+            url = urls[prov]
             r = requests.post(
                 url,
                 headers={"Authorization": f"Bearer {cle}", "Content-Type": "application/json"},

@@ -235,14 +235,40 @@ def _routes_pour_profil(model_req: str) -> List[Dict[str, str]]:
         "key": os.environ.get("GEMINI_API_KEY", "").strip(),
         "model": os.environ.get("RIOT_UPSTREAM_GEMINI_MODEL", "gemini-flash-latest"),
     }
+    cerebras = {
+        "provider": "Cerebras",
+        "url": "https://api.cerebras.ai/v1/chat/completions",
+        "key": os.environ.get("CEREBRAS_API_KEY", "").strip(),
+        "model": os.environ.get("RIOT_UPSTREAM_CEREBRAS_MODEL", "gpt-oss-120b"),
+    }
+    nvidia = {
+        "provider": "NVIDIA",
+        "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+        "key": os.environ.get("NVIDIA_API_KEY", "").strip(),
+        "model": os.environ.get("RIOT_UPSTREAM_NVIDIA_MODEL", "meta/llama-3.3-70b-instruct"),
+    }
+    custom_base = (os.environ.get("CUSTOM_BASE_URL", "") or os.environ.get("FREELLMAPI_BASE_URL", "")).strip().rstrip("/")
+    custom_url = ""
+    if custom_base:
+        custom_url = custom_base if custom_base.endswith("/chat/completions") else (
+            f"{custom_base}/chat/completions" if custom_base.endswith("/v1") else f"{custom_base}/v1/chat/completions"
+        )
+    custom = {
+        "provider": "Custom",
+        "url": custom_url,
+        "key": (os.environ.get("CUSTOM_API_KEY", "") or os.environ.get("FREELLMAPI_KEY", "")).strip(),
+        "model": os.environ.get("RIOT_UPSTREAM_CUSTOM_MODEL", "auto"),
+    }
 
     if "fast" in m:
-        ordre = [groq, gemini, mistral, openrouter]
+        ordre = [cerebras, groq, gemini, mistral, nvidia, openrouter, custom]
+    elif "code" in m:
+        ordre = [mistral, cerebras, nvidia, groq, gemini, openrouter, custom]
     elif "deep" in m:
-        ordre = [openrouter, mistral, gemini, groq]
+        ordre = [openrouter, nvidia, cerebras, mistral, gemini, groq, custom]
     else:
-        ordre = [mistral, groq, gemini, openrouter]
-    return [c for c in ordre if c["key"]]
+        ordre = [mistral, cerebras, groq, gemini, nvidia, openrouter, custom]
+    return [c for c in ordre if c["key"] and c["url"]]
 
 
 @app.get("/health")
