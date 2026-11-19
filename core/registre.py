@@ -95,7 +95,7 @@ _NON_LOCAUX = {
     "faire_brief", "lire_mails", "lire_mail", "preparer_mail", "envoyer_mail", "mettre_a_la_corbeille",
     "get_events", "create_event", "delete_event", "get_deadlines",
     # Recherche & Automatisation Web
-    "chercher_web", "book_appointment", "confirmer_reservation",
+    "chercher_web", "lire_page_web", "recueillir_veille_web", "book_appointment", "confirmer_reservation",
     "browser_open", "browser_current_page", "browser_tabs", "browser_close_tabs", "browser_interact",
     # Telephonie (Twilio)
     "call_with_message", "call_and_book", "cout_appels",
@@ -115,7 +115,7 @@ _NON_LOCAUX = {
 # Packs et routage dynamique des outils (optimisation contextuelle & anti-saturation)
 _PACK_REFLEXES = {
     "heure_et_date", "lancer_minuteur", "meteo", "noter", "notes_du_jour",
-    "sortir_idee", "mon_budget", "faire_brief", "remember", "recall", "forget", "chercher_web"
+    "sortir_idee", "mon_budget", "faire_brief", "remember", "recall", "forget", "chercher_web", "lire_page_web"
 }
 
 _CATEGORIES_OUTILS = {

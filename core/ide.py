@@ -171,8 +171,9 @@ def _extraire_outils_ide(lecture_seule: bool = False) -> List[Dict[str, Any]]:
 
     cibles_lecture = {
         "explorer_projet", "lire_code", "chercher_dans_code", "lister_dossier",
-        "chercher_fichiers", "chercher_web", "recall", "chercher_recette_dev",
-        "lister_regles", "get_system_stats", "lister_images_generees",
+        "chercher_fichiers", "chercher_web", "lire_page_web", "recueillir_veille_web",
+        "recall", "chercher_recette_dev", "lister_regles", "get_system_stats",
+        "lister_images_generees",
     }
     cibles_ecriture = {
         "ecrire_code", "patcher_code", "supprimer_fichier", "executer_terminal",
@@ -238,6 +239,8 @@ def _construire_prompt_ide(
         "Tu es RIOT IDE Copilot, un ingenieur logiciel senior travaillant directement dans l'espace de travail "
         f"`{projet}` (branche git : `{_recup_branche_git(projet) or '-'}`).\n"
         f"{regle_mode}\n"
+        "Pour toute documentation externe, version recente ou fait incertain, utilise `chercher_web` / `lire_page_web` "
+        "au lieu d'inventer et cite tes sources.\n"
         "Reponds toujours en francais, de maniere dense, structuree et verifiable."
         f"{ctx_memoire}"
         f"{ctx_fichier}"

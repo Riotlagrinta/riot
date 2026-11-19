@@ -830,3 +830,140 @@ def memory_delete(request: Request, kind: str = "", mem_key: str = ""):
     identite = _verifier_acces_detail(request, verifier_quota=False)
     nb = _get_memory_store().supprimer(identite["user_id"], kind=kind.strip(), mem_key=mem_key.strip())
     return {"ok": True, "supprimes": nb}
+
+
+# ---------------------------------------------------------------------------
+# RECHERCHE INTERNET SOURCÉE POUR CLIENTS RIOT (Anti-hallucination)
+# ---------------------------------------------------------------------------
+
+def _executer_recherche_web_cloud(requete: str, max_resultats: int = 5, plan: str = "free") -> Dict[str, Any]:
+    """Cascade web serveur : Perplexity -> Tavily -> Brave -> DuckDuckGo -> Wikipedia."""
+    q = (requete or "").strip()
+    max_res = max(1, min(int(max_resultats or 5), 10))
+
+    # 1. Perplexity Sonar (reponses sourcees avec citations)
+    pplx_key = os.environ.get("PERPLEXITY_API_KEY", "").strip()
+    allow_free_pplx = os.environ.get("RIOT_PERPLEXITY_ALLOW_FREE", "1").strip() != "0"
+    if pplx_key and (allow_free_pplx or plan != "free"):
+        try:
+            r = requests.post(
+                "https://api.perplexity.ai/chat/completions",
+                headers={"Authorization": f"Bearer {pplx_key}", "Content-Type": "application/json"},
+                json={
+                    "model": os.environ.get("RIOT_PERPLEXITY_MODEL", "sonar"),
+                    "messages": [
+                        {"role": "system", "content": "Réponds en français de façon concise, factuelle et vérifiable avec tes sources."},
+                        {"role": "user", "content": q},
+                    ],
+                    "return_citations": True,
+                },
+                timeout=18,
+            )
+            if r.status_code == 200:
+                data = r.json()
+                answer = str(((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
+                cits = data.get("citations") or []
+                results = [{"title": f"Source {i + 1}", "url": str(u), "snippet": ""} for i, u in enumerate(cits[:max_res])]
+                if answer or results:
+                    return {"ok": True, "source": "riot-web-sonar", "answer": answer, "results": results}
+        except Exception:
+            pass
+
+    # 2. Tavily Search
+    tavily_key = os.environ.get("TAVILY_API_KEY", "").strip()
+    if tavily_key:
+        try:
+            r = requests.post(
+                "https://api.tavily.com/search",
+                json={"api_key": tavily_key, "query": q, "include_answer": True, "max_results": max_res},
+                timeout=12,
+            )
+            if r.status_code == 200:
+                data = r.json()
+                results = [
+                    {
+                        "title": str(it.get("title") or "Sans titre"),
+                        "url": str(it.get("url") or ""),
+                        "snippet": str(it.get("content") or "")[:450],
+                    }
+                    for it in (data.get("results") or [])[:max_res]
+                ]
+                return {"ok": True, "source": "riot-web-tavily", "answer": str(data.get("answer") or "").strip(), "results": results}
+        except Exception:
+            pass
+
+    # 3. Brave Search API
+    brave_key = os.environ.get("BRAVE_SEARCH_API_KEY", "").strip()
+    if brave_key:
+        try:
+            r = requests.get(
+                "https://api.search.brave.com/res/v1/web/search",
+                headers={"Accept": "application/json", "X-Subscription-Token": brave_key},
+                params={"q": q, "count": max_res},
+                timeout=10,
+            )
+            if r.status_code == 200:
+                web_res = ((r.json().get("web") or {}).get("results") or [])[:max_res]
+                results = [
+                    {
+                        "title": str(it.get("title") or "Sans titre"),
+                        "url": str(it.get("url") or ""),
+                        "snippet": str(it.get("description") or "")[:450],
+                    }
+                    for it in web_res
+                ]
+                if results:
+                    return {"ok": True, "source": "riot-web-brave", "answer": "", "results": results}
+        except Exception:
+            pass
+
+    # 4. DuckDuckGo (ddgs)
+    try:
+        from ddgs import DDGS
+        with DDGS() as ddgs:
+            bruts = list(ddgs.text(q, region="wt-wt", max_results=max_res))
+        results = [
+            {
+                "title": str(it.get("title") or "Résultat").strip(),
+                "url": str(it.get("href") or it.get("url") or "").strip(),
+                "snippet": str(it.get("body") or it.get("snippet") or "").strip()[:500],
+            }
+            for it in bruts
+        ]
+        if results:
+            return {"ok": True, "source": "riot-web-ddg", "answer": "", "results": results}
+    except Exception:
+        pass
+
+    # 5. Wikipedia REST OpenSearch
+    for lang in ("fr", "en"):
+        try:
+            r = requests.get(
+                f"https://{lang}.wikipedia.org/w/api.php",
+                params={"action": "opensearch", "search": q, "limit": min(max_res, 4), "format": "json"},
+                headers={"User-Agent": "RIOT-Engine/1.0"},
+                timeout=6,
+            )
+            if r.status_code == 200:
+                arr = r.json()
+                if isinstance(arr, list) and len(arr) >= 4 and arr[1]:
+                    results = [
+                        {"title": str(t), "url": str(u), "snippet": str(d)[:400]}
+                        for t, d, u in zip(arr[1], arr[2], arr[3])
+                    ]
+                    return {"ok": True, "source": f"riot-web-wiki-{lang}", "answer": "", "results": results}
+        except Exception:
+            continue
+
+    return {"ok": False, "source": "none", "answer": "", "results": [], "erreur": "Aucun résultat web disponible."}
+
+
+@app.post("/v1/web/search")
+async def web_search(request: Request):
+    identite = _verifier_acces_detail(request)
+    body = await request.json() or {}
+    query = str(body.get("query") or body.get("requete") or "").strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="Paramètre 'query' requis.")
+    max_res = int(body.get("max_results") or 5)
+    return _executer_recherche_web_cloud(query, max_resultats=max_res, plan=str(identite.get("plan") or "free"))

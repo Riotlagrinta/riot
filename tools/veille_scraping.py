@@ -141,9 +141,10 @@ def surveiller_marche_crypto(paires: str = "BTCUSDT,ETHUSDT,SOLUSDT") -> str:
 )
 def recueillir_veille_web(url: str, max_mots: int = 1200) -> str:
     """Effectue un scraping sécurisé et synthétique d'une URL."""
-    u = url.strip()
-    if not u.startswith("http://") and not u.startswith("https://"):
-        u = "https://" + u
+    from tools.web import _valider_url_publique
+    ok_url, u = _valider_url_publique(url)
+    if not ok_url:
+        return f"❌ URL refusée par sécurité : {u}"
 
     try:
         req = urllib.request.Request(

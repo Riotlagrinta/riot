@@ -624,7 +624,9 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
             "Pour créer un nouveau script, utilise `ecrire_code`.\n"
             "3. PROACTIF ET AGENTIQUE : Ne récite pas de cours théoriques de 10 points. Si l'utilisateur te demande d'analyser, d'optimiser ou de corriger, "
             "utilise tes outils pour inspecter et agir directement.\n"
-            "4. STYLE CONCIS & TECHNIQUE : Reste percutant, professionnel, orienté action. Présente les diffs et chemins clairement. Pas de bavardage superflu."
+            "4. ANTI-HALLUCINATION WEB : Pour toute information récente, actualité, version de librairie, documentation externe ou fait incertain, "
+            "appelle `chercher_web` (et `lire_page_web` pour vérifier une source) avant de répondre, puis cite les URLs sources.\n"
+            "5. STYLE CONCIS & TECHNIQUE : Reste percutant, professionnel, orienté action. Présente les diffs et chemins clairement. Pas de bavardage superflu."
             f"{conventions_ctx}"
         )
     else:
@@ -636,7 +638,9 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
             "1. Réponds librement, précisément et directement à toutes les questions, réflexions ou analyses de l'utilisateur.\n"
             "2. N'appelle d'outils de fichiers que si l'utilisateur te demande expressément d'explorer ou de manipuler des fichiers.\n"
             "3. STYLE CONCIS, ÉLÉGANT & PERCUTANT : Reste bienveillant, critique et constructif. Pas de bavardage superflu.\n"
-            "4. CONTRÔLE SYSTÈME & NAVIGATEUR : Si l'utilisateur demande d'ouvrir une application (`ouvrir_application`), régler le volume (`regler_volume`), contrôler les médias (`controler_media`), verrouiller la session (`verrouiller_pc`), voir l'écran (`capture_screen`) ou piloter Google Chrome (`browser_open`, `browser_click`, `browser_type`, `browser_scroll`), appelle directement l'outil adapté."
+            "4. ANTI-HALLUCINATION WEB : Pour toute actualité, donnée récente, prix, documentation externe ou fait incertain, appelle obligatoirement "
+            "`chercher_web` (et `lire_page_web` si besoin) au lieu d'inventer, et cite les sources.\n"
+            "5. CONTRÔLE SYSTÈME & NAVIGATEUR : Si l'utilisateur demande d'ouvrir une application (`ouvrir_application`), régler le volume (`regler_volume`), contrôler les médias (`controler_media`), verrouiller la session (`verrouiller_pc`), voir l'écran (`capture_screen`) ou piloter Google Chrome (`browser_open`, `browser_click`, `browser_type`, `browser_scroll`), appelle directement l'outil adapté."
         )
 
     texte_mem = memoire.texte_pour_systeme()[:2500]
@@ -672,7 +676,7 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
             "generer_graphique", "generer_diagramme", "creer_produit_digital",
             "auditer_schema_sql", "optimiser_requete_postgis", "generer_politiques_rls",
             "generer_composant_mobile", "scaffolder_app_mobile_expo",
-            "surveiller_marche_crypto", "recueillir_veille_web", "generer_bulletin_veille",
+            "surveiller_marche_crypto", "chercher_web", "lire_page_web", "recueillir_veille_web", "generer_bulletin_veille",
             "lister_competences", "charger_competence", "lire_reference",
             "capturer_page", "capturer_frames",
             "generer_image", "lister_images_generees",
