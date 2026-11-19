@@ -193,3 +193,126 @@ def test_proxy_chat_completions_usage_and_opaque_model(monkeypatch, tmp_path):
     assert len(logs) == 1 and logs[0]["tokens_in"] == 11 and logs[0]["tokens_out"] == 4
 
 
+def test_persistent_memory_user_dir_ide_injection_cloud_sync_and_auto_extract(monkeypatch, tmp_path):
+    from core import ide, memoire
+    from proxy import server as proxy_srv
+
+    # 1. Emplacement utilisateur persistant (~/.riot/riot_memory.db) hors dossier du code
+    assert memoire._DEFAULT_USER_DB_PATH == pathlib.Path.home() / ".riot" / "riot_memory.db"
+
+    prev_db = memoire.DB_PATH
+    try:
+        # 2. Base PC A isolée + masquage automatique des secrets
+        db_pc_a = tmp_path / "pc_a" / "riot_memory.db"
+        monkeypatch.setenv("RIOT_MEMORY_SYNC", "0")
+        memoire.reinitialiser_connexion(db_pc_a)
+
+        memoire.memoriser_entite("preferences", "stack_pref", "Toujours utiliser FastAPI avec gsk_1234567890abcdef12345", sync_auto=False)
+        memoire.ajouter_regle_dev("tests_obligatoires", "Lancer pytest apres chaque edit")
+        memoire.ajouter_recette_code(
+            titre="Erreur CORS FastAPI",
+            langage="python",
+            probleme="Requete bloquee CORS depuis localhost:5173",
+            cause="CORSMiddleware absent",
+            solution="Ajouter CORSMiddleware avec allow_origins explicite",
+            tags="fastapi,cors",
+            sync_auto=False,
+        )
+
+        prompt_ide = ide._construire_prompt_ide("code", tmp_path, None, message="probleme CORS FastAPI")
+        assert "Toujours utiliser FastAPI" in prompt_ide
+        assert "gsk_123456" not in prompt_ide
+        assert "Lancer pytest apres chaque edit" in prompt_ide
+        assert "Erreur CORS FastAPI" in prompt_ide
+
+        noms_outils_ide = {s["name"] for s in ide._extraire_outils_ide(lecture_seule=False)}
+        assert {"remember", "recall", "forget", "apprendre_regle", "lister_regles", "enregistrer_recette_dev", "chercher_recette_dev"} <= noms_outils_ide
+
+        # 3. Auto-extraction silencieuse type Hermes (filtre trivial + extraction JSON)
+        res_trivial = memoire.extraire_et_memoriser_depuis_echange("salut", "bonjour !")
+        assert res_trivial == {"entities": 0, "recipes": 0}
+
+        class _FakeMsg:
+            def __init__(self, text):
+                self.type = "text"
+                self.text = text
+
+        class _FakeRep:
+            def __init__(self, text):
+                self.content = [_FakeMsg(text)]
+
+        class _FakeLLM:
+            def disponible(self):
+                return True
+
+            def repondre(self, sys_p, msgs, schemas):
+                return _FakeRep(
+                    '```json\n{"entities": [{"categorie": "projects", "cle": "medigo", '
+                    '"contenu": "ERP pharmacie Next.js + PostGIS"}], '
+                    '"recipes": [{"titre": "Fix SQLite WAL lock", "langage": "python", '
+                    '"probleme": "database is locked", "cause": "threads concurrents", '
+                    '"solution": "Activer PRAGMA journal_mode = WAL et RLock", "tags": "sqlite"}]}\n```'
+                )
+
+        res_ext = memoire.extraire_et_memoriser_depuis_echange(
+            "Je travaille sur mon projet medigo et j'ai corrige le bug database is locked.",
+            "Le verrou SQLite WAL est corrige avec PRAGMA journal_mode = WAL et un RLock.",
+            surface="ide",
+            forcer=True,
+            provider=_FakeLLM(),
+        )
+        assert res_ext == {"entities": 1, "recipes": 1}
+        assert memoire.charger()["projects"]["medigo"] == "ERP pharmacie Next.js + PostGIS"
+
+        # 4. Synchro Cloud hybride (PC A -> Proxy MemoryCloudStore -> PC B + propagation tombstone)
+        mem_cloud = proxy_srv.MemoryCloudStore(db_path=tmp_path / "cloud_mem.db", pg_url="")
+        monkeypatch.setattr(proxy_srv, "_MEMORY_STORE", mem_cloud)
+        monkeypatch.delenv("RIOT_IDENTITY_DATABASE_URL", raising=False)
+        monkeypatch.setenv("RIOT_PROXY_TOKEN", "tok_mem_test")
+        monkeypatch.setenv("RIOT_MEMORY_SYNC", "1")
+        monkeypatch.setenv("RIOT_GATEWAY_URL", "http://testserver/v1")
+        monkeypatch.setenv("RIOT_GATEWAY_TOKEN", "tok_mem_test")
+
+        pc = TestClient(proxy_srv.app)
+        locaux_a = memoire.collecter_items_locaux()
+        r_sync_a = pc.post(
+            "/v1/memory/sync",
+            headers={"Authorization": "Bearer tok_mem_test"},
+            json={"items": locaux_a, "since": ""},
+        )
+        assert r_sync_a.status_code == 200, r_sync_a.text
+        assert len(r_sync_a.json()["items"]) >= 4
+
+        # PC B (nouvelle machine vierge) récupère toute la mémoire
+        db_pc_b = tmp_path / "pc_b" / "riot_memory.db"
+        memoire.reinitialiser_connexion(db_pc_b)
+        r_pull_b = pc.get("/v1/memory", headers={"Authorization": "Bearer tok_mem_test"})
+        assert r_pull_b.status_code == 200
+        appl_b = memoire.appliquer_items_cloud(r_pull_b.json()["items"])
+        assert appl_b["appliques"] >= 4
+        assert memoire.charger()["projects"]["medigo"] == "ERP pharmacie Next.js + PostGIS"
+
+        # Suppression sur PC A -> tombstone -> propagée vers PC B
+        memoire.reinitialiser_connexion(db_pc_a)
+        assert memoire.supprimer_entite("projects", "medigo", sync_auto=False) is True
+        r_sync_del = pc.post(
+            "/v1/memory/sync",
+            headers={"Authorization": "Bearer tok_mem_test"},
+            json={"items": memoire.collecter_items_locaux(), "since": ""},
+        )
+        assert r_sync_del.status_code == 200
+
+        memoire.reinitialiser_connexion(db_pc_b)
+        r_pull_b2 = pc.get(
+            "/v1/memory?since=2000-01-01T00:00:00Z",
+            headers={"Authorization": "Bearer tok_mem_test"},
+        )
+        assert r_pull_b2.status_code == 200
+        appl_b2 = memoire.appliquer_items_cloud(r_pull_b2.json()["items"])
+        assert appl_b2["supprimes"] >= 1
+        assert "medigo" not in memoire.charger()["projects"]
+    finally:
+        memoire.reinitialiser_connexion(prev_db)
+
+
+

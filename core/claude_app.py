@@ -628,6 +628,8 @@ def _memoriser_tour(chat_id: Optional[str], question: str, reponse: str):
 
             del _HISTORIQUE_CHAT[:-20]
 
+        memoire.lancer_auto_memoire_asynchrone(question, reponse, surface="studio")
+
 
 
 def formater_fichiers_joints(fichiers: list) -> str:

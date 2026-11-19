@@ -171,13 +171,14 @@ def _extraire_outils_ide(lecture_seule: bool = False) -> List[Dict[str, Any]]:
 
     cibles_lecture = {
         "explorer_projet", "lire_code", "chercher_dans_code", "lister_dossier",
-        "chercher_fichiers", "chercher_web", "recall", "get_system_stats",
-        "lister_images_generees",
+        "chercher_fichiers", "chercher_web", "recall", "chercher_recette_dev",
+        "lister_regles", "get_system_stats", "lister_images_generees",
     }
     cibles_ecriture = {
         "ecrire_code", "patcher_code", "supprimer_fichier", "executer_terminal",
-        "executer_test_ou_commande", "generer_image", "remember",
-        "generer_diagramme", "generer_graphique",
+        "executer_test_ou_commande", "generer_image", "remember", "forget",
+        "apprendre_regle", "enregistrer_recette_dev", "generer_diagramme",
+        "generer_graphique",
     }
     autorises = cibles_lecture if lecture_seule else (cibles_lecture | cibles_ecriture)
 
@@ -192,7 +193,12 @@ def _extraire_outils_ide(lecture_seule: bool = False) -> List[Dict[str, Any]]:
     return schemas[:32]
 
 
-def _construire_prompt_ide(mode: str, projet: Path, fichier_actif: Optional[Dict[str, str]]) -> str:
+def _construire_prompt_ide(
+    mode: str,
+    projet: Path,
+    fichier_actif: Optional[Dict[str, str]],
+    message: str = "",
+) -> str:
     regle_mode = {
         "plan": (
             "MODE PLANIFICATION : Ne modifie aucun fichier pour l'instant. Analyse la codebase avec les outils "
@@ -220,11 +226,20 @@ def _construire_prompt_ide(mode: str, projet: Path, fichier_actif: Optional[Dict
             f"```\n{snippet}\n```"
         )
 
+    ctx_memoire = ""
+    try:
+        texte_mem = memoire.texte_pour_systeme()[:2500]
+        recettes = memoire.recup_recettes_pertinentes(message or (fichier_actif or {}).get("chemin", ""))
+        ctx_memoire = f"{texte_mem}{recettes}"
+    except Exception:
+        ctx_memoire = ""
+
     return (
         "Tu es RIOT IDE Copilot, un ingenieur logiciel senior travaillant directement dans l'espace de travail "
         f"`{projet}` (branche git : `{_recup_branche_git(projet) or '-'}`).\n"
         f"{regle_mode}\n"
         "Reponds toujours en francais, de maniere dense, structuree et verifiable."
+        f"{ctx_memoire}"
         f"{ctx_fichier}"
     )
 
@@ -307,6 +322,7 @@ def _simuler_et_stager_patch(projet: Path, nom_outil: str, args: Dict[str, Any])
 def monter_routes(app) -> None:
     from fastapi import Request
     from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
+    memoire.lancer_synchro_arriere_plan()
 
     def garde(request: Request):
         if not _local_seulement(request):
@@ -660,7 +676,7 @@ def monter_routes(app) -> None:
 
         def _worker():
             try:
-                systeme = _construire_prompt_ide(mode, projet, fichier_actif)
+                systeme = _construire_prompt_ide(mode, projet, fichier_actif, message=message)
                 if mode == "ask":
                     outils_schemas = []
                 elif mode == "plan":
@@ -732,6 +748,8 @@ def monter_routes(app) -> None:
                     hist.append({"role": "user", "content": res_blocs})
 
                 _emit({"type": "done", "texte": texte_final or "Tache terminee."})
+                if texte_final:
+                    memoire.lancer_auto_memoire_asynchrone(message, texte_final, surface="ide")
             except Exception as e:
                 LOG.exception("Erreur RIOT IDE chat")
                 _emit({"type": "error", "erreur": str(e)})

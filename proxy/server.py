@@ -19,9 +19,13 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import os
+import sqlite3
+import threading
 import time
 from collections import defaultdict, deque
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Deque, Dict, List, Optional
 
@@ -30,7 +34,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from core.telemetry import TelemetryStore, envoyer_alerte_ntfy, envoyer_alerte_webhook
+from core.telemetry import TelemetryStore, envoyer_alerte_ntfy, envoyer_alerte_webhook, masquer_secrets
 
 app = FastAPI(title="RIOT Engine Gateway")
 
@@ -93,7 +97,7 @@ def _verifier_jeton_neon(raw_token: str) -> Optional[Dict[str, Any]]:
         return dict(row)
 
 
-def _verifier_acces_detail(request: Request) -> Dict[str, Any]:
+def _verifier_acces_detail(request: Request, verifier_quota: bool = True) -> Dict[str, Any]:
     expected = os.environ.get("RIOT_PROXY_TOKEN", "").strip()
     id_url = os.environ.get("RIOT_IDENTITY_DATABASE_URL", "").strip()
     auth = request.headers.get("authorization", "")
@@ -103,6 +107,7 @@ def _verifier_acces_detail(request: Request) -> Dict[str, Any]:
     if id_url:
         if expected and token and hmac.compare_digest(token, expected):
             identite = {
+                "user_id": "creator-master",
                 "user_ref": "creator-master",
                 "email": "creator@riot.local",
                 "display_name": "Créateur RIOT",
@@ -125,6 +130,7 @@ def _verifier_acces_detail(request: Request) -> Dict[str, Any]:
                     detail="Connexion RIOT requise. Créez un jeton sur https://riot-portal.vercel.app/account puis lancez `riot login`.",
                 )
             identite = {
+                "user_id": str(row["user_id"]),
                 "user_ref": f"{row['email']} ({row['user_id'][:8]})",
                 "email": row["email"],
                 "display_name": row["display_name"] or row["email"],
@@ -135,8 +141,10 @@ def _verifier_acces_detail(request: Request) -> Dict[str, Any]:
         if expected and not hmac.compare_digest(token, expected):
             raise HTTPException(status_code=401, detail="Jeton client RIOT invalide.")
         raw_id = token or (request.client.host if request.client else "anon")
+        uid_local = hashlib.sha256(raw_id.encode("utf-8")).hexdigest()[:16]
         identite = {
-            "user_ref": hashlib.sha256(raw_id.encode("utf-8")).hexdigest()[:12],
+            "user_id": uid_local,
+            "user_ref": uid_local[:12],
             "email": "local@riot",
             "display_name": "Local",
             "plan": "free",
@@ -153,7 +161,7 @@ def _verifier_acces_detail(request: Request) -> Dict[str, Any]:
     q.append(now)
 
     used_24h = _STORE.compter_requetes_utilisateur_24h(cle_hash)
-    if used_24h >= identite["daily_quota"]:
+    if verifier_quota and used_24h >= identite["daily_quota"]:
         envoyer_alerte_ntfy(
             "RIOT Quota journalier atteint",
             f"Utilisateur : {cle_hash} ({identite['plan']}) · {used_24h}/{identite['daily_quota']} requêtes sur 24h.",
@@ -279,6 +287,7 @@ def health():
         "service": "RIOT Engine Gateway",
         "routes_actives": actifs,
         "telemetry_backend": _STORE.backend_name,
+        "memory_backend": _get_memory_store().backend_name,
         "identity_auth": bool(os.environ.get("RIOT_IDENTITY_DATABASE_URL", "").strip()),
     }
 
@@ -491,3 +500,333 @@ def admin_ntfy_test(request: Request):
     if not res.get("sent"):
         raise HTTPException(status_code=400, detail=res.get("detail") or "Envoi ntfy impossible.")
     return res
+
+
+# ---------------------------------------------------------------------------
+# MEMOIRE HYBRIDE CLOUD MULTI-POSTES (Neon PostgreSQL / SQLite WAL)
+# ---------------------------------------------------------------------------
+
+def _norm_ts_iso(raw: Any) -> str:
+    """Normalise un horodatage ISO-8601 en UTC pour eviter toute erreur de parsing Postgres."""
+    s = str(raw or "").strip()
+    if s:
+        try:
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc).isoformat()
+        except Exception:
+            pass
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _sanitiser_meta(meta: Any) -> Dict[str, Any]:
+    if not isinstance(meta, dict):
+        return {}
+    out: Dict[str, Any] = {}
+    for k, v in list(meta.items())[:20]:
+        ks = str(k)[:64]
+        if isinstance(v, str):
+            out[ks] = masquer_secrets(v, max_len=3000)
+        elif isinstance(v, (int, float, bool)) or v is None:
+            out[ks] = v
+        else:
+            out[ks] = masquer_secrets(str(v), max_len=500)
+    return out
+
+
+class MemoryCloudStore:
+    """Stockage isole par utilisateur pour synchroniser entites et recettes entre appareils."""
+
+    def __init__(self, db_path: Optional[Path] = None, pg_url: Optional[str] = None):
+        self.pg_url = (
+            pg_url
+            if pg_url is not None
+            else (
+                os.environ.get("RIOT_MEMORY_DATABASE_URL", "").strip()
+                or os.environ.get("RIOT_TELEMETRY_DATABASE_URL", "").strip()
+                or os.environ.get("RIOT_PORTAL_DATABASE_URL", "").strip()
+            )
+        ).strip()
+        env_db = os.environ.get("RIOT_PROXY_MEMORY_DB", "").strip()
+        self.db_path = Path(db_path) if db_path is not None else (
+            Path(env_db) if env_db else (Path.home() / ".riot" / "proxy_memory.db")
+        )
+        self._lock = threading.Lock()
+        self._pg_ready = False
+        self.backend_name = "neon-postgres" if self.pg_url else "sqlite"
+        self._init_db()
+
+    def _connect_sqlite(self) -> sqlite3.Connection:
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(self.db_path), timeout=8.0, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _connect_pg(self):
+        import psycopg
+        from psycopg.rows import dict_row
+        return psycopg.connect(self.pg_url, autocommit=True, row_factory=dict_row, connect_timeout=8)
+
+    def _init_db(self) -> None:
+        if self.pg_url:
+            try:
+                with self._connect_pg() as conn:
+                    conn.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS user_memories (
+                            id BIGSERIAL PRIMARY KEY,
+                            user_id TEXT NOT NULL,
+                            kind TEXT NOT NULL,
+                            mem_key TEXT NOT NULL,
+                            content TEXT NOT NULL DEFAULT '',
+                            metadata_json TEXT NOT NULL DEFAULT '{}',
+                            deleted BOOLEAN NOT NULL DEFAULT FALSE,
+                            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                            UNIQUE(user_id, kind, mem_key)
+                        )
+                        """
+                    )
+                    conn.execute(
+                        "CREATE INDEX IF NOT EXISTS idx_user_memories_uid_ts "
+                        "ON user_memories (user_id, updated_at DESC)"
+                    )
+                self._pg_ready = True
+                return
+            except Exception as e:
+                self.backend_name = f"sqlite-fallback ({type(e).__name__})"
+
+        with self._lock:
+            conn = self._connect_sqlite()
+            try:
+                conn.execute("PRAGMA journal_mode=WAL;")
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS user_memories (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id TEXT NOT NULL,
+                        kind TEXT NOT NULL,
+                        mem_key TEXT NOT NULL,
+                        content TEXT NOT NULL DEFAULT '',
+                        metadata_json TEXT NOT NULL DEFAULT '{}',
+                        deleted INTEGER NOT NULL DEFAULT 0,
+                        updated_at TEXT NOT NULL,
+                        UNIQUE(user_id, kind, mem_key)
+                    )
+                    """
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_user_memories_uid_ts "
+                    "ON user_memories (user_id, updated_at DESC)"
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+    def _row_to_item(self, row: Any) -> Dict[str, Any]:
+        meta_raw = row["metadata_json"] or "{}"
+        try:
+            meta = json.loads(meta_raw) if isinstance(meta_raw, str) else dict(meta_raw)
+        except Exception:
+            meta = {}
+        upd = row["updated_at"]
+        upd_str = upd.astimezone(timezone.utc).isoformat() if hasattr(upd, "astimezone") else str(upd)
+        return {
+            "kind": row["kind"],
+            "mem_key": row["mem_key"],
+            "content": row["content"] or "",
+            "metadata": meta,
+            "deleted": bool(row["deleted"]),
+            "updated_at": upd_str,
+        }
+
+    def lister(self, user_id: str, since: str = "", inclure_supprimes: bool = False) -> List[Dict[str, Any]]:
+        since_norm = _norm_ts_iso(since) if since.strip() else ""
+        if self._pg_ready:
+            with self._connect_pg() as conn:
+                if since_norm:
+                    rows = conn.execute(
+                        "SELECT kind, mem_key, content, metadata_json, deleted, updated_at "
+                        "FROM user_memories WHERE user_id = %s AND updated_at >= %s::timestamptz "
+                        "ORDER BY updated_at ASC LIMIT 2000",
+                        (user_id, since_norm),
+                    ).fetchall()
+                elif inclure_supprimes:
+                    rows = conn.execute(
+                        "SELECT kind, mem_key, content, metadata_json, deleted, updated_at "
+                        "FROM user_memories WHERE user_id = %s ORDER BY updated_at ASC LIMIT 2000",
+                        (user_id,),
+                    ).fetchall()
+                else:
+                    rows = conn.execute(
+                        "SELECT kind, mem_key, content, metadata_json, deleted, updated_at "
+                        "FROM user_memories WHERE user_id = %s AND deleted = FALSE "
+                        "ORDER BY updated_at ASC LIMIT 2000",
+                        (user_id,),
+                    ).fetchall()
+                return [self._row_to_item(r) for r in rows]
+
+        with self._lock:
+            conn = self._connect_sqlite()
+            try:
+                if since_norm:
+                    rows = conn.execute(
+                        "SELECT kind, mem_key, content, metadata_json, deleted, updated_at "
+                        "FROM user_memories WHERE user_id = ? AND updated_at >= ? "
+                        "ORDER BY updated_at ASC LIMIT 2000",
+                        (user_id, since_norm),
+                    ).fetchall()
+                elif inclure_supprimes:
+                    rows = conn.execute(
+                        "SELECT kind, mem_key, content, metadata_json, deleted, updated_at "
+                        "FROM user_memories WHERE user_id = ? ORDER BY updated_at ASC LIMIT 2000",
+                        (user_id,),
+                    ).fetchall()
+                else:
+                    rows = conn.execute(
+                        "SELECT kind, mem_key, content, metadata_json, deleted, updated_at "
+                        "FROM user_memories WHERE user_id = ? AND deleted = 0 "
+                        "ORDER BY updated_at ASC LIMIT 2000",
+                        (user_id,),
+                    ).fetchall()
+                return [self._row_to_item(r) for r in rows]
+            finally:
+                conn.close()
+
+    def sync(self, user_id: str, items: List[Dict[str, Any]], since: str = "") -> Dict[str, Any]:
+        nettoyes = []
+        for raw in (items or [])[:1000]:
+            if not isinstance(raw, dict):
+                continue
+            kind = str(raw.get("kind") or "").strip()[:64]
+            mem_key = masquer_secrets(str(raw.get("mem_key") or "").strip(), max_len=200)
+            if not kind or not mem_key:
+                continue
+            deleted = bool(raw.get("deleted", False))
+            content = "" if deleted else masquer_secrets(str(raw.get("content") or ""), max_len=4000)
+            meta_json = "{}" if deleted else json.dumps(_sanitiser_meta(raw.get("metadata")), ensure_ascii=False)
+            ts = _norm_ts_iso(raw.get("updated_at"))
+            nettoyes.append((kind, mem_key, content, meta_json, deleted, ts))
+
+        if self._pg_ready:
+            with self._connect_pg() as conn:
+                for kind, mem_key, content, meta_json, deleted, ts in nettoyes:
+                    conn.execute(
+                        """
+                        INSERT INTO user_memories (user_id, kind, mem_key, content, metadata_json, deleted, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s::timestamptz)
+                        ON CONFLICT (user_id, kind, mem_key) DO UPDATE SET
+                            content = EXCLUDED.content,
+                            metadata_json = EXCLUDED.metadata_json,
+                            deleted = EXCLUDED.deleted,
+                            updated_at = EXCLUDED.updated_at
+                        WHERE EXCLUDED.updated_at >= user_memories.updated_at
+                        """,
+                        (user_id, kind, mem_key, content, meta_json, deleted, ts),
+                    )
+        else:
+            with self._lock:
+                conn = self._connect_sqlite()
+                try:
+                    for kind, mem_key, content, meta_json, deleted, ts in nettoyes:
+                        conn.execute(
+                            """
+                            INSERT INTO user_memories (user_id, kind, mem_key, content, metadata_json, deleted, updated_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                            ON CONFLICT (user_id, kind, mem_key) DO UPDATE SET
+                                content = excluded.content,
+                                metadata_json = excluded.metadata_json,
+                                deleted = excluded.deleted,
+                                updated_at = excluded.updated_at
+                            WHERE excluded.updated_at >= user_memories.updated_at
+                            """,
+                            (user_id, kind, mem_key, content, meta_json, 1 if deleted else 0, ts),
+                        )
+                    conn.commit()
+                finally:
+                    conn.close()
+
+        retour = self.lister(user_id, since=since, inclure_supprimes=bool(since.strip()))
+        return {
+            "ok": True,
+            "recus": len(nettoyes),
+            "items": retour,
+            "server_time": datetime.now(timezone.utc).isoformat(),
+            "backend": self.backend_name,
+        }
+
+    def supprimer(self, user_id: str, kind: str = "", mem_key: str = "") -> int:
+        ts = datetime.now(timezone.utc).isoformat()
+        if self._pg_ready:
+            with self._connect_pg() as conn:
+                if kind and mem_key:
+                    cur = conn.execute(
+                        "UPDATE user_memories SET deleted = TRUE, content = '', metadata_json = '{}', updated_at = %s::timestamptz "
+                        "WHERE user_id = %s AND kind = %s AND mem_key = %s",
+                        (ts, user_id, kind, mem_key),
+                    )
+                else:
+                    cur = conn.execute(
+                        "UPDATE user_memories SET deleted = TRUE, content = '', metadata_json = '{}', updated_at = %s::timestamptz "
+                        "WHERE user_id = %s",
+                        (ts, user_id),
+                    )
+                return int(cur.rowcount or 0)
+
+        with self._lock:
+            conn = self._connect_sqlite()
+            try:
+                if kind and mem_key:
+                    cur = conn.execute(
+                        "UPDATE user_memories SET deleted = 1, content = '', metadata_json = '{}', updated_at = ? "
+                        "WHERE user_id = ? AND kind = ? AND mem_key = ?",
+                        (ts, user_id, kind, mem_key),
+                    )
+                else:
+                    cur = conn.execute(
+                        "UPDATE user_memories SET deleted = 1, content = '', metadata_json = '{}', updated_at = ? "
+                        "WHERE user_id = ?",
+                        (ts, user_id),
+                    )
+                conn.commit()
+                return int(cur.rowcount or 0)
+            finally:
+                conn.close()
+
+
+_MEMORY_STORE: Optional[MemoryCloudStore] = None
+
+
+def _get_memory_store() -> MemoryCloudStore:
+    global _MEMORY_STORE
+    if _MEMORY_STORE is None:
+        _MEMORY_STORE = MemoryCloudStore()
+    return _MEMORY_STORE
+
+
+@app.get("/v1/memory")
+def memory_list(request: Request, since: str = ""):
+    identite = _verifier_acces_detail(request, verifier_quota=False)
+    items = _get_memory_store().lister(identite["user_id"], since=since, inclure_supprimes=bool(since.strip()))
+    return {
+        "ok": True,
+        "items": items,
+        "server_time": datetime.now(timezone.utc).isoformat(),
+        "backend": _get_memory_store().backend_name,
+    }
+
+
+@app.post("/v1/memory/sync")
+async def memory_sync(request: Request):
+    identite = _verifier_acces_detail(request, verifier_quota=False)
+    body = await request.json() or {}
+    items = body.get("items") if isinstance(body.get("items"), list) else []
+    since = str(body.get("since") or "").strip()
+    return _get_memory_store().sync(identite["user_id"], items, since=since)
+
+
+@app.delete("/v1/memory")
+def memory_delete(request: Request, kind: str = "", mem_key: str = ""):
+    identite = _verifier_acces_detail(request, verifier_quota=False)
+    nb = _get_memory_store().supprimer(identite["user_id"], kind=kind.strip(), mem_key=mem_key.strip())
+    return {"ok": True, "supprimes": nb}

@@ -91,6 +91,7 @@ _COMMANDES_INTERNES = [
     "/pc", "/status", "/system",
     "/remote", "/mobile",
     "/tokens", "/cost",
+    "/memory", "/mem", "/memoire",
     "/recettes",
     "/clear", "/cls",
     "/help", "/aide",
@@ -336,6 +337,7 @@ def commande_login(arg: str = ""):
     config.definir("gateway.url", gw_url)
     config.definir("gateway.token", tok)
     llm_mod.reinitialiser()
+    memoire.lancer_synchro_arriere_plan()
     console.print(
         f"[bold green]✓ Connecté ![/bold green] "
         f"[white]{u.get('display_name') or u.get('email')}[/white] · "
@@ -435,6 +437,7 @@ def commande_aide():
         f"[bold {acc}]Commandes Rapides & Design :[/bold {acc}]\n"
         f"  • [bold {sec}]/theme [nom][/bold {sec}]         : Change le design (obsidian, paper, tactical)\n"
         f"  • [bold {sec}]/ide[/bold {sec}]                  : Ouvre RIOT IDE (éditeur multi-panneaux + terminal + agent)\n"
+        f"  • [bold {sec}]/memory [sync|forget][/bold {sec}] : Affiche la mémoire persistante ou force la synchro Cloud\n"
         f"  • [bold {sec}]/update [check][/bold {sec}]       : Vérifie et installe les mises à jour RIOT\n"
         f"  • [bold {sec}]/mcp [reload][/bold {sec}]         : Gère les connexions aux serveurs MCP externes (mcp_servers.json)\n"
         f"  • [bold {sec}]/app[/bold {sec}]                  : Lance RIOT Studio en application bureau & web\n"
@@ -500,6 +503,49 @@ def commande_tokens():
         f"[bold #d97757]Session Tokens :[/bold #d97757] [cyan]Entrée: {prompt_t}[/cyan] │ "
         f"[green]Sortie: {rep_t}[/green] │ [bold white]Total: {total} tokens[/bold white]"
     )
+
+
+def commande_memory(arg: str = ""):
+    """Consulte, synchronise ou nettoie la mémoire persistante hybride (SQLite + Cloud)."""
+    p = _pal()
+    acc = p["cli_accent"]
+    sub = (arg or "").strip()
+    low = sub.lower()
+
+    if low == "sync":
+        with console.status(f"[bold {acc}]Synchronisation de la mémoire avec RIOT Cloud...[/bold {acc}]"):
+            res = memoire.synchroniser_cloud()
+        if res.get("ok"):
+            console.print(
+                f"[bold green]✓ Mémoire synchronisée[/bold green] "
+                f"(envoyés: {res.get('envoyes', 0)}, reçus: {res.get('recus', 0)}, "
+                f"appliqués: {res.get('appliques', 0)}, supprimés: {res.get('supprimes', 0)})\n"
+            )
+        else:
+            detail = res.get("erreur") or res.get("raison") or "hors ligne"
+            console.print(f"[yellow]Synchro Cloud ignorée ({detail}). Mémoire locale intacte.[/yellow]\n")
+        return
+
+    if low.startswith("forget "):
+        sujet = sub[7:].strip()
+        nb = memoire.oublier_par_motif(sujet)
+        console.print(f"[bold green]✓ {nb} élément(s) oublié(s) pour '{sujet}'.[/bold green]\n")
+        return
+
+    etat = memoire.etat_synchro_cloud()
+    m = memoire.charger()
+    lignes = [
+        f"[bold white]Base locale :[/bold white] {etat['db_path']}",
+        f"[bold white]Cloud Sync :[/bold white] {'Actif (' + str(etat['gateway']) + ')' if etat['cloud_actif'] else 'Local uniquement (connecte-toi avec /login)'}",
+        f"[bold white]Dernière synchro :[/bold white] {etat['derniere_synchro'] or 'jamais'}",
+        f"[bold white]Volume :[/bold white] {etat['nb_entites']} entité(s) · {etat['nb_recettes']} recette(s) dev\n",
+    ]
+    for cat in ("preferences", "projects", "people", "regles_dev"):
+        for k, v in (m.get(cat) or {}).items():
+            lignes.append(f"• [{cat}] [cyan]{k}[/cyan] = {v}")
+    for f_txt in (m.get("facts") or []):
+        lignes.append(f"• [facts] {f_txt}")
+    console.print(Panel("\n".join(lignes), title=f"[bold {acc}]MÉMOIRE LONG TERME RIOT[/bold {acc}]", border_style=acc, box=ROUNDED))
 
 
 def _charger_conventions_projet(dossier: Optional[Path]) -> str:
@@ -593,6 +639,9 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
             "4. CONTRÔLE SYSTÈME & NAVIGATEUR : Si l'utilisateur demande d'ouvrir une application (`ouvrir_application`), régler le volume (`regler_volume`), contrôler les médias (`controler_media`), verrouiller la session (`verrouiller_pc`), voir l'écran (`capture_screen`) ou piloter Google Chrome (`browser_open`, `browser_click`, `browser_type`, `browser_scroll`), appelle directement l'outil adapté."
         )
 
+    texte_mem = memoire.texte_pour_systeme()[:2500]
+    if texte_mem:
+        systeme += f"\n{texte_mem}"
     recettes_ctx = memoire.recup_recettes_pertinentes(phrase)
     if recettes_ctx:
         systeme += f"\n{recettes_ctx}"
@@ -613,6 +662,8 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
             "explorer_projet", "lire_code", "ecrire_code", "patcher_code",
             "chercher_dans_code", "executer_test_ou_commande", "executer_terminal",
             "inspecter_port", "lister_dossier", "supprimer_fichier", "ouvrir_terminal_interactif",
+            "remember", "recall", "forget", "apprendre_regle", "lister_regles",
+            "enregistrer_recette_dev", "chercher_recette_dev",
             "trade_app_statut", "trade_app_prix_crypto", "trade_app_demarrer_service",
             "trading_analyse_technique", "trading_calculateur_risque", "trading_carnet_ordres_express",
             "analyser_espace_stockage", "nettoyer_caches_temporaires",
@@ -658,6 +709,7 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
             console.print()
             console.print(Markdown(reponse_finale))
             console.print(f"[dim]  ⚡ {provider.nom} · {dt}s[/dim]\n")
+            memoire.lancer_auto_memoire_asynchrone(phrase, reponse_finale, surface="cli")
             return
 
         # Appel d'outils requis
@@ -782,6 +834,7 @@ def lancer_terminal_interactif():
         mcp_client.initialiser_connexions_mcp()
     except Exception:
         pass
+    memoire.lancer_synchro_arriere_plan()
 
     completer = WordCompleter(_COMMANDES_INTERNES, ignore_case=True)
     session = PromptSession(
@@ -835,6 +888,11 @@ def lancer_terminal_interactif():
                 parties = texte.split(maxsplit=1)
                 arg_kq = parties[1] if len(parties) > 1 else ""
                 commande_keys(arg_kq)
+                continue
+            elif cmd.startswith("/memory") or cmd.startswith("/mem") or cmd.startswith("/memoire"):
+                parties = texte.split(maxsplit=1)
+                arg_mem = parties[1] if len(parties) > 1 else ""
+                commande_memory(arg_mem)
                 continue
             elif cmd in ("/ide", "/editeur"):
                 from core import serveur, claude_app
