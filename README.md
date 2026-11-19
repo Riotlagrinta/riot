@@ -73,7 +73,7 @@ Inspiré des standards d'ingénierie d'Anthropic et DeepMind, le coordinateur or
 - **Mémoire Hybride & Auto-extraction** : SQLite FTS5 (`~/.riot/riot_memory.db`) synchronisé sur Neon PostgreSQL (`/memory`, `/memory sync`, `/memory forget <sujet>`).
 - **Accès Internet Anti-Hallucination** : `chercher_web` + `lire_page_web` avec sources vérifiées (Perplexity, Tavily, Firecrawl, Brave, DuckDuckGo, Wikipedia).
 - **15 Connecteurs MCP & Outils natifs** : `/mcp catalog`, `/mcp add <slug>` (`firecrawl`, `playwright`, `context7`, `github`, `neon`, `supabase`, `notion`, `stripe`...) + bouton `🔌 MCP` dans l'IDE + outils Git (`git_status`, `git_diff`, `git_log`), GitHub & API HTTP sécurisée.
-- **Mode Cadrage `grill-me`, `content-strategy` & `anti-ai-slop` (activés par défaut)** : `/grill-me on|off|<sujet>` ou case `Clarifier avant d'agir (grill-me)` dans l'IDE, outil `content-strategy` pour vos plans éditoriaux, et outil `anti-ai-slop` pour éliminer les hooks et clichés visuels IA de vos designs.
+- **Mode Cadrage `grill-me`, `content-strategy`, `anti-ai-slop` & `seo-audit` (activés par défaut)** : `/grill-me on|off|<sujet>` ou case `Clarifier avant d'agir (grill-me)` dans l'IDE, `content-strategy` pour vos plans éditoriaux, `anti-ai-slop` pour éliminer les clichés IA de vos designs, et `seo-audit` pour optimiser le référencement Google de vos sites.
 - Guide détaillé : [docs/connecteurs_et_outils.md](docs/connecteurs_et_outils.md).
 
 ---

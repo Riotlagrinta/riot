@@ -586,6 +586,33 @@ def test_anti_ai_slop_detection_and_cleanup(tmp_path):
     assert "bg-clip-text" not in nettoye
 
 
+def test_seo_audit_html_nextjs_and_ssrf(tmp_path):
+    from core import ide, registre
+    from tools import seo_audit as seo
+
+    if len(registre.tous()) < 20:
+        registre.charger_outils()
+    assert "seo-audit" in registre._PACK_REFLEXES
+    assert "seo-audit" in {s["name"] for s in ide._extraire_outils_ide(lecture_seule=True)}
+
+    # 1. Protection SSRF sur URL locale
+    assert "[ERREUR SECURITE]" in seo.seo_audit(url="http://127.0.0.1:8790")
+
+    # 2. Audit HTML avec defauts critiques (noindex, H1 absent, alt manquant) + generation snippet
+    html_bad = tmp_path / "index.html"
+    html_bad.write_text(
+        '<html><head><meta name="robots" content="noindex" /><title>Court</title></head>'
+        '<body><img src="hero.png" /><p>Texte bref.</p></body></html>',
+        encoding="utf-8",
+    )
+    rapport = seo.seo_audit(fichier=str(html_bad), mot_cle_cible="Pharmacie de garde Togo")
+    assert "noindex" in rapport
+    assert "<h1>" in rapport
+    assert "application/ld+json" in rapport
+    assert "Score :" in rapport
+
+
+
 
 
 

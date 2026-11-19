@@ -19,6 +19,7 @@ riot
 - `/grill-me [on|off|<sujet>]` : **Cadrage actif** — pose 1 à 4 questions ciblées avec recommandations avant d'agir.
 - **Outil `content-strategy` (activé par défaut)** : génère une stratégie éditoriale complète (piliers, matrice canaux, calendrier 4 semaines, hooks & KPIs) exportée en Markdown.
 - **Outil `anti-ai-slop` (activé par défaut)** : détecte et supprime les hooks génériques IA, badges emojis, halos flous et dégradés SaaS clichés de vos designs UI.
+- **Outil `seo-audit` (activé par défaut)** : audite le référencement Google (URL ou HTML/Next.js) : `<title>`, `meta`, `H1`, `canonical`, `robots.txt`, `sitemap.xml`, JSON-LD et snippet correctif.
 - **Accès Internet anti-hallucination (activé par défaut)** : `chercher_web`, `lire_page_web` (citations URLs vérifiables, Firecrawl / Perplexity / DuckDuckGo) + outils natifs Git (`git_status`, `git_diff`, `git_log`), GitHub & HTTP REST.
 - `riot /theme [obsidian|paper|tactical]` : Bascule entre les 3 thèmes visuels (`Obsidian & Ambre`, `Encre & Émeraude`, `Tactical Ops`) sur CLI, IDE, Studio et Mobile.
 - `/model custom` : Branche n'importe quelle passerelle compatible OpenAI (FreeLLMAPI, LiteLLM, LM Studio, DeepSeek) en plus de Groq, Mistral, Gemini, OpenRouter, Claude et Ollama.

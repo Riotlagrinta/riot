@@ -95,7 +95,18 @@ L'outil **`content-strategy`** est activé par défaut sur toutes les surfaces (
 
 Exemple : *« Utilise content-strategy pour créer ma stratégie de contenu pour MediGo Togo sur LinkedIn et TikTok »*.
 
-> **Activation par défaut :** `content-strategy`, `anti-ai-slop`, `grill-me`, `chercher_web`, `lire_page_web`, les outils Git (`git_status`, `git_diff`, `git_log`), `github_repo_info`, `requete_api_http` et les connecteurs MCP 0-clé (`fetch`, `context7`) sont pré-activés par défaut dès le premier lancement.
+> **Activation par défaut :** `content-strategy`, `anti-ai-slop`, `seo-audit`, `grill-me`, `chercher_web`, `lire_page_web`, les outils Git (`git_status`, `git_diff`, `git_log`), `github_repo_info`, `requete_api_http` et les connecteurs MCP 0-clé (`fetch`, `context7`) sont pré-activés par défaut dès le premier lancement.
+
+---
+
+## 7. Audit Référencement Google `seo-audit` (Activé par défaut)
+
+L'outil **`seo-audit`** audite une URL publique en ligne ou un fichier local (HTML / Next.js `.tsx`) et fournit un score `/100` ainsi que le code HTML/JSON-LD correctif prêt à coller :
+
+- Vérification `<title>`, `meta description`, `canonical`, `viewport` Mobile-First, `robots` (`noindex`), `lang`.
+- Hiérarchie `<h1>`/`<h2>`, attributs `alt` sur les images, densité de contenu, Open Graph & Schema.org `JSON-LD`.
+- Vérification live de `HTTPS`, `/robots.txt` et `/sitemap.xml` lorsque vous passez une `url`.
+
 
 ---
 
