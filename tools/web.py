@@ -94,6 +94,61 @@ def _lire_page_brute(url: str, max_mots: int = 1200, timeout: float = 8.0) -> Di
     ok, val = _valider_url_publique(url)
     if not ok:
         return {"ok": False, "url": url, "erreur": val}
+
+    # 1. Firecrawl local (si FIRECRAWL_API_KEY configurée : idéal pour sites JS/SPA/Markdown propre)
+    fc_key = (os.environ.get("FIRECRAWL_API_KEY", "") or _reglage_sur("web.firecrawl_key")).strip()
+    if fc_key:
+        try:
+            rf = requests.post(
+                "https://api.firecrawl.dev/v1/scrape",
+                headers={"Authorization": f"Bearer {fc_key}", "Content-Type": "application/json"},
+                json={"url": val, "formats": ["markdown"], "onlyMainContent": True},
+                timeout=max(timeout, 15.0),
+            )
+            if rf.status_code == 200:
+                payload = (rf.json().get("data") or {})
+                md = str(payload.get("markdown") or "").strip()
+                meta = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+                if md:
+                    mots = md.split()
+                    extrait = " ".join(mots[:max_mots]) + (" ... [tronqué]" if len(mots) > max_mots else "")
+                    return {
+                        "ok": True,
+                        "url": str(meta.get("sourceURL") or val),
+                        "titre": str(meta.get("title") or val),
+                        "description": str(meta.get("description") or ""),
+                        "texte": extrait,
+                        "nb_mots": min(len(mots), max_mots),
+                        "source": "firecrawl",
+                    }
+        except Exception:
+            pass
+
+    # 2. Passerelle Cloud (/v1/web/scrape) si connecté par jeton
+    gw_tok = (os.environ.get("RIOT_GATEWAY_TOKEN", "") or _reglage_sur("gateway.token")).strip()
+    if gw_tok:
+        gw_url = (
+            os.environ.get("RIOT_GATEWAY_URL", "")
+            or _reglage_sur("gateway.url")
+            or "https://riot-engine-proxy.onrender.com/v1"
+        ).strip().rstrip("/")
+        base = gw_url[:-3] if gw_url.endswith("/v1") else gw_url
+        try:
+            rg = requests.post(
+                f"{base}/v1/web/scrape",
+                headers={"Authorization": f"Bearer {gw_tok}", "Content-Type": "application/json"},
+                json={"url": val, "max_words": max_mots},
+                timeout=max(timeout, 15.0),
+            )
+            if rg.status_code == 200:
+                data = rg.json()
+                if data.get("ok") and data.get("texte"):
+                    return data
+        except Exception:
+            pass
+
+    # 3. Scraping HTTP direct assaini
+    err_direct = ""
     try:
         rep = requests.get(
             val,
@@ -120,17 +175,43 @@ def _lire_page_brute(url: str, max_mots: int = 1200, timeout: float = 8.0) -> Di
             texte = re.sub(r"\s+", " ", brut).strip()
 
         mots = texte.split()
-        extrait = " ".join(mots[:max_mots]) + (" ... [tronqué]" if len(mots) > max_mots else "")
-        return {
-            "ok": True,
-            "url": url_finale,
-            "titre": titre,
-            "description": desc,
-            "texte": extrait,
-            "nb_mots": min(len(mots), max_mots),
-        }
+        if len(mots) >= 15:
+            extrait = " ".join(mots[:max_mots]) + (" ... [tronqué]" if len(mots) > max_mots else "")
+            return {
+                "ok": True,
+                "url": url_finale,
+                "titre": titre,
+                "description": desc,
+                "texte": extrait,
+                "nb_mots": min(len(mots), max_mots),
+                "source": "http-direct",
+            }
     except Exception as e:
-        return {"ok": False, "url": val, "erreur": str(e)}
+        err_direct = str(e)
+
+    # 4. Repli Jina Reader (rendu Markdown gratuit pour pages JS/SPA si direct vide ou bloqué)
+    try:
+        rj = requests.get(
+            f"https://r.jina.ai/{val}",
+            headers={"User-Agent": _USER_AGENT, "Accept": "text/plain"},
+            timeout=max(timeout, 12.0),
+        )
+        if rj.status_code == 200 and len(rj.text.strip()) > 60:
+            mots = rj.text.strip().split()
+            extrait = " ".join(mots[:max_mots]) + (" ... [tronqué]" if len(mots) > max_mots else "")
+            return {
+                "ok": True,
+                "url": val,
+                "titre": val,
+                "description": "",
+                "texte": extrait,
+                "nb_mots": min(len(mots), max_mots),
+                "source": "jina-reader",
+            }
+    except Exception:
+        pass
+
+    return {"ok": False, "url": val, "erreur": err_direct or "Contenu web vide ou protégé."}
 
 
 def _reglage_sur(cle: str, defaut: str = "") -> str:
@@ -195,6 +276,31 @@ def recherche_web_structuree(requete: str, max_resultats: int = 5) -> Dict[str, 
                     for it in (data.get("results") or [])[:max_res]
                 ]
                 return {"ok": True, "source": "tavily", "answer": str(data.get("answer") or "").strip(), "results": results}
+        except Exception:
+            pass
+
+    # 2b. Clé Firecrawl locale (search + contenu markdown)
+    fc_key = (os.environ.get("FIRECRAWL_API_KEY", "") or _reglage_sur("web.firecrawl_key")).strip()
+    if fc_key:
+        try:
+            r = requests.post(
+                "https://api.firecrawl.dev/v1/search",
+                headers={"Authorization": f"Bearer {fc_key}", "Content-Type": "application/json"},
+                json={"query": q, "limit": max_res},
+                timeout=14,
+            )
+            if r.status_code == 200:
+                items_fc = (r.json().get("data") or [])[:max_res]
+                results = [
+                    {
+                        "title": str(it.get("title") or "Sans titre"),
+                        "url": str(it.get("url") or ""),
+                        "snippet": str(it.get("description") or it.get("markdown") or "")[:450],
+                    }
+                    for it in items_fc
+                ]
+                if results:
+                    return {"ok": True, "source": "firecrawl", "answer": "", "results": results}
         except Exception:
             pass
 

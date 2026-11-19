@@ -157,6 +157,18 @@ class TelemetryStore:
                             ON CONFLICT (version) DO NOTHING
                             """
                         )
+                        pconn.execute(
+                            """
+                            INSERT INTO releases (version, titre, notes, commande)
+                            VALUES (
+                                '0.3.3',
+                                'RIOT v0.3.3 — Mémoire Hybride Neon, Web Anti-Hallucination & Connecteurs MCP',
+                                E'• Mémoire long terme hybride SQLite (~/.riot) + Neon PostgreSQL & auto-extraction silencieuse\\n• Recherche Internet sourcée & lecture web Firecrawl/Perplexity/DDG (/v1/web/search & /v1/web/scrape)\\n• Catalogue de 15 connecteurs MCP prêts en 1 commande (/mcp catalog, /mcp add firecrawl/github/supabase...)',
+                                'npm install -g @riotlagrinta/riot@latest'
+                            )
+                            ON CONFLICT (version) DO NOTHING
+                            """
+                        )
                 self._pg_ready = True
                 return
             except Exception as e:
@@ -207,11 +219,11 @@ class TelemetryStore:
                         "INSERT INTO releases (ts, version, titre, notes, commande) VALUES (?, ?, ?, ?, ?)",
                         (
                             time.time(),
-                            "0.3.1",
-                            "RIOT v0.3.1 — IDE Agentique, Mode Opaque & Logo Spirale",
-                            "• RIOT IDE multi-panneaux (CodeMirror, diff coloré Accepter/Rejeter, terminal, Ctrl+P)\n"
-                            "• 3 thèmes au choix (Obsidian & Ambre, Encre & Émeraude, Tactical Ops)\n"
-                            "• Moteur opaque RIOT Engine & passerelle Cloud dédiée",
+                            "0.3.3",
+                            "RIOT v0.3.3 — Mémoire Hybride Neon, Web Anti-Hallucination & Connecteurs MCP",
+                            "• Mémoire long terme hybride SQLite (~/.riot) + Neon PostgreSQL & auto-extraction silencieuse\n"
+                            "• Recherche Internet sourcée & lecture web Firecrawl/Perplexity/DDG (/v1/web/search & /v1/web/scrape)\n"
+                            "• Catalogue de 15 connecteurs MCP prêts en 1 commande (/mcp catalog, /mcp add firecrawl/github/supabase...)",
                             "npm install -g @riotlagrinta/riot@latest",
                         ),
                     )

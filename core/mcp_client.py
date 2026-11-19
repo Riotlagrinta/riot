@@ -21,7 +21,117 @@ from core.registre import Outil
 
 LOG = logging.getLogger("riot.mcp_client")
 _RACINE = Path(__file__).resolve().parent.parent
-_FICHIER_CONFIG_MCP = _RACINE / "mcp_servers.json"
+_FICHIER_CONFIG_REPO = _RACINE / "mcp_servers.json"
+_FICHIER_CONFIG_USER = Path.home() / ".riot" / "mcp_servers.json"
+
+# Catalogue universel de connecteurs MCP prêts à installer en 1 commande (/mcp add <slug>)
+CATALOGUE_CONNECTEURS_MCP: Dict[str, Dict[str, Any]] = {
+    "fetch": {
+        "categorie": "web",
+        "command": "uvx",
+        "args": ["mcp-server-fetch"],
+        "env_requis": [],
+        "description": "Lecture et extraction HTTP/Web distante (0 clé requise)",
+    },
+    "context7": {
+        "categorie": "dev",
+        "command": "npx",
+        "args": ["-y", "@upstash/context7-mcp"],
+        "env_requis": [],
+        "description": "Documentation à jour des librairies et frameworks (0 clé requise)",
+    },
+    "playwright": {
+        "categorie": "web",
+        "command": "npx",
+        "args": ["-y", "@playwright/mcp@latest"],
+        "env_requis": [],
+        "description": "Automatisation navigateur web complète via Playwright (0 clé requise)",
+    },
+    "firecrawl": {
+        "categorie": "web",
+        "command": "npx",
+        "args": ["-y", "firecrawl-mcp"],
+        "env_requis": ["FIRECRAWL_API_KEY"],
+        "description": "Scraping JS avancé, crawl de sites entiers et recherche web (Firecrawl)",
+    },
+    "brave_search": {
+        "categorie": "web",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+        "env_requis": ["BRAVE_API_KEY"],
+        "description": "Moteur de recherche web & actualités via Brave Search API",
+    },
+    "tavily": {
+        "categorie": "web",
+        "command": "npx",
+        "args": ["-y", "tavily-mcp@latest"],
+        "env_requis": ["TAVILY_API_KEY"],
+        "description": "Recherche IA orientée RAG et extraction web (Tavily)",
+    },
+    "perplexity": {
+        "categorie": "web",
+        "command": "npx",
+        "args": ["-y", "server-perplexity-ask"],
+        "env_requis": ["PERPLEXITY_API_KEY"],
+        "description": "Synthèse web sourcée temps réel via Perplexity Sonar",
+    },
+    "github": {
+        "categorie": "dev",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-github"],
+        "env_requis": ["GITHUB_PERSONAL_ACCESS_TOKEN"],
+        "description": "Issues, Pull Requests, dépôts et code search GitHub",
+    },
+    "postgres": {
+        "categorie": "data",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-postgres", "${POSTGRES_URL}"],
+        "env_requis": ["POSTGRES_URL"],
+        "description": "Inspection et requêtes SQL sur PostgreSQL / Neon / PostGIS",
+    },
+    "neon": {
+        "categorie": "data",
+        "command": "npx",
+        "args": ["-y", "@neondatabase/mcp-server-neon"],
+        "env_requis": ["NEON_API_KEY"],
+        "description": "Gestion de projets, branches et SQL sur Neon Serverless Postgres",
+    },
+    "supabase": {
+        "categorie": "data",
+        "command": "npx",
+        "args": ["-y", "@supabase/mcp-server-supabase@latest"],
+        "env_requis": ["SUPABASE_ACCESS_TOKEN"],
+        "description": "Gestion des bases Supabase, SQL, RLS et Edge Functions",
+    },
+    "notion": {
+        "categorie": "saas",
+        "command": "npx",
+        "args": ["-y", "@notionhq/notion-mcp-server"],
+        "env_requis": ["NOTION_TOKEN"],
+        "description": "Lecture et écriture de pages et bases de données Notion",
+    },
+    "slack": {
+        "categorie": "saas",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-slack"],
+        "env_requis": ["SLACK_BOT_TOKEN", "SLACK_TEAM_ID"],
+        "description": "Lecture et envoi de messages dans les canaux Slack",
+    },
+    "stripe": {
+        "categorie": "saas",
+        "command": "npx",
+        "args": ["-y", "@stripe/mcp"],
+        "env_requis": ["STRIPE_SECRET_KEY"],
+        "description": "Clients, abonnements, factures et paiements Stripe",
+    },
+    "google_workspace": {
+        "categorie": "saas",
+        "command": "uvx",
+        "args": ["workspace-mcp"],
+        "env_requis": ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
+        "description": "Connexion Google Workspace (Drive, Docs, Sheets, Gmail, Calendar)",
+    },
+}
 
 # État interne du client MCP
 _BOUCLE_ASYNC: Optional[asyncio.AbstractEventLoop] = None
@@ -30,6 +140,26 @@ _SESSIONS_ACTIVES: Dict[str, Any] = {}          # nom_serveur -> ClientSession
 _STACKS_ACTIVES: Dict[str, Any] = {}            # nom_serveur -> AsyncExitStack
 _STATUTS_SERVEURS: Dict[str, Dict[str, Any]] = {} # nom_serveur -> métadonnées & statut
 _OUTILS_MCP_ENREGISTRES: set = set()
+
+
+def fichier_config_mcp() -> Path:
+    """Retourne le chemin persistant (~/.riot/mcp_servers.json) protégé des mises à jour CLI."""
+    env_cfg = os.environ.get("RIOT_MCP_CONFIG", "").strip()
+    if env_cfg:
+        return Path(env_cfg)
+    return _FICHIER_CONFIG_USER
+
+
+def _resoudre_placeholders_env(valeur: str, extra_env: Optional[Dict[str, str]] = None) -> str:
+    """Remplace ${VAR} par extra_env ou os.environ sans modifier les autres chaînes."""
+    import re
+    s = str(valeur)
+    def _sub(m):
+        nom = m.group(1)
+        if extra_env and nom in extra_env and str(extra_env[nom]).strip():
+            return str(extra_env[nom]).strip()
+        return os.environ.get(nom, m.group(0))
+    return re.sub(r"\$\{([A-Za-z0-9_]+)\}", _sub, s)
 
 
 def _initialiser_boucle_fond():
@@ -49,24 +179,35 @@ def _initialiser_boucle_fond():
 
 
 def charger_config_mcp() -> Dict[str, Any]:
-    """Lit le fichier standard mcp_servers.json."""
-    if not _FICHIER_CONFIG_MCP.exists():
+    """Lit la config MCP utilisateur (~/.riot/mcp_servers.json), avec migration initiale depuis le dépôt."""
+    cible = fichier_config_mcp()
+    if not cible.exists() and cible == _FICHIER_CONFIG_USER and _FICHIER_CONFIG_REPO.exists():
+        try:
+            cible.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(_FICHIER_CONFIG_REPO, cible)
+        except Exception:
+            pass
+    chemin = cible if cible.exists() else _FICHIER_CONFIG_REPO
+    if not chemin.exists():
         return {"mcpServers": {}}
     try:
-        with open(_FICHIER_CONFIG_MCP, "r", encoding="utf-8") as f:
-            return json.load(f)
+        with open(chemin, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {"mcpServers": {}}
     except Exception as e:
-        LOG.exception("Erreur lecture mcp_servers.json : %s", e)
+        LOG.exception("Erreur lecture %s : %s", chemin, e)
         return {"mcpServers": {}}
 
 
 def sauvegarder_config_mcp(config: Dict[str, Any]):
-    """Sauvegarde la configuration dans mcp_servers.json."""
+    """Sauvegarde la configuration dans le fichier persistant utilisateur."""
+    cible = fichier_config_mcp()
     try:
-        with open(_FICHIER_CONFIG_MCP, "w", encoding="utf-8") as f:
+        cible.parent.mkdir(parents=True, exist_ok=True)
+        with open(cible, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
     except Exception as e:
-        LOG.exception("Erreur écriture mcp_servers.json : %s", e)
+        LOG.exception("Erreur écriture %s : %s", cible, e)
 
 
 async def _connecter_serveur_stdio(nom: str, details: dict):
@@ -75,14 +216,17 @@ async def _connecter_serveur_stdio(nom: str, details: dict):
     from mcp.client.stdio import stdio_client
 
     cmd = details.get("command", "")
-    args = details.get("args", [])
     env = details.get("env")
+    env_dict = env if isinstance(env, dict) else {}
+    args = [_resoudre_placeholders_env(a, env_dict) for a in (details.get("args") or [])]
 
     # Résolution binaire Windows si nécessaire
     exe = shutil.which(cmd) or cmd
     env_complet = os.environ.copy()
-    if env and isinstance(env, dict):
-        env_complet.update(env)
+    for k, v in env_dict.items():
+        val = _resoudre_placeholders_env(str(v), env_dict)
+        if val and not (val.startswith("${") and val.endswith("}")):
+            env_complet[str(k)] = val
 
     params = StdioServerParameters(command=exe, args=args, env=env_complet)
     stack = contextlib.AsyncExitStack()
@@ -291,14 +435,115 @@ def statut_mcp() -> Dict[str, Any]:
     }
 
 
-def ajouter_serveur_mcp(nom: str, commande: str, args: Optional[List[str]] = None, description: str = ""):
+def ajouter_serveur_mcp(
+    nom: str,
+    commande: str,
+    args: Optional[List[str]] = None,
+    description: str = "",
+    env: Optional[Dict[str, str]] = None,
+    recharger: bool = True,
+):
     """Ajoute dynamiquement un serveur MCP dans la configuration et tente la connexion."""
     cfg = charger_config_mcp()
-    cfg.setdefault("mcpServers", {})[nom] = {
+    entree: Dict[str, Any] = {
         "command": commande,
         "args": args or [],
         "description": description or f"Serveur MCP {nom}",
-        "enabled": True
+        "enabled": True,
     }
+    if env:
+        entree["env"] = dict(env)
+    cfg.setdefault("mcpServers", {})[nom] = entree
     sauvegarder_config_mcp(cfg)
-    recharger_connexions_mcp()
+    if recharger:
+        recharger_connexions_mcp()
+
+
+def lister_catalogue_connecteurs() -> List[Dict[str, Any]]:
+    """Retourne la liste des connecteurs MCP du catalogue avec leur statut d'installation."""
+    cfg = charger_config_mcp().get("mcpServers", {})
+    out: List[Dict[str, Any]] = []
+    for slug, spec in CATALOGUE_CONNECTEURS_MCP.items():
+        deja = cfg.get(slug)
+        out.append({
+            "slug": slug,
+            "categorie": spec["categorie"],
+            "description": spec["description"],
+            "env_requis": list(spec.get("env_requis") or []),
+            "installe": slug in cfg,
+            "actif": bool(deja and deja.get("enabled", True)),
+        })
+    return out
+
+
+def installer_connecteur_catalogue(
+    slug: str,
+    credential: str = "",
+    activer: bool = True,
+    recharger: bool = True,
+) -> Dict[str, Any]:
+    """Installe un connecteur du catalogue officiel dans ~/.riot/mcp_servers.json."""
+    cle = (slug or "").strip().lower().replace("-", "_")
+    spec = CATALOGUE_CONNECTEURS_MCP.get(cle)
+    if not spec:
+        return {"ok": False, "erreur": f"Connecteur '{slug}' inconnu. Lance `/mcp catalog`."}
+
+    cfg = charger_config_mcp()
+    serveurs = cfg.setdefault("mcpServers", {})
+    env_requis = list(spec.get("env_requis") or [])
+    env_map: Dict[str, str] = {}
+    cred = (credential or "").strip()
+    if env_requis:
+        if cred:
+            env_map[env_requis[0]] = cred
+        else:
+            for var_nom in env_requis:
+                if os.environ.get(var_nom, "").strip():
+                    env_map[var_nom] = os.environ[var_nom].strip()
+
+    entree: Dict[str, Any] = {
+        "command": spec["command"],
+        "args": list(spec["args"]),
+        "description": spec["description"],
+        "enabled": bool(activer),
+    }
+    if env_map:
+        entree["env"] = env_map
+    serveurs[cle] = entree
+    sauvegarder_config_mcp(cfg)
+    if activer and recharger:
+        recharger_connexions_mcp()
+    return {
+        "ok": True,
+        "slug": cle,
+        "actif": bool(activer),
+        "env_requis": env_requis,
+        "env_manquantes": [v for v in env_requis if v not in env_map and not os.environ.get(v)],
+        "config_path": str(fichier_config_mcp()),
+    }
+
+
+def basculer_connecteur_mcp(nom: str, enabled: bool, recharger: bool = True) -> bool:
+    """Active ou désactive un serveur MCP existant dans la configuration utilisateur."""
+    cfg = charger_config_mcp()
+    srv = (cfg.get("mcpServers") or {}).get(nom)
+    if not isinstance(srv, dict):
+        return False
+    srv["enabled"] = bool(enabled)
+    sauvegarder_config_mcp(cfg)
+    if recharger:
+        recharger_connexions_mcp()
+    return True
+
+
+def supprimer_connecteur_mcp(nom: str, recharger: bool = True) -> bool:
+    """Supprime un connecteur MCP de la configuration utilisateur."""
+    cfg = charger_config_mcp()
+    serveurs = cfg.get("mcpServers") or {}
+    if nom not in serveurs:
+        return False
+    del serveurs[nom]
+    sauvegarder_config_mcp(cfg)
+    if recharger:
+        recharger_connexions_mcp()
+    return True

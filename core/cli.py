@@ -374,12 +374,72 @@ def commande_outils():
 
 
 def commande_mcp(arg: str = ""):
-    """Gère l'affichage et le rechargement des connexions Model Context Protocol (MCP)."""
+    """Gère les connecteurs MCP : statut, catalogue (/mcp catalog), ajout (/mcp add) et activation."""
     from core import mcp_client
     p = _pal()
     acc = p["cli_accent"]
-    arg_clean = arg.strip().lower()
+    brut = (arg or "").strip()
+    parties = brut.split(maxsplit=2)
+    action = parties[0].lower() if parties else ""
 
+    if action in ("catalog", "catalogue", "list", "store"):
+        cat = mcp_client.lister_catalogue_connecteurs()
+        table = Table(
+            title=f"🧩 Catalogue des Connecteurs MCP ({len(cat)} prêts à l'emploi)",
+            border_style=acc,
+            box=ROUNDED,
+        )
+        table.add_column("Slug", style=f"bold {p['cli_warn']}")
+        table.add_column("Catégorie", style=p["cli_secondary"])
+        table.add_column("État", style="white")
+        table.add_column("Clé / Env requise", style="dim")
+        table.add_column("Description", style="dim")
+        for c in cat:
+            etat = "[bold green]● Actif[/bold green]" if c["actif"] else ("[yellow]○ Installé[/yellow]" if c["installe"] else "[dim]Disponible[/dim]")
+            envs = ", ".join(c["env_requis"]) if c["env_requis"] else "Aucune (0 clé)"
+            table.add_row(c["slug"], c["categorie"], etat, envs, c["description"][:58])
+        console.print()
+        console.print(table)
+        console.print("[dim]  Installer en 1 ligne : [bold white]/mcp add <slug> [cle_api_ou_url][/bold white] (ex: `/mcp add firecrawl fc-...`)[/dim]\n")
+        return
+
+    if action == "add":
+        if len(parties) < 2:
+            console.print("[yellow]Usage : /mcp add <slug> [cle_api_ou_url][/yellow] (voir `/mcp catalog`)")
+            return
+        slug = parties[1].strip()
+        cred = parties[2].strip() if len(parties) >= 3 else ""
+        with console.status(f"[bold {acc}]Installation et connexion du connecteur '{slug}'...[/bold {acc}]"):
+            res = mcp_client.installer_connecteur_catalogue(slug, credential=cred, activer=True, recharger=True)
+        if not res.get("ok"):
+            console.print(f"[bold red]✕ {res.get('erreur')}[/bold red]\n")
+            return
+        manq = res.get("env_manquantes") or []
+        console.print(f"[bold green]✓ Connecteur '{res['slug']}' enregistré[/bold green] dans [dim]{res['config_path']}[/dim]")
+        if manq:
+            console.print(f"[yellow]⚠ Variable(s) requise(s) non définie(s) : {', '.join(manq)}[/yellow]")
+        console.print()
+        return
+
+    if action in ("enable", "on", "disable", "off"):
+        if len(parties) < 2:
+            console.print(f"[yellow]Usage : /mcp {action} <nom_connecteur>[/yellow]")
+            return
+        nom_c = parties[1].strip()
+        ok_b = mcp_client.basculer_connecteur_mcp(nom_c, enabled=action in ("enable", "on"), recharger=True)
+        console.print(f"[bold green]✓ Connecteur '{nom_c}' mis à jour.[/bold green]\n" if ok_b else f"[red]✕ Connecteur '{nom_c}' introuvable.[/red]\n")
+        return
+
+    if action in ("remove", "rm", "del"):
+        if len(parties) < 2:
+            console.print("[yellow]Usage : /mcp remove <nom_connecteur>[/yellow]")
+            return
+        nom_c = parties[1].strip()
+        ok_d = mcp_client.supprimer_connecteur_mcp(nom_c, recharger=True)
+        console.print(f"[bold green]✓ Connecteur '{nom_c}' supprimé.[/bold green]\n" if ok_d else f"[red]✕ Connecteur '{nom_c}' introuvable.[/red]\n")
+        return
+
+    arg_clean = brut.lower()
     if not mcp_client._STATUTS_SERVEURS or arg_clean in ("reload", "refresh", "r"):
         with console.status(f"[bold {acc}]Connexion aux serveurs MCP...[/bold {acc}]"):
             if arg_clean in ("reload", "refresh", "r"):
@@ -418,7 +478,7 @@ def commande_mcp(arg: str = ""):
 
     console.print()
     console.print(table)
-    console.print("[dim]  Configuration : mcp_servers.json │ Recharger à chaud : [bold white]/mcp reload[/bold white][/dim]\n")
+    console.print(f"[dim]  Config : {mcp_client.fichier_config_mcp()} │ Catalogue : [bold white]/mcp catalog[/bold white] │ Ajout : [bold white]/mcp add <slug> [cle][/bold white] │ Recharger : [bold white]/mcp reload[/bold white][/dim]\n")
 
 
 def commande_aide():
@@ -439,7 +499,7 @@ def commande_aide():
         f"  • [bold {sec}]/ide[/bold {sec}]                  : Ouvre RIOT IDE (éditeur multi-panneaux + terminal + agent)\n"
         f"  • [bold {sec}]/memory [sync|forget][/bold {sec}] : Affiche la mémoire persistante ou force la synchro Cloud\n"
         f"  • [bold {sec}]/update [check][/bold {sec}]       : Vérifie et installe les mises à jour RIOT\n"
-        f"  • [bold {sec}]/mcp [reload][/bold {sec}]         : Gère les connexions aux serveurs MCP externes (mcp_servers.json)\n"
+        f"  • [bold {sec}]/mcp [catalog|add|reload][/bold {sec}] : Gère et installe les connecteurs MCP (Firecrawl, GitHub, Neon...)\n"
         f"  • [bold {sec}]/app[/bold {sec}]                  : Lance RIOT Studio en application bureau & web\n"
         f"  • [bold {sec}]/code[/bold {sec}]                 : Bascule le mode Développeur / Coder mono-agent\n"
         f"  • [bold {sec}]/project <nom>[/bold {sec}]         : Change de projet actif (ex: [italic]/project Trade App[/italic])\n"
@@ -686,7 +746,7 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
             "ouvrir_application", "controler_media", "regler_volume",
             "verrouiller_pc", "eteindre_pc", "capture_screen"
         }
-        schemas = [s for s in tous_schemas if s.get("name") in outils_code_cibles]
+        schemas = [s for s in tous_schemas if (s.get("name") in outils_code_cibles or str(s.get("name", "")).startswith("mcp_"))]
     else:
         schemas = tous_schemas
 

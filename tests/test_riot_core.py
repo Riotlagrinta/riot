@@ -142,16 +142,16 @@ def test_spiral_icons_and_creator_monitoring(monkeypatch, tmp_path):
     assert pc.get("/status/public").status_code == 200
     assert "prompt" not in pc.get("/status/public").text
     assert pc.get("/releases").status_code == 200
-    assert pc.get("/releases/latest").json()["version"] == "0.3.1"
+    assert pc.get("/releases/latest").json()["version"] == "0.3.3"
     assert pc.get("/admin/metrics").status_code == 401
     assert pc.get("/admin/metrics", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
     assert pc.get("/admin/logs", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
     r_rel = pc.post(
         "/admin/releases",
         headers={"X-Admin-Token": "secret_creator_tok"},
-        json={"version": "0.3.2", "titre": "Test Release", "notes": "- Note 1"},
+        json={"version": "0.3.4", "titre": "Test Release", "notes": "- Note 1"},
     )
-    assert r_rel.status_code == 200 and pc.get("/releases/latest").json()["version"] == "0.3.2"
+    assert r_rel.status_code == 200 and pc.get("/releases/latest").json()["version"] == "0.3.4"
 
 
 def test_proxy_chat_completions_usage_and_opaque_model(monkeypatch, tmp_path):
@@ -383,6 +383,87 @@ def test_web_search_ssrf_and_proxy_cascade(monkeypatch):
 
     noms_ide = {s["name"] for s in ide._extraire_outils_ide(lecture_seule=True)}
     assert {"chercher_web", "lire_page_web", "recueillir_veille_web"} <= noms_ide
+
+
+def test_mcp_connectors_catalog_and_firecrawl_gateway(monkeypatch, tmp_path):
+    from core import ide, mcp_client, registre
+    from core.registre import Outil
+    from proxy import server as proxy_srv
+
+    # 1. Config MCP persistante utilisateur (~/.riot/mcp_servers.json) + catalogue complet
+    cfg_tmp = tmp_path / "mcp_servers.json"
+    monkeypatch.setenv("RIOT_MCP_CONFIG", str(cfg_tmp))
+    assert {"fetch", "context7", "firecrawl", "github", "postgres", "neon", "supabase", "notion", "slack", "stripe", "google_workspace"} <= set(mcp_client.CATALOGUE_CONNECTEURS_MCP)
+
+    res_add = mcp_client.installer_connecteur_catalogue("firecrawl", credential="fc_dummy_test", activer=True, recharger=False)
+    assert res_add["ok"] is True and res_add["slug"] == "firecrawl"
+    cfg_lu = mcp_client.charger_config_mcp()
+    assert cfg_lu["mcpServers"]["firecrawl"]["env"]["FIRECRAWL_API_KEY"] == "fc_dummy_test"
+    assert mcp_client.basculer_connecteur_mcp("firecrawl", enabled=False, recharger=False) is True
+    assert mcp_client.charger_config_mcp()["mcpServers"]["firecrawl"]["enabled"] is False
+    assert mcp_client.supprimer_connecteur_mcp("firecrawl", recharger=False) is True
+
+    # 2. Exposition dynamique des outils mcp_* dans IDE
+    registre._REGISTRE["mcp_firecrawl_scrape"] = Outil(
+        fonction=lambda url: url,
+        nom="mcp_firecrawl_scrape",
+        description="Scrape Firecrawl",
+        parametres={"type": "object", "properties": {}},
+        confirmation=False,
+        lent=False,
+        phrase_attente="",
+        annonce=None,
+        mcp_expose=False,
+    )
+    try:
+        noms_ide = {s["name"] for s in ide._extraire_outils_ide(lecture_seule=False)}
+        assert "mcp_firecrawl_scrape" in noms_ide
+    finally:
+        registre._REGISTRE.pop("mcp_firecrawl_scrape", None)
+
+    # 3. Nouveaux connecteurs LLM (DeepSeek, Together, Fireworks) + Firecrawl /v1/web/scrape sur Proxy
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "ds_dummy")
+    monkeypatch.setenv("TOGETHER_API_KEY", "tg_dummy")
+    monkeypatch.setenv("FIREWORKS_API_KEY", "fw_dummy")
+    routes_code = [r["provider"] for r in proxy_srv._routes_pour_profil("riot-code")]
+    assert {"DeepSeek", "Together", "Fireworks"} <= set(routes_code)
+
+    monkeypatch.delenv("RIOT_IDENTITY_DATABASE_URL", raising=False)
+    monkeypatch.setenv("RIOT_PROXY_TOKEN", "tok_fc_test")
+    monkeypatch.setenv("FIRECRAWL_API_KEY", "fc_proxy_dummy")
+
+    class _FakeFirecrawlResp:
+        status_code = 200
+
+        def json(self):
+            return {
+                "data": {
+                    "markdown": "# Doc Firecrawl\nContenu Markdown propre extrait.",
+                    "metadata": {"title": "Doc Firecrawl", "sourceURL": "https://example.com/docs"},
+                }
+            }
+
+    monkeypatch.setattr(proxy_srv.requests, "post", lambda *a, **kw: _FakeFirecrawlResp())
+    import socket as _sock
+    orig_getaddrinfo = _sock.getaddrinfo
+    monkeypatch.setattr(
+        _sock,
+        "getaddrinfo",
+        lambda host, port, *a, **kw: (
+            [(2, 1, 6, "", ("93.184.216.34", 443))] if host == "example.com" else orig_getaddrinfo(host, port, *a, **kw)
+        ),
+    )
+    pc = TestClient(proxy_srv.app)
+    assert pc.post("/v1/web/scrape", headers={"Authorization": "Bearer tok_fc_test"}, json={"url": "http://127.0.0.1:8000"}).status_code == 400
+    r_sc = pc.post(
+        "/v1/web/scrape",
+        headers={"Authorization": "Bearer tok_fc_test"},
+        json={"url": "https://example.com/docs", "max_words": 500},
+    )
+    assert r_sc.status_code == 200, r_sc.text
+    assert r_sc.json()["source"] == "riot-scrape-firecrawl"
+    assert "Contenu Markdown propre extrait" in r_sc.json()["texte"]
+
 
 
 

@@ -185,13 +185,13 @@ def _extraire_outils_ide(lecture_seule: bool = False) -> List[Dict[str, Any]]:
 
     schemas = []
     for o in registre.tous():
-        if o.nom in autorises:
+        if o.nom in autorises or o.nom.startswith("mcp_"):
             schemas.append({
                 "name": o.nom,
                 "description": o.description or o.nom,
                 "input_schema": o.parametres or {"type": "object", "properties": {}},
             })
-    return schemas[:32]
+    return schemas[:48]
 
 
 def _construire_prompt_ide(

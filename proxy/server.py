@@ -255,6 +255,24 @@ def _routes_pour_profil(model_req: str) -> List[Dict[str, str]]:
         "key": os.environ.get("NVIDIA_API_KEY", "").strip(),
         "model": os.environ.get("RIOT_UPSTREAM_NVIDIA_MODEL", "meta/llama-3.3-70b-instruct"),
     }
+    deepseek = {
+        "provider": "DeepSeek",
+        "url": "https://api.deepseek.com/chat/completions",
+        "key": os.environ.get("DEEPSEEK_API_KEY", "").strip(),
+        "model": os.environ.get("RIOT_UPSTREAM_DEEPSEEK_MODEL", "deepseek-reasoner" if "deep" in m else "deepseek-chat"),
+    }
+    together = {
+        "provider": "Together",
+        "url": "https://api.together.xyz/v1/chat/completions",
+        "key": os.environ.get("TOGETHER_API_KEY", "").strip(),
+        "model": os.environ.get("RIOT_UPSTREAM_TOGETHER_MODEL", "meta-llama/Llama-3.3-70B-Instruct-Turbo"),
+    }
+    fireworks = {
+        "provider": "Fireworks",
+        "url": "https://api.fireworks.ai/inference/v1/chat/completions",
+        "key": os.environ.get("FIREWORKS_API_KEY", "").strip(),
+        "model": os.environ.get("RIOT_UPSTREAM_FIREWORKS_MODEL", "accounts/fireworks/models/llama-v3p3-70b-instruct"),
+    }
     custom_base = (os.environ.get("CUSTOM_BASE_URL", "") or os.environ.get("FREELLMAPI_BASE_URL", "")).strip().rstrip("/")
     custom_url = ""
     if custom_base:
@@ -269,13 +287,13 @@ def _routes_pour_profil(model_req: str) -> List[Dict[str, str]]:
     }
 
     if "fast" in m:
-        ordre = [cerebras, groq, gemini, mistral, nvidia, openrouter, custom]
+        ordre = [cerebras, groq, gemini, fireworks, together, mistral, nvidia, deepseek, openrouter, custom]
     elif "code" in m:
-        ordre = [mistral, cerebras, nvidia, groq, gemini, openrouter, custom]
+        ordre = [mistral, deepseek, cerebras, nvidia, fireworks, together, groq, gemini, openrouter, custom]
     elif "deep" in m:
-        ordre = [openrouter, nvidia, cerebras, mistral, gemini, groq, custom]
+        ordre = [deepseek, openrouter, nvidia, together, cerebras, mistral, gemini, groq, custom]
     else:
-        ordre = [mistral, cerebras, groq, gemini, nvidia, openrouter, custom]
+        ordre = [mistral, cerebras, groq, deepseek, gemini, nvidia, together, fireworks, openrouter, custom]
     return [c for c in ordre if c["key"] and c["url"]]
 
 
@@ -332,7 +350,7 @@ def public_releases(limit: int = 20):
 def public_latest_release():
     rel = _STORE.derniere_release()
     if not rel:
-        return {"ok": True, "version": "0.3.1", "release": None}
+        return {"ok": True, "version": "0.3.3", "release": None}
     return {"ok": True, "version": rel["version"], "release": rel}
 
 
@@ -892,6 +910,31 @@ def _executer_recherche_web_cloud(requete: str, max_resultats: int = 5, plan: st
         except Exception:
             pass
 
+    # 2b. Firecrawl Search API
+    fc_key = os.environ.get("FIRECRAWL_API_KEY", "").strip()
+    if fc_key:
+        try:
+            r = requests.post(
+                "https://api.firecrawl.dev/v1/search",
+                headers={"Authorization": f"Bearer {fc_key}", "Content-Type": "application/json"},
+                json={"query": q, "limit": max_res},
+                timeout=14,
+            )
+            if r.status_code == 200:
+                items_fc = (r.json().get("data") or [])[:max_res]
+                results = [
+                    {
+                        "title": str(it.get("title") or "Sans titre"),
+                        "url": str(it.get("url") or ""),
+                        "snippet": str(it.get("description") or it.get("markdown") or "")[:450],
+                    }
+                    for it in items_fc
+                ]
+                if results:
+                    return {"ok": True, "source": "riot-web-firecrawl", "answer": "", "results": results}
+        except Exception:
+            pass
+
     # 3. Brave Search API
     brave_key = os.environ.get("BRAVE_SEARCH_API_KEY", "").strip()
     if brave_key:
@@ -967,3 +1010,67 @@ async def web_search(request: Request):
         raise HTTPException(status_code=400, detail="Paramètre 'query' requis.")
     max_res = int(body.get("max_results") or 5)
     return _executer_recherche_web_cloud(query, max_resultats=max_res, plan=str(identite.get("plan") or "free"))
+
+
+@app.post("/v1/web/scrape")
+async def web_scrape(request: Request):
+    _verifier_acces_detail(request)
+    body = await request.json() or {}
+    url = str(body.get("url") or "").strip()
+    max_words = max(100, min(int(body.get("max_words") or 1200), 4000))
+    from tools.web import _extraire_meta_page, _nettoyer_html_texte, _valider_url_publique
+    ok, val = _valider_url_publique(url)
+    if not ok:
+        raise HTTPException(status_code=400, detail=val)
+
+    fc_key = os.environ.get("FIRECRAWL_API_KEY", "").strip()
+    if fc_key:
+        try:
+            rf = requests.post(
+                "https://api.firecrawl.dev/v1/scrape",
+                headers={"Authorization": f"Bearer {fc_key}", "Content-Type": "application/json"},
+                json={"url": val, "formats": ["markdown"], "onlyMainContent": True},
+                timeout=16,
+            )
+            if rf.status_code == 200:
+                payload = rf.json().get("data") or {}
+                md = str(payload.get("markdown") or "").strip()
+                meta = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+                if md:
+                    mots = md.split()
+                    extrait = " ".join(mots[:max_words]) + (" ... [tronqué]" if len(mots) > max_words else "")
+                    return {
+                        "ok": True,
+                        "url": str(meta.get("sourceURL") or val),
+                        "titre": str(meta.get("title") or val),
+                        "description": str(meta.get("description") or ""),
+                        "texte": extrait,
+                        "nb_mots": min(len(mots), max_words),
+                        "source": "riot-scrape-firecrawl",
+                    }
+        except Exception:
+            pass
+
+    try:
+        rep = requests.get(val, headers={"User-Agent": "RIOT-Engine/1.0"}, timeout=8, allow_redirects=True)
+        rep.raise_for_status()
+        ok_fin, url_fin = _valider_url_publique(rep.url or val)
+        if not ok_fin:
+            raise HTTPException(status_code=400, detail=url_fin)
+        titre, desc = _extraire_meta_page(rep.text or "")
+        texte = _nettoyer_html_texte(rep.text or "")
+        mots = texte.split()
+        extrait = " ".join(mots[:max_words]) + (" ... [tronqué]" if len(mots) > max_words else "")
+        return {
+            "ok": True,
+            "url": url_fin,
+            "titre": titre,
+            "description": desc,
+            "texte": extrait,
+            "nb_mots": min(len(mots), max_words),
+            "source": "riot-scrape-http",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Impossible de lire {val} : {e}")
