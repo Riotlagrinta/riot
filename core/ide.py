@@ -175,7 +175,7 @@ def _extraire_outils_ide(lecture_seule: bool = False) -> List[Dict[str, Any]]:
         "git_status", "git_diff", "git_log", "requete_api_http", "github_repo_info",
         "lister_connecteurs_mcp", "recall", "chercher_recette_dev", "lister_regles",
         "get_system_stats", "lister_images_generees", "capturer_page", "browser_open",
-        "grill-me", "content-strategy",
+        "grill-me", "content-strategy", "anti-ai-slop",
     }
     cibles_ecriture = {
         "ecrire_code", "patcher_code", "supprimer_fichier", "executer_terminal",
@@ -250,6 +250,8 @@ def _construire_prompt_ide(
         f"{regle_mode}\n"
         "Pour toute documentation externe, version recente ou fait incertain, utilise `chercher_web` / `lire_page_web` "
         "au lieu d'inventer et cite tes sources.\n"
+        "Pour tout design UI / landing page / maquette, evite les hooks et cliches visuels IA generiques et "
+        "verifie le rendu avec `anti-ai-slop`.\n"
         "Reponds toujours en francais, de maniere dense, structuree et verifiable."
         f"{ctx_grill}"
         f"{ctx_memoire}"

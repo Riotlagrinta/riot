@@ -95,5 +95,16 @@ L'outil **`content-strategy`** est activé par défaut sur toutes les surfaces (
 
 Exemple : *« Utilise content-strategy pour créer ma stratégie de contenu pour MediGo Togo sur LinkedIn et TikTok »*.
 
-> **Activation par défaut :** `content-strategy`, `grill-me`, `chercher_web`, `lire_page_web`, les outils Git (`git_status`, `git_diff`, `git_log`), `github_repo_info`, `requete_api_http` et les connecteurs MCP 0-clé (`fetch`, `context7`) sont pré-activés par défaut dès le premier lancement.
+> **Activation par défaut :** `content-strategy`, `anti-ai-slop`, `grill-me`, `chercher_web`, `lire_page_web`, les outils Git (`git_status`, `git_diff`, `git_log`), `github_repo_info`, `requete_api_http` et les connecteurs MCP 0-clé (`fetch`, `context7`) sont pré-activés par défaut dès le premier lancement.
+
+---
+
+## 6. Design Sans Clichés `anti-ai-slop` (Activé par défaut)
+
+L'outil **`anti-ai-slop`** audite et nettoie vos maquettes et fichiers HTML/CSS/React pour supprimer le look « généré par IA » :
+
+- Supprime les hooks/slogans creux (*« Propulsé par l'IA »*, *« Révolutionnez… »*, *« Libérez tout le potentiel »*, *« Elevate your… »*).
+- Supprime les badges pilules/emojis clichés dans les Hero (`✨ Nouveau`, `🚀 Propulsé par l'IA`), les halos `blur-3xl` et les titres `bg-clip-text text-transparent`.
+- Signale les dégradés violet/indigo génériques, les grilles SaaS symétriques et fournit des directives artistiques ancrées dans votre projet (avec option `appliquer=True` pour nettoyer un fichier directement).
+
 

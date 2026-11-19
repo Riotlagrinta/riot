@@ -559,6 +559,34 @@ def test_content_strategy_and_default_tools(monkeypatch, tmp_path):
         memoire.reinitialiser_connexion(prev_db)
 
 
+def test_anti_ai_slop_detection_and_cleanup(tmp_path):
+    from core import ide, registre
+    from tools import anti_ai_slop as slop
+
+    if len(registre.tous()) < 20:
+        registre.charger_outils()
+    assert "anti-ai-slop" in registre._PACK_REFLEXES
+    assert "anti-ai-slop" in {s["name"] for s in ide._extraire_outils_ide(lecture_seule=True)}
+
+    page_slop = tmp_path / "landing.html"
+    page_slop.write_text(
+        "<section>\n"
+        "  <div class='blur-3xl'></div>\n"
+        "  <span>🚀 Propulsé par l'IA</span>\n"
+        "  <h1 class='bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent'>Révolutionnez votre gestion</h1>\n"
+        "</section>\n",
+        encoding="utf-8",
+    )
+    rapport = slop.anti_ai_slop(fichier=str(page_slop), sujet="ERP Pharmacie", appliquer=True)
+    assert "Dégradé violet/indigo/rose cliché IA" in rapport
+    assert "Propulsé par l'IA" in rapport
+    nettoye = page_slop.read_text(encoding="utf-8")
+    assert "Propulsé par l'IA" not in nettoye
+    assert "blur-3xl" not in nettoye
+    assert "bg-clip-text" not in nettoye
+
+
+
 
 
 

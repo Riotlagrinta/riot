@@ -116,7 +116,7 @@ _NON_LOCAUX = {
 _PACK_REFLEXES = {
     "heure_et_date", "lancer_minuteur", "meteo", "noter", "notes_du_jour",
     "sortir_idee", "mon_budget", "faire_brief", "remember", "recall", "forget",
-    "chercher_web", "lire_page_web", "grill-me", "content-strategy",
+    "chercher_web", "lire_page_web", "grill-me", "content-strategy", "anti-ai-slop",
     "git_status", "git_diff", "git_log", "requete_api_http", "github_repo_info",
     "lister_connecteurs_mcp", "installer_connecteur_mcp", "basculer_connecteur_mcp",
 }

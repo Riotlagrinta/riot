@@ -187,7 +187,7 @@ def executer_ingenieur(mission: str, dossier_projet: Path, console: Console, pla
         "- Quand tu as fini d'appliquer toutes les modifications, résume brièvement les fichiers modifiés."
         f"{conventions}"
     )
-    outils_engineer = {"lire_code", "patcher_code", "ecrire_code", "chercher_dans_code", "generer_pdf", "generer_excel", "generer_powerpoint", "generer_graphique", "generer_diagramme", "creer_produit_digital", "auditer_schema_sql", "optimiser_requete_postgis", "generer_politiques_rls", "generer_composant_mobile", "scaffolder_app_mobile_expo", "surveiller_marche_crypto", "recueillir_veille_web", "generer_bulletin_veille", "lister_competences", "charger_competence", "lire_reference", "capturer_page", "capturer_frames"}
+    outils_engineer = {"lire_code", "patcher_code", "ecrire_code", "chercher_dans_code", "anti-ai-slop", "content-strategy", "grill-me", "generer_pdf", "generer_excel", "generer_powerpoint", "generer_graphique", "generer_diagramme", "creer_produit_digital", "auditer_schema_sql", "optimiser_requete_postgis", "generer_politiques_rls", "generer_composant_mobile", "scaffolder_app_mobile_expo", "surveiller_marche_crypto", "recueillir_veille_web", "generer_bulletin_veille", "lister_competences", "charger_competence", "lire_reference", "capturer_page", "capturer_frames"}
     t0 = time.time()
     contexte = f"Mission de l'utilisateur : {mission}"
     if plan:
