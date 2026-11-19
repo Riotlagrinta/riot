@@ -30,7 +30,7 @@
       "ide-terminal-panel", "ide-term-cwd", "ide-term-output", "ide-term-form",
       "ide-term-input", "ide-term-clear", "ide-agent-feed", "ide-agent-form",
       "ide-agent-input", "ide-agent-send", "ide-attach-active", "ide-active-file-chip",
-      "ide-review-mode", "ide-pending-count",
+      "ide-review-mode", "ide-grill-me", "ide-pending-count",
       "ide-quickopen-modal", "ide-quickopen-input", "ide-quickopen-list",
       "ide-folder-modal", "ide-folder-close", "ide-folder-cancel", "ide-folder-roots",
       "ide-folder-up", "ide-folder-path", "ide-folder-go", "ide-folder-os",
@@ -363,6 +363,7 @@
       message: prompt,
       mode: state.agentMode,
       review_mode: els["ide-review-mode"].checked,
+      grill_me: !!(els["ide-grill-me"] && els["ide-grill-me"].checked),
       historique: state.history.slice(-8),
       fichier_actif: els["ide-attach-active"].checked && tab ? { chemin: tab.path, contenu: tab.content } : null
     };

@@ -115,7 +115,7 @@ _NON_LOCAUX = {
 # Packs et routage dynamique des outils (optimisation contextuelle & anti-saturation)
 _PACK_REFLEXES = {
     "heure_et_date", "lancer_minuteur", "meteo", "noter", "notes_du_jour",
-    "sortir_idee", "mon_budget", "faire_brief", "remember", "recall", "forget", "chercher_web", "lire_page_web"
+    "sortir_idee", "mon_budget", "faire_brief", "remember", "recall", "forget", "chercher_web", "lire_page_web", "grill-me"
 }
 
 _CATEGORIES_OUTILS = {

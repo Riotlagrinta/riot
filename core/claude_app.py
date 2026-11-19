@@ -3561,7 +3561,7 @@ def monter_routes(app):
 
 
 
-                    "surveiller_marche_crypto", "chercher_web", "lire_page_web", "recueillir_veille_web", "generer_bulletin_veille",
+                    "surveiller_marche_crypto", "chercher_web", "lire_page_web", "recueillir_veille_web", "generer_bulletin_veille", "grill-me",
 
 
 

@@ -490,6 +490,37 @@ def test_native_connectors_and_ide_mcp_routes(monkeypatch, tmp_path):
     assert mcp_client.charger_config_mcp()["mcpServers"]["playwright"]["enabled"] is False
 
 
+def test_grill_me_tool_and_prompt_modes(tmp_path):
+    from core import ide, registre
+    from tools import grill_me as gm
+
+    # 1. Enregistrement de l'outil sous le nom exact 'grill-me' + formatage structuré
+    if len(registre.tous()) < 20:
+        registre.charger_outils()
+    assert registre.get("grill-me") is not None
+
+    out = gm.grill_me(
+        objectif="Creer un dashboard de paiement",
+        questions=[
+            {
+                "question": "Quel moyen de paiement prioriser ?",
+                "options": ["T-Money / Flooz", "Stripe / Carte"],
+                "recommandation": "T-Money / Flooz",
+            }
+        ],
+        pourquoi="Eviter de coder le mauvais fournisseur.",
+    )
+    assert "T-Money / Flooz *(Recommandé)*" in out
+    assert "INSTRUCTION INTERNE" in out
+
+    # 2. Exposition IDE + injection MODE GRILL-ME ACTIF dans le prompt
+    noms_ide = {s["name"] for s in ide._extraire_outils_ide(lecture_seule=True)}
+    assert "grill-me" in noms_ide
+    prompt_actif = ide._construire_prompt_ide("code", tmp_path, None, message="Cree un ERP", grill_me=True)
+    assert "MODE GRILL-ME ACTIF" in prompt_actif
+
+
+
 
 
 

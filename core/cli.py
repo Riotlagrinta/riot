@@ -91,6 +91,7 @@ _COMMANDES_INTERNES = [
     "/pc", "/status", "/system",
     "/remote", "/mobile",
     "/tokens", "/cost",
+    "/grill-me",
     "/memory", "/mem", "/memoire",
     "/recettes",
     "/clear", "/cls",
@@ -102,6 +103,7 @@ _COMMANDES_INTERNES = [
 _SESSION_CTX = {
     "projet_actif": None,
     "mode_code": True,
+    "grill_me": False,
     "tokens_prompt": 0,
     "tokens_reponse": 0,
 }
@@ -497,6 +499,7 @@ def commande_aide():
         f"[bold {acc}]Commandes Rapides & Design :[/bold {acc}]\n"
         f"  • [bold {sec}]/theme [nom][/bold {sec}]         : Change le design (obsidian, paper, tactical)\n"
         f"  • [bold {sec}]/ide[/bold {sec}]                  : Ouvre RIOT IDE (éditeur multi-panneaux + terminal + agent)\n"
+        f"  • [bold {sec}]/grill-me [on|off|sujet][/bold {sec}] : Pose des questions ciblées avant d'agir (cadrage auto)\n"
         f"  • [bold {sec}]/memory [sync|forget][/bold {sec}] : Affiche la mémoire persistante ou force la synchro Cloud\n"
         f"  • [bold {sec}]/update [check][/bold {sec}]       : Vérifie et installe les mises à jour RIOT\n"
         f"  • [bold {sec}]/mcp [catalog|add|reload][/bold {sec}] : Gère et installe les connecteurs MCP (Firecrawl, GitHub, Neon...)\n"
@@ -709,6 +712,11 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
     recettes_ctx = memoire.recup_recettes_pertinentes(phrase)
     if recettes_ctx:
         systeme += f"\n{recettes_ctx}"
+    try:
+        from tools.grill_me import consigne_grill_me
+        systeme += consigne_grill_me(bool(_SESSION_CTX.get("grill_me", False)))
+    except Exception:
+        pass
 
     # Auto-compaction si l'historique devient trop long (Pilier 5)
     historique_conversation[:] = _compacter_historique(historique_conversation, max_messages=12)
@@ -726,6 +734,7 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
             "explorer_projet", "lire_code", "ecrire_code", "patcher_code",
             "chercher_dans_code", "executer_test_ou_commande", "executer_terminal",
             "inspecter_port", "lister_dossier", "supprimer_fichier", "ouvrir_terminal_interactif",
+            "grill-me",
             "git_status", "git_diff", "git_log", "requete_api_http", "github_repo_info",
             "lister_connecteurs_mcp", "installer_connecteur_mcp", "basculer_connecteur_mcp",
             "remember", "recall", "forget", "apprendre_regle", "lister_regles",
@@ -959,6 +968,28 @@ def lancer_terminal_interactif():
                 parties = texte.split(maxsplit=1)
                 arg_mem = parties[1] if len(parties) > 1 else ""
                 commande_memory(arg_mem)
+                continue
+            elif cmd.startswith("/grill-me") or cmd.startswith("/grill"):
+                parties = texte.split(maxsplit=1)
+                arg_gm = parties[1].strip() if len(parties) > 1 else ""
+                low_gm = arg_gm.lower()
+                if not arg_gm:
+                    _SESSION_CTX["grill_me"] = not _SESSION_CTX.get("grill_me", False)
+                    etat_gm = "ACTIVÉ (questions avant action sur chaque nouveau prompt)" if _SESSION_CTX["grill_me"] else "DÉSACTIVÉ"
+                    console.print(f"[bold green]✓ Mode grill-me {etat_gm}.[/bold green]\n")
+                elif low_gm in ("on", "true", "1", "activer"):
+                    _SESSION_CTX["grill_me"] = True
+                    console.print("[bold green]✓ Mode grill-me ACTIVÉ : RIOT posera des questions de clarification avant d'agir.[/bold green]\n")
+                elif low_gm in ("off", "false", "0", "desactiver"):
+                    _SESSION_CTX["grill_me"] = False
+                    console.print("[bold yellow]✓ Mode grill-me DÉSACTIVÉ.[/bold yellow]\n")
+                else:
+                    prev_gm = _SESSION_CTX.get("grill_me", False)
+                    _SESSION_CTX["grill_me"] = True
+                    try:
+                        executer_ordre(arg_gm, historique_conv)
+                    finally:
+                        _SESSION_CTX["grill_me"] = prev_gm
                 continue
             elif cmd in ("/ide", "/editeur"):
                 from core import serveur, claude_app

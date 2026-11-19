@@ -175,6 +175,7 @@ def _extraire_outils_ide(lecture_seule: bool = False) -> List[Dict[str, Any]]:
         "git_status", "git_diff", "git_log", "requete_api_http", "github_repo_info",
         "lister_connecteurs_mcp", "recall", "chercher_recette_dev", "lister_regles",
         "get_system_stats", "lister_images_generees", "capturer_page", "browser_open",
+        "grill-me",
     }
     cibles_ecriture = {
         "ecrire_code", "patcher_code", "supprimer_fichier", "executer_terminal",
@@ -200,6 +201,7 @@ def _construire_prompt_ide(
     projet: Path,
     fichier_actif: Optional[Dict[str, str]],
     message: str = "",
+    grill_me: bool = False,
 ) -> str:
     regle_mode = {
         "plan": (
@@ -236,6 +238,12 @@ def _construire_prompt_ide(
     except Exception:
         ctx_memoire = ""
 
+    try:
+        from tools.grill_me import consigne_grill_me
+        ctx_grill = consigne_grill_me(bool(grill_me or mode == "grill-me"))
+    except Exception:
+        ctx_grill = ""
+
     return (
         "Tu es RIOT IDE Copilot, un ingenieur logiciel senior travaillant directement dans l'espace de travail "
         f"`{projet}` (branche git : `{_recup_branche_git(projet) or '-'}`).\n"
@@ -243,6 +251,7 @@ def _construire_prompt_ide(
         "Pour toute documentation externe, version recente ou fait incertain, utilise `chercher_web` / `lire_page_web` "
         "au lieu d'inventer et cite tes sources.\n"
         "Reponds toujours en francais, de maniere dense, structuree et verifiable."
+        f"{ctx_grill}"
         f"{ctx_memoire}"
         f"{ctx_fichier}"
     )
@@ -665,6 +674,7 @@ def monter_routes(app) -> None:
         message = str(body.get("message", "")).strip()
         mode = str(body.get("mode", "code")).lower()
         review_mode = bool(body.get("review_mode", True))
+        grill_me = bool(body.get("grill_me", False)) or mode == "grill-me" or message.lower().startswith("/grill-me")
         fichier_actif = body.get("fichier_actif") if isinstance(body.get("fichier_actif"), dict) else None
         historique_client = body.get("historique") if isinstance(body.get("historique"), list) else []
 
@@ -680,7 +690,7 @@ def monter_routes(app) -> None:
 
         def _worker():
             try:
-                systeme = _construire_prompt_ide(mode, projet, fichier_actif, message=message)
+                systeme = _construire_prompt_ide(mode, projet, fichier_actif, message=message, grill_me=grill_me)
                 if mode == "ask":
                     outils_schemas = []
                 elif mode == "plan":
