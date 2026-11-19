@@ -520,6 +520,46 @@ def test_grill_me_tool_and_prompt_modes(tmp_path):
     assert "MODE GRILL-ME ACTIF" in prompt_actif
 
 
+def test_content_strategy_and_default_tools(monkeypatch, tmp_path):
+    from core import ide, memoire, mcp_client, registre
+    from tools import content_strategy as cs
+
+    # 1. Activation par defaut dans _PACK_REFLEXES, IDE et MCP presets
+    if len(registre.tous()) < 20:
+        registre.charger_outils()
+    obligatoires = {"content-strategy", "grill-me", "chercher_web", "lire_page_web", "git_status", "github_repo_info"}
+    assert obligatoires <= registre._PACK_REFLEXES
+    noms_ide = {s["name"] for s in ide._extraire_outils_ide(lecture_seule=True)}
+    assert obligatoires <= noms_ide
+
+    cfg_tmp = tmp_path / "fresh_mcp.json"
+    monkeypatch.setenv("RIOT_MCP_CONFIG", str(cfg_tmp))
+    monkeypatch.setattr(mcp_client, "_FICHIER_CONFIG_REPO", tmp_path / "nonexistent_repo_mcp.json")
+    cfg = mcp_client.charger_config_mcp()
+    assert "fetch" in cfg["mcpServers"] and "context7" in cfg["mcpServers"]
+
+    # 2. Execution reelle de content-strategy (avec sauvegarde isolee dans tmp_path)
+    prev_db = memoire.DB_PATH
+    try:
+        memoire.reinitialiser_connexion(tmp_path / "cs_mem.db")
+        monkeypatch.setenv("RIOT_MEMORY_SYNC", "0")
+        monkeypatch.setattr(cs, "_DOSSIER_SORTIE", tmp_path / "out_docs")
+        rapport = cs.content_strategy(
+            marque_ou_projet="MediGo Togo",
+            objectif="Acquerir 1000 patients actifs",
+            audience_cible="Patients et pharmacies de garde a Lome",
+            canaux="TikTok, WhatsApp, LinkedIn",
+            cadence_semaine=5,
+        )
+        assert "Stratégie de Contenu — MediGo Togo" in rapport
+        assert "Piliers Éditoriaux" in rapport
+        assert (tmp_path / "out_docs" / "strategie_contenu_medigo_togo.md").exists()
+        assert "content_strategy_medigo_togo" in memoire.charger()["projects"]
+    finally:
+        memoire.reinitialiser_connexion(prev_db)
+
+
+
 
 
 

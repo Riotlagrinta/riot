@@ -3255,7 +3255,7 @@ def monter_routes(app):
 
 
 
-                    "scaffolder_app_mobile_expo", "surveiller_marche_crypto", "chercher_web", "lire_page_web", "recueillir_veille_web",
+                    "scaffolder_app_mobile_expo", "surveiller_marche_crypto", "chercher_web", "lire_page_web", "recueillir_veille_web", "content-strategy", "grill-me",
 
 
 
@@ -3384,7 +3384,7 @@ def monter_routes(app):
 
 
 
-                    "scaffolder_app_mobile_expo", "surveiller_marche_crypto", "chercher_web", "lire_page_web", "recueillir_veille_web",
+                    "scaffolder_app_mobile_expo", "surveiller_marche_crypto", "chercher_web", "lire_page_web", "recueillir_veille_web", "content-strategy", "grill-me",
 
 
 
@@ -3561,7 +3561,7 @@ def monter_routes(app):
 
 
 
-                    "surveiller_marche_crypto", "chercher_web", "lire_page_web", "recueillir_veille_web", "generer_bulletin_veille", "grill-me",
+                    "surveiller_marche_crypto", "chercher_web", "lire_page_web", "recueillir_veille_web", "generer_bulletin_veille", "grill-me", "content-strategy",
 
 
 

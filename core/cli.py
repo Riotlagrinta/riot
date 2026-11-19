@@ -734,7 +734,7 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
             "explorer_projet", "lire_code", "ecrire_code", "patcher_code",
             "chercher_dans_code", "executer_test_ou_commande", "executer_terminal",
             "inspecter_port", "lister_dossier", "supprimer_fichier", "ouvrir_terminal_interactif",
-            "grill-me",
+            "grill-me", "content-strategy",
             "git_status", "git_diff", "git_log", "requete_api_http", "github_repo_info",
             "lister_connecteurs_mcp", "installer_connecteur_mcp", "basculer_connecteur_mcp",
             "remember", "recall", "forget", "apprendre_regle", "lister_regles",

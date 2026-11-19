@@ -175,7 +175,7 @@ def _extraire_outils_ide(lecture_seule: bool = False) -> List[Dict[str, Any]]:
         "git_status", "git_diff", "git_log", "requete_api_http", "github_repo_info",
         "lister_connecteurs_mcp", "recall", "chercher_recette_dev", "lister_regles",
         "get_system_stats", "lister_images_generees", "capturer_page", "browser_open",
-        "grill-me",
+        "grill-me", "content-strategy",
     }
     cibles_ecriture = {
         "ecrire_code", "patcher_code", "supprimer_fichier", "executer_terminal",
@@ -193,7 +193,7 @@ def _extraire_outils_ide(lecture_seule: bool = False) -> List[Dict[str, Any]]:
                 "description": o.description or o.nom,
                 "input_schema": o.parametres or {"type": "object", "properties": {}},
             })
-    return schemas[:48]
+    return schemas[:64]
 
 
 def _construire_prompt_ide(

@@ -81,3 +81,19 @@ L'outil **`grill-me`** permet à RIOT de vous poser **1 à 4 questions ciblées*
   - `/grill-me <sujet>` : lance un cadrage immédiat sur un sujet précis (ex: `/grill-me Créer une API de paiement T-Money`).
 - **Dans RIOT IDE** : cochez **`Clarifier avant d'agir (grill-me)`** sous les modes `Code / Plan / Swarm / Ask`, ou préfixez votre message par `/grill-me`.
 - **En chat libre / Studio** : l'agent appelle automatiquement `grill-me` dès qu'une demande présente de vraies ambiguïtés.
+
+---
+
+## 5. Stratégie Éditoriale `content-strategy` (Activé par défaut)
+
+L'outil **`content-strategy`** est activé par défaut sur toutes les surfaces (CLI, IDE, Studio) pour concevoir une stratégie de contenu complète et l'exporter en Markdown dans `output_documents/strategie_contenu_<projet>.md` :
+
+- **Positionnement & Ton** adaptés à votre cible et votre objectif.
+- **4 Piliers éditoriaux (40 / 30 / 20 / 10)** : Autorité/Preuve, Éducatif, Build in Public, Conversion.
+- **Matrice Canaux & Formats** (LinkedIn, TikTok, Instagram, YouTube, WhatsApp, X, Blog).
+- **Calendrier 4 semaines** + **8 Hooks d'accroche** + **KPIs hebdomadaires**.
+
+Exemple : *« Utilise content-strategy pour créer ma stratégie de contenu pour MediGo Togo sur LinkedIn et TikTok »*.
+
+> **Activation par défaut :** `content-strategy`, `grill-me`, `chercher_web`, `lire_page_web`, les outils Git (`git_status`, `git_diff`, `git_log`), `github_repo_info`, `requete_api_http` et les connecteurs MCP 0-clé (`fetch`, `context7`) sont pré-activés par défaut dès le premier lancement.
+

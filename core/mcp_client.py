@@ -178,25 +178,62 @@ def _initialiser_boucle_fond():
     _THREAD_FOND.start()
 
 
+def _presets_defaut_mcp() -> Dict[str, Any]:
+    """Configuration MCP par défaut activée automatiquement au premier démarrage (connecteurs 0-clé)."""
+    return {
+        "mcpServers": {
+            "fetch": {
+                "command": "uvx",
+                "args": ["mcp-server-fetch"],
+                "description": CATALOGUE_CONNECTEURS_MCP["fetch"]["description"],
+                "enabled": bool(shutil.which("uvx")),
+            },
+            "context7": {
+                "command": "npx",
+                "args": ["-y", "@upstash/context7-mcp"],
+                "description": CATALOGUE_CONNECTEURS_MCP["context7"]["description"],
+                "enabled": bool(shutil.which("npx")),
+            },
+            "playwright": {
+                "command": "npx",
+                "args": ["-y", "@playwright/mcp@latest"],
+                "description": CATALOGUE_CONNECTEURS_MCP["playwright"]["description"],
+                "enabled": False,
+            },
+            "firecrawl": {
+                "command": "npx",
+                "args": ["-y", "firecrawl-mcp"],
+                "description": CATALOGUE_CONNECTEURS_MCP["firecrawl"]["description"],
+                "enabled": False,
+            },
+        }
+    }
+
+
 def charger_config_mcp() -> Dict[str, Any]:
-    """Lit la config MCP utilisateur (~/.riot/mcp_servers.json), avec migration initiale depuis le dépôt."""
+    """Lit la config MCP utilisateur (~/.riot/mcp_servers.json), ou l'initialise avec les connecteurs par défaut."""
     cible = fichier_config_mcp()
-    if not cible.exists() and cible == _FICHIER_CONFIG_USER and _FICHIER_CONFIG_REPO.exists():
-        try:
-            cible.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(_FICHIER_CONFIG_REPO, cible)
-        except Exception:
-            pass
+    if not cible.exists() and cible == _FICHIER_CONFIG_USER:
+        if _FICHIER_CONFIG_REPO.exists():
+            try:
+                cible.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(_FICHIER_CONFIG_REPO, cible)
+            except Exception:
+                pass
+        else:
+            defaut = _presets_defaut_mcp()
+            sauvegarder_config_mcp(defaut)
+            return defaut
     chemin = cible if cible.exists() else _FICHIER_CONFIG_REPO
     if not chemin.exists():
-        return {"mcpServers": {}}
+        return _presets_defaut_mcp()
     try:
         with open(chemin, "r", encoding="utf-8") as f:
             data = json.load(f)
-            return data if isinstance(data, dict) else {"mcpServers": {}}
+            return data if isinstance(data, dict) else _presets_defaut_mcp()
     except Exception as e:
         LOG.exception("Erreur lecture %s : %s", chemin, e)
-        return {"mcpServers": {}}
+        return _presets_defaut_mcp()
 
 
 def sauvegarder_config_mcp(config: Dict[str, Any]):

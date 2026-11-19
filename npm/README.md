@@ -17,7 +17,8 @@ riot
 - `/memory [sync|forget <sujet>]` : **Mémoire persistante hybride** (`~/.riot/riot_memory.db` SQLite FTS5 + synchronisation Cloud Neon multi-postes + auto-extraction silencieuse).
 - `/mcp [catalog|add <slug> [cle]|reload]` : **Catalogue de 15 connecteurs MCP** prêts en 1 ligne (`context7`, `playwright`, `firecrawl`, `github`, `supabase`, `neon`, `postgres`, `notion`, `slack`, `stripe`...).
 - `/grill-me [on|off|<sujet>]` : **Cadrage actif** — pose 1 à 4 questions ciblées avec recommandations avant d'agir.
-- **Accès Internet anti-hallucination** : `chercher_web`, `lire_page_web` (citations URLs vérifiables, Firecrawl / Perplexity / DuckDuckGo) + outils natifs Git (`git_status`, `git_diff`, `git_log`), GitHub & HTTP REST.
+- **Outil `content-strategy` (activé par défaut)** : génère une stratégie éditoriale complète (piliers, matrice canaux, calendrier 4 semaines, hooks & KPIs) exportée en Markdown.
+- **Accès Internet anti-hallucination (activé par défaut)** : `chercher_web`, `lire_page_web` (citations URLs vérifiables, Firecrawl / Perplexity / DuckDuckGo) + outils natifs Git (`git_status`, `git_diff`, `git_log`), GitHub & HTTP REST.
 - `riot /theme [obsidian|paper|tactical]` : Bascule entre les 3 thèmes visuels (`Obsidian & Ambre`, `Encre & Émeraude`, `Tactical Ops`) sur CLI, IDE, Studio et Mobile.
 - `/model custom` : Branche n'importe quelle passerelle compatible OpenAI (FreeLLMAPI, LiteLLM, LM Studio, DeepSeek) en plus de Groq, Mistral, Gemini, OpenRouter, Claude et Ollama.
 
