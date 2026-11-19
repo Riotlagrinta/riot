@@ -68,9 +68,13 @@ Inspiré des standards d'ingénierie d'Anthropic et DeepMind, le coordinateur or
 - Interface Obsidian & Néon Cyan pour smartphone.
 - Télémétrie push continue (CPU, RAM, Disque, Réseau), reconnaissance vocale Web Speech API, terminal interactif et tuteur RAG de cours (`etude/`).
 
-### 3. Terminal Cyberpunk CLI
-- Lancement : `riot` ou `python riot.py`
-- Raccourcis directs : `riot /trade BTCUSDT`, `riot /raw`, `riot /swarm`.
+### 3. Terminal Cyberpunk CLI & RIOT IDE (`riot --ide`)
+- Lancement CLI : `riot` ou `python riot.py` — Lancement IDE : `riot --ide` ou `/ide`.
+- **Mémoire Hybride & Auto-extraction** : SQLite FTS5 (`~/.riot/riot_memory.db`) synchronisé sur Neon PostgreSQL (`/memory`, `/memory sync`, `/memory forget <sujet>`).
+- **Accès Internet Anti-Hallucination** : `chercher_web` + `lire_page_web` avec sources vérifiées (Perplexity, Tavily, Firecrawl, Brave, DuckDuckGo, Wikipedia).
+- **15 Connecteurs MCP & Outils natifs** : `/mcp catalog`, `/mcp add <slug>` (`firecrawl`, `playwright`, `context7`, `github`, `neon`, `supabase`, `notion`, `stripe`...) + bouton `🔌 MCP` dans l'IDE + outils Git (`git_status`, `git_diff`, `git_log`), GitHub & API HTTP sécurisée.
+- **Mode Cadrage `grill-me`** : `/grill-me on|off|<sujet>` ou case `Clarifier avant d'agir (grill-me)` dans l'IDE.
+- Guide détaillé : [docs/connecteurs_et_outils.md](docs/connecteurs_et_outils.md).
 
 ---
 

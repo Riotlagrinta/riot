@@ -9,11 +9,15 @@ npm install -g @riotlagrinta/riot
 riot
 ```
 
-## Modes principaux
+## Modes & Commandes principales
 
 - `riot` : Terminal interactif multi-agents (`/swarm`, `/architect`, `/engineer`, `/test`, `/review`, `/trade`).
-- `riot --ide` *(ou `/ide`)* : **RIOT IDE** multi-panneaux (explorateur Git, CodeMirror, revue de diff Accepter/Rejeter avant écriture, terminal intégré, palette `Ctrl+P`, agent copilote).
+- `riot --ide` *(ou `/ide`)* : **RIOT IDE** multi-panneaux (explorateur Git, CodeMirror, revue de diff Accepter/Rejeter avant écriture, panneau `🔌 MCP`, mode `grill-me`, terminal intégré, palette `Ctrl+P`).
 - `riot --app` *(ou `/studio`)* : **RIOT Studio** (interface web & application bureau + génération de maquettes/images).
+- `/memory [sync|forget <sujet>]` : **Mémoire persistante hybride** (`~/.riot/riot_memory.db` SQLite FTS5 + synchronisation Cloud Neon multi-postes + auto-extraction silencieuse).
+- `/mcp [catalog|add <slug> [cle]|reload]` : **Catalogue de 15 connecteurs MCP** prêts en 1 ligne (`context7`, `playwright`, `firecrawl`, `github`, `supabase`, `neon`, `postgres`, `notion`, `slack`, `stripe`...).
+- `/grill-me [on|off|<sujet>]` : **Cadrage actif** — pose 1 à 4 questions ciblées avec recommandations avant d'agir.
+- **Accès Internet anti-hallucination** : `chercher_web`, `lire_page_web` (citations URLs vérifiables, Firecrawl / Perplexity / DuckDuckGo) + outils natifs Git (`git_status`, `git_diff`, `git_log`), GitHub & HTTP REST.
 - `riot /theme [obsidian|paper|tactical]` : Bascule entre les 3 thèmes visuels (`Obsidian & Ambre`, `Encre & Émeraude`, `Tactical Ops`) sur CLI, IDE, Studio et Mobile.
 - `/model custom` : Branche n'importe quelle passerelle compatible OpenAI (FreeLLMAPI, LiteLLM, LM Studio, DeepSeek) en plus de Groq, Mistral, Gemini, OpenRouter, Claude et Ollama.
 
