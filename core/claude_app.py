@@ -2675,7 +2675,7 @@ def monter_routes(app):
 
 
 
-                    schemas = [s for s in registre.schemas_api() if s.get("name") in outils]
+                    schemas = [s for s in registre.schemas_api() if (s.get("name") in outils or str(s.get("name", "")).startswith("mcp_"))]
 
 
 

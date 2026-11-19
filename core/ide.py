@@ -172,14 +172,15 @@ def _extraire_outils_ide(lecture_seule: bool = False) -> List[Dict[str, Any]]:
     cibles_lecture = {
         "explorer_projet", "lire_code", "chercher_dans_code", "lister_dossier",
         "chercher_fichiers", "chercher_web", "lire_page_web", "recueillir_veille_web",
-        "recall", "chercher_recette_dev", "lister_regles", "get_system_stats",
-        "lister_images_generees",
+        "git_status", "git_diff", "git_log", "requete_api_http", "github_repo_info",
+        "lister_connecteurs_mcp", "recall", "chercher_recette_dev", "lister_regles",
+        "get_system_stats", "lister_images_generees", "capturer_page", "browser_open",
     }
     cibles_ecriture = {
         "ecrire_code", "patcher_code", "supprimer_fichier", "executer_terminal",
         "executer_test_ou_commande", "generer_image", "remember", "forget",
-        "apprendre_regle", "enregistrer_recette_dev", "generer_diagramme",
-        "generer_graphique",
+        "apprendre_regle", "enregistrer_recette_dev", "installer_connecteur_mcp",
+        "basculer_connecteur_mcp", "generer_diagramme", "generer_graphique",
     }
     autorises = cibles_lecture if lecture_seule else (cibles_lecture | cibles_ecriture)
 
@@ -856,3 +857,60 @@ def monter_routes(app) -> None:
                 except Exception:
                     continue
         return {"ok": True, "chemins": liste}
+
+    @app.get("/api/ide/mcp")
+    def api_ide_mcp_list(request: Request):
+        if (r := garde(request)):
+            return r
+        from core import mcp_client
+        return {
+            "ok": True,
+            "catalogue": mcp_client.lister_catalogue_connecteurs(),
+            "statut": mcp_client.statut_mcp(),
+            "config_path": str(mcp_client.fichier_config_mcp()),
+        }
+
+    @app.post("/api/ide/mcp/add")
+    async def api_ide_mcp_add(request: Request):
+        if (r := garde(request)):
+            return r
+        from core import mcp_client
+        body = await request.json() or {}
+        slug = str(body.get("slug") or "").strip()
+        credential = str(body.get("credential") or "").strip()
+        recharger = bool(body.get("recharger", True))
+        res = mcp_client.installer_connecteur_catalogue(slug, credential=credential, activer=True, recharger=recharger)
+        code = 200 if res.get("ok") else 400
+        return JSONResponse(res, status_code=code)
+
+    @app.post("/api/ide/mcp/toggle")
+    async def api_ide_mcp_toggle(request: Request):
+        if (r := garde(request)):
+            return r
+        from core import mcp_client
+        body = await request.json() or {}
+        nom = str(body.get("nom") or "").strip()
+        enabled = bool(body.get("enabled", True))
+        recharger = bool(body.get("recharger", True))
+        ok = mcp_client.basculer_connecteur_mcp(nom, enabled=enabled, recharger=recharger)
+        if not ok:
+            return JSONResponse({"ok": False, "erreur": f"Connecteur '{nom}' introuvable."}, status_code=404)
+        return {"ok": True, "nom": nom, "enabled": enabled}
+
+    @app.post("/api/ide/mcp/reload")
+    def api_ide_mcp_reload(request: Request):
+        if (r := garde(request)):
+            return r
+        from core import mcp_client
+        ok = mcp_client.recharger_connexions_mcp()
+        return {"ok": bool(ok), "statut": mcp_client.statut_mcp()}
+
+    @app.delete("/api/ide/mcp/{nom}")
+    def api_ide_mcp_delete(request: Request, nom: str):
+        if (r := garde(request)):
+            return r
+        from core import mcp_client
+        ok = mcp_client.supprimer_connecteur_mcp(nom.strip(), recharger=True)
+        if not ok:
+            return JSONResponse({"ok": False, "erreur": f"Connecteur '{nom}' introuvable."}, status_code=404)
+        return {"ok": True, "nom": nom}

@@ -39,6 +39,9 @@
     </div>
 
     <div class="ide-topbar-right">
+      <button id="ide-btn-mcp" type="button" class="ide-pill ide-pill-btn" title="Connecteurs MCP (Firecrawl, GitHub, Context7, Supabase...)">
+        🔌 MCP
+      </button>
       <button id="ide-btn-model" type="button" class="ide-pill ide-pill-btn" title="Changer de modèle / FreeLLMAPI">
         <span class="ide-dot-live"></span>
         <span id="ide-model-label">Chargement...</span>
@@ -223,6 +226,21 @@
         <button type="button" id="ide-folder-cancel" class="ide-btn-sm">Annuler</button>
         <button type="button" id="ide-folder-open" class="ide-btn-sm ide-btn-accent">Ouvrir ce dossier</button>
       </div>
+    </div>
+  </div>
+
+  <!-- MODAL CONNECTEURS MCP -->
+  <div id="ide-mcp-modal" class="ide-modal hidden">
+    <div class="ide-modal-card" style="width:min(680px,95vw);max-height:85vh;display:flex;flex-direction:column;gap:10px;">
+      <div class="ide-modal-head">
+        <h3>🔌 Connecteurs &amp; Serveurs MCP</h3>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button type="button" id="ide-mcp-reload" class="ide-btn-sm">↻ Recharger</button>
+          <button type="button" id="ide-mcp-close" class="ide-icon-btn">✕</button>
+        </div>
+      </div>
+      <div id="ide-mcp-summary" class="ide-hint">Chargement des connecteurs...</div>
+      <div id="ide-mcp-list" class="ide-folder-list" style="max-height:52vh;overflow:auto;"></div>
     </div>
   </div>
 

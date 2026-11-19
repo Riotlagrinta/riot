@@ -465,6 +465,32 @@ def test_mcp_connectors_catalog_and_firecrawl_gateway(monkeypatch, tmp_path):
     assert "Contenu Markdown propre extrait" in r_sc.json()["texte"]
 
 
+def test_native_connectors_and_ide_mcp_routes(monkeypatch, tmp_path):
+    from core import mcp_client, serveur
+    from tools import connecteurs
+
+    # 1. Connecteurs natifs Git & protection SSRF sur requete_api_http
+    monkeypatch.setenv("RIOT_MCP_CONFIG", str(tmp_path / "mcp_ide.json"))
+    st_git = connecteurs.git_status()
+    assert isinstance(st_git, str) and len(st_git) > 0
+    assert "[ERREUR SECURITE]" in connecteurs.requete_api_http("http://127.0.0.1:8790/ide")
+    assert "playwright" in connecteurs.lister_connecteurs_mcp()
+
+    # 2. Routes /api/ide/mcp* en local + installation Playwright (0 cle) sans lancer npx
+    client = TestClient(serveur.app(), base_url="http://127.0.0.1:8790", client=("127.0.0.1", 50000))
+    r_list = client.get("/api/ide/mcp")
+    assert r_list.status_code == 200 and r_list.json()["ok"] is True
+
+    r_add = client.post("/api/ide/mcp/add", json={"slug": "playwright", "recharger": False})
+    assert r_add.status_code == 200 and r_add.json()["slug"] == "playwright"
+    assert mcp_client.charger_config_mcp()["mcpServers"]["playwright"]["enabled"] is True
+
+    r_tog = client.post("/api/ide/mcp/toggle", json={"nom": "playwright", "enabled": False, "recharger": False})
+    assert r_tog.status_code == 200 and r_tog.json()["enabled"] is False
+    assert mcp_client.charger_config_mcp()["mcpServers"]["playwright"]["enabled"] is False
+
+
+
 
 
 

@@ -220,8 +220,35 @@ async def _connecter_serveur_stdio(nom: str, details: dict):
     env_dict = env if isinstance(env, dict) else {}
     args = [_resoudre_placeholders_env(a, env_dict) for a in (details.get("args") or [])]
 
-    # Résolution binaire Windows si nécessaire
-    exe = shutil.which(cmd) or cmd
+    # Pré-vérification binaire et variables non résolues
+    exe = shutil.which(cmd)
+    if not exe:
+        _STATUTS_SERVEURS[nom] = {
+            "statut": "erreur",
+            "transport": "stdio",
+            "commande": f"{cmd} {' '.join(args)}",
+            "description": details.get("description", ""),
+            "outils_count": 0,
+            "outils": [],
+            "erreur": f"Binaire '{cmd}' introuvable sur cette machine.",
+            "connecte_a": None,
+        }
+        return
+
+    non_resolus = [a for a in args if "${" in str(a) and "}" in str(a)]
+    if non_resolus:
+        _STATUTS_SERVEURS[nom] = {
+            "statut": "erreur",
+            "transport": "stdio",
+            "commande": f"{cmd} {' '.join(args)}",
+            "description": details.get("description", ""),
+            "outils_count": 0,
+            "outils": [],
+            "erreur": f"Variable manquante dans args : {', '.join(non_resolus)}",
+            "connecte_a": None,
+        }
+        return
+
     env_complet = os.environ.copy()
     for k, v in env_dict.items():
         val = _resoudre_placeholders_env(str(v), env_dict)
@@ -362,6 +389,59 @@ def _enregistrer_outil_mcp(nom_serveur: str, tool_def: Any, session: Any):
     _OUTILS_MCP_ENREGISTRES.add(nom_outil)
 
 
+async def _connecter_serveur_streamable_http(nom: str, details: dict):
+    """Établit la connexion avec un serveur MCP distant via Streamable HTTP."""
+    from mcp import ClientSession
+    from mcp.client.streamable_http import streamable_http_client
+    import httpx
+
+    url = _resoudre_placeholders_env(details.get("url", ""))
+    raw_headers = details.get("headers") if isinstance(details.get("headers"), dict) else {}
+    headers = {str(k): _resoudre_placeholders_env(str(v)) for k, v in raw_headers.items()}
+
+    stack = contextlib.AsyncExitStack()
+    try:
+        http_client = httpx.AsyncClient(headers=headers, timeout=20.0) if headers else None
+        if http_client is not None:
+            await stack.enter_async_context(http_client)
+        read_stream, write_stream, _ = await stack.enter_async_context(
+            streamable_http_client(url, http_client=http_client)
+        )
+        session = await stack.enter_async_context(ClientSession(read_stream, write_stream))
+        await session.initialize()
+
+        tools_response = await session.list_tools()
+        outils_decouverts = tools_response.tools or []
+
+        _SESSIONS_ACTIVES[nom] = session
+        _STACKS_ACTIVES[nom] = stack
+        _STATUTS_SERVEURS[nom] = {
+            "statut": "connecté",
+            "transport": "http",
+            "url": url,
+            "description": details.get("description", ""),
+            "outils_count": len(outils_decouverts),
+            "outils": [t.name for t in outils_decouverts],
+            "erreur": None,
+            "connecte_a": time.strftime("%H:%M:%S"),
+        }
+        for t in outils_decouverts:
+            _enregistrer_outil_mcp(nom, t, session)
+    except Exception as e:
+        await stack.aclose()
+        _STATUTS_SERVEURS[nom] = {
+            "statut": "erreur",
+            "transport": "http",
+            "url": url,
+            "description": details.get("description", ""),
+            "outils_count": 0,
+            "outils": [],
+            "erreur": str(e),
+            "connecte_a": None,
+        }
+        LOG.warning("Échec connexion HTTP MCP '%s' : %s", nom, e)
+
+
 async def _demarrer_tous_serveurs_async():
     """Démarre toutes les connexions actives définies dans mcp_servers.json."""
     config = charger_config_mcp()
@@ -381,7 +461,12 @@ async def _demarrer_tous_serveurs_async():
         if "command" in details:
             await _connecter_serveur_stdio(nom, details)
         elif "url" in details:
-            await _connecter_serveur_sse(nom, details)
+            trans = str(details.get("transport") or "").strip().lower()
+            url_s = str(details.get("url") or "").strip().lower()
+            if trans in ("http", "streamable_http", "streamable-http") or (not trans and url_s.endswith("/mcp")):
+                await _connecter_serveur_streamable_http(nom, details)
+            else:
+                await _connecter_serveur_sse(nom, details)
 
 
 async def _fermer_tous_serveurs_async():

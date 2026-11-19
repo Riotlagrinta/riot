@@ -49,11 +49,11 @@ def _charger_conventions_projet(dossier: Path) -> str:
 
 
 def _filtrer_schemas(noms_outils: set) -> List[dict]:
-    """Extrait uniquement les schémas d'outils autorisés pour un sous-agent."""
+    """Extrait les schémas d'outils autorisés pour un sous-agent (incluant connecteurs MCP)."""
     if not registre.tous():
         registre.charger_outils()
     tous = registre.schemas_api()
-    return [s for s in tous if s.get("name") in noms_outils]
+    return [s for s in tous if (s.get("name") in noms_outils or str(s.get("name", "")).startswith("mcp_"))]
 
 
 def _executer_boucle_agent(
@@ -150,7 +150,7 @@ def executer_architecte(mission: str, dossier_projet: Path, console: Console) ->
         "Sois concis, direct et rigoureux. Si l'utilisateur demande d'exporter en PDF ou de créer un document PDF, utilise l'outil `generer_pdf`. Si un schéma ou flux est pertinent, utilise `generer_diagramme`.\n"
         f"{conventions}"
     )
-    outils_architect = {"explorer_projet", "lire_code", "chercher_dans_code", "lister_dossier", "generer_pdf", "generer_excel", "generer_powerpoint", "generer_graphique", "generer_diagramme", "creer_produit_digital", "auditer_schema_sql", "optimiser_requete_postgis", "generer_politiques_rls", "generer_composant_mobile", "scaffolder_app_mobile_expo", "surveiller_marche_crypto", "recueillir_veille_web", "generer_bulletin_veille", "lister_competences", "charger_competence", "lire_reference", "capturer_page", "capturer_frames"}
+    outils_architect = {"explorer_projet", "lire_code", "chercher_dans_code", "lister_dossier", "git_status", "git_diff", "git_log", "chercher_web", "lire_page_web", "github_repo_info", "requete_api_http", "generer_pdf", "generer_excel", "generer_powerpoint", "generer_graphique", "generer_diagramme", "creer_produit_digital", "auditer_schema_sql", "optimiser_requete_postgis", "generer_politiques_rls", "generer_composant_mobile", "scaffolder_app_mobile_expo", "surveiller_marche_crypto", "recueillir_veille_web", "generer_bulletin_veille", "lister_competences", "charger_competence", "lire_reference", "capturer_page", "capturer_frames"}
     t0 = time.time()
     plan = _executer_boucle_agent(
         nom_agent="RIOT-Architect",

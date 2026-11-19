@@ -35,6 +35,7 @@
       "ide-folder-modal", "ide-folder-close", "ide-folder-cancel", "ide-folder-roots",
       "ide-folder-up", "ide-folder-path", "ide-folder-go", "ide-folder-os",
       "ide-folder-list", "ide-folder-open",
+      "ide-btn-mcp", "ide-mcp-modal", "ide-mcp-close", "ide-mcp-reload", "ide-mcp-summary", "ide-mcp-list",
       "ide-model-modal", "ide-modal-close", "ide-model-form",
       "ide-cfg-profil-wrap", "ide-cfg-profil", "ide-admin-model-fields",
       "ide-cfg-mode", "ide-cfg-baseurl-wrap", "ide-cfg-baseurl", "ide-cfg-model", "ide-cfg-key"
@@ -789,6 +790,83 @@
       if (ev.target === els["ide-quickopen-modal"]) els["ide-quickopen-modal"].classList.add("hidden");
     });
 
+    async function loadMcpConnectors() {
+      if (!els["ide-mcp-list"]) return;
+      els["ide-mcp-summary"].textContent = "Chargement du catalogue MCP...";
+      var r = await fetch("/api/ide/mcp");
+      var d = await r.json();
+      if (!r.ok || !d.ok) {
+        els["ide-mcp-summary"].textContent = d.erreur || "Erreur chargement MCP.";
+        return;
+      }
+      var st = d.statut || {};
+      var srvs = st.serveurs || {};
+      els["ide-mcp-summary"].textContent = (st.total_outils_mcp || 0) + " outil(s) MCP actif(s) · Config : " + (d.config_path || "~/.riot/mcp_servers.json");
+      var box = els["ide-mcp-list"];
+      box.innerHTML = "";
+      (d.catalogue || []).forEach(function (c) {
+        var live = srvs[c.slug] || {};
+        var statutTxt = live.statut || (c.actif ? "actif" : (c.installe ? "désactivé" : "disponible"));
+        var row = document.createElement("div");
+        row.className = "ide-folder-row";
+        row.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:default;";
+        var info = document.createElement("div");
+        info.style.cssText = "display:flex;flex-direction:column;gap:2px;";
+        info.innerHTML =
+          "<strong>" + escapeHtml(c.slug) + " <span style='opacity:.65;font-weight:400;'>[" + escapeHtml(c.categorie) + " · " + escapeHtml(statutTxt) + "]</span></strong>" +
+          "<span style='font-size:12px;opacity:.8;'>" + escapeHtml(c.description) + "</span>" +
+          (live.erreur ? "<span style='font-size:11px;color:#f87171;'>" + escapeHtml(live.erreur) + "</span>" : "");
+        var actions = document.createElement("div");
+        actions.style.cssText = "display:flex;gap:6px;flex-shrink:0;";
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = c.actif ? "ide-btn-sm" : "ide-btn-sm ide-btn-accent";
+        btn.textContent = c.actif ? "Désactiver" : (c.installe ? "Activer" : "Installer");
+        btn.addEventListener("click", async function () {
+          btn.disabled = true;
+          if (!c.installe) {
+            var cred = "";
+            if (c.env_requis && c.env_requis.length > 0) {
+              cred = window.prompt("Clé / URL pour " + c.slug + " (" + c.env_requis.join(", ") + ") — laissez vide si déjà en variable d'env :", "") || "";
+            }
+            await fetch("/api/ide/mcp/add", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ slug: c.slug, credential: cred })
+            });
+          } else {
+            await fetch("/api/ide/mcp/toggle", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ nom: c.slug, enabled: !c.actif })
+            });
+          }
+          await loadMcpConnectors();
+        });
+        actions.appendChild(btn);
+        row.appendChild(info);
+        row.appendChild(actions);
+        box.appendChild(row);
+      });
+    }
+
+    if (els["ide-btn-mcp"]) {
+      els["ide-btn-mcp"].addEventListener("click", function () {
+        els["ide-mcp-modal"].classList.remove("hidden");
+        void loadMcpConnectors();
+      });
+      els["ide-mcp-close"].addEventListener("click", function () { els["ide-mcp-modal"].classList.add("hidden"); });
+      els["ide-mcp-modal"].addEventListener("click", function (ev) {
+        if (ev.target === els["ide-mcp-modal"]) els["ide-mcp-modal"].classList.add("hidden");
+      });
+      els["ide-mcp-reload"].addEventListener("click", async function () {
+        els["ide-mcp-reload"].disabled = true;
+        await fetch("/api/ide/mcp/reload", { method: "POST" });
+        els["ide-mcp-reload"].disabled = false;
+        await loadMcpConnectors();
+      });
+    }
+
     els["ide-btn-model"].addEventListener("click", function () { els["ide-model-modal"].classList.remove("hidden"); });
     els["ide-modal-close"].addEventListener("click", function () { els["ide-model-modal"].classList.add("hidden"); });
     els["ide-cfg-mode"].addEventListener("change", function () {
@@ -832,6 +910,7 @@
       } else if (ev.key === "Escape") {
         els["ide-quickopen-modal"].classList.add("hidden");
         els["ide-folder-modal"].classList.add("hidden");
+        if (els["ide-mcp-modal"]) els["ide-mcp-modal"].classList.add("hidden");
         els["ide-model-modal"].classList.add("hidden");
       }
     });
