@@ -12,9 +12,12 @@ from core.registre import outil
 
 _CONSIGNE_GRILL_ME = (
     "MODE GRILL-ME ACTIF : Avant de modifier des fichiers, de coder ou d'executer une tache complexe, "
-    "analyse la demande pour identifier les points flous (perimetre, stack, UX, securite, contraintes). "
-    "Si l'utilisateur n'a pas encore repondu a tes questions pour cette demande, appelle d'abord l'outil "
-    "`grill-me` avec 2 a 4 questions courtes et une recommandation claire, puis attends sa reponse. "
+    "analyse la demande pour identifier de VRAIS points flous (perimetre, stack, UX, securite, contraintes). "
+    "INTERDICTION d'appeler `grill-me` pour : (1) une question de suivi ou de statut ('la video est prete ?', 'c'est bon ?'), "
+    "(2) un ordre direct et clair ('ouvre youtube', 'lance remotion', 'ouvre ffmpeg', 'verifie ...'), "
+    "(3) une question factuelle ou discussion simple. "
+    "Si une vraie ambiguite d'architecture subsiste et que l'utilisateur n'a pas encore repondu, appelle `grill-me` "
+    "avec 2 a 4 questions courtes et une recommandation claire, puis attends sa reponse. "
     "Si l'utilisateur vient justement de repondre a tes questions `grill-me`, passe directement a l'action."
 )
 
@@ -24,9 +27,9 @@ def consigne_grill_me(actif: bool) -> str:
     if actif:
         return f"\n\n{_CONSIGNE_GRILL_ME}"
     return (
-        "\n\nOutil `grill-me` disponible : si une nouvelle demande complexe comporte de vraies "
-        "ambiguites d'architecture ou de produit, tu peux appeler `grill-me` pour poser 2 a 3 questions "
-        "avant d'agir."
+        "\n\nOutil `grill-me` disponible : reserve UNIQUEMENT aux nouveaux projets ou demandes complexes ayant de vraies "
+        "ambiguites d'architecture/produit. Ne l'appelle JAMAIS sur une question de suivi/statut ('c'est pret ?') "
+        "ni sur une commande directe ('ouvre ...', 'lance ...', 'execute ...')."
     )
 
 
@@ -71,9 +74,9 @@ def formater_interview_grill_me(
 
 @outil(
     nom="grill-me",
-    description="Pose 1 a 4 questions ciblees a l'utilisateur (avec recommandations par defaut) pour lever "
-                "toute ambiguite et mieux comprendre sa demande avant de coder ou d'agir. "
-                "Apres appel de cet outil, pose ces questions directement a l'utilisateur et attends sa reponse.",
+    description="Pose 1 a 4 questions ciblees a l'utilisateur uniquement avant un NOUVEAU projet ou une tache complexe "
+                "comportant de vraies ambiguites d'architecture/UX. NE PAS utiliser pour une question de statut ('est-ce pret ?'), "
+                "une question simple, ni un ordre direct ('ouvre youtube', 'lance ffmpeg', 'verifie ...').",
     parametres={
         "type": "object",
         "properties": {

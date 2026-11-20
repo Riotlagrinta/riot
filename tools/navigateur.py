@@ -356,6 +356,16 @@ def _protege(url):
 
 def browser_open(url: str = "", recherche: str = "") -> str:
 
+    cible = url.strip()
+
+    if not cible and recherche.strip():
+
+        cible = f"https://www.google.com/search?q={quote_plus(recherche.strip())}"
+
+    if cible and "://" not in cible:
+
+        cible = "https://" + cible
+
     browser = _connexion()
 
     if browser is None:
@@ -366,23 +376,33 @@ def browser_open(url: str = "", recherche: str = "") -> str:
 
         if browser is None:
 
+            if cible:
+
+                try:
+
+                    import webbrowser
+
+                    if webbrowser.open(cible, new=2):
+
+                        return (
+
+                            f"J'ai ouvert {cible} dans ton navigateur par défaut "
+
+                            "(Chrome CDP port 9222 indisponible : action terminée, inutile de réessayer)."
+
+                        )
+
+                except Exception:
+
+                    pass
+
             return _MSG_ABSENT
 
     try:
 
-        cible = url.strip()
-
-        if not cible and recherche.strip():
-
-            cible = f"https://www.google.com/search?q={quote_plus(recherche.strip())}"
-
         if not cible:
 
             return "Dis-moi quoi ouvrir (une adresse ou une recherche)."
-
-        if "://" not in cible:
-
-            cible = "https://" + cible
 
         _assurer_sessions_auth(browser, cible)
 

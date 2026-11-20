@@ -4,6 +4,7 @@ Supporte 3 thèmes commutables via `/theme` (`obsidian`, `paper`, `tactical`).
 """
 import os
 import sys
+import json
 import time
 import subprocess
 from datetime import datetime
@@ -763,6 +764,7 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
 
     p = _pal()
     acc = p["cli_accent"]
+    compteur_appels = {}
     for tour in range(6):
         t0 = time.time()
         try:
@@ -798,16 +800,28 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
             nom_outil = b.name
             args = b.input or {}
             outil = registre.get(nom_outil)
+            try:
+                empreinte_appel = f"{nom_outil}:{json.dumps(args, sort_keys=True, ensure_ascii=False)}"
+            except Exception:
+                empreinte_appel = f"{nom_outil}:{args}"
+            compteur_appels[empreinte_appel] = compteur_appels.get(empreinte_appel, 0) + 1
 
             # Style visuel Claude Code pour l'exécution d'outils
             arg_str = ", ".join(f"{k}='{str(v)[:50]}'" for k, v in args.items())
             console.print(f"[bold {acc}]● Executing[/bold {acc}] [bold white]{nom_outil}[/bold white]([dim]{arg_str}[/dim])...")
 
             t_outil = time.time()
-            try:
-                res = outil.fonction(**args) if outil else f"[ERREUR] Outil inconnu : {nom_outil}"
-            except Exception as e:
-                res = f"[ERREUR] Échec de l'outil {nom_outil} : {e}"
+            if compteur_appels[empreinte_appel] > 2:
+                res = (
+                    f"[BOUCLE STOPPÉE] `{nom_outil}` a déjà été appelé {compteur_appels[empreinte_appel] - 1} fois "
+                    "avec exactement les mêmes arguments. Change d'outil (ex. `executer_terminal` pour un outil CLI "
+                    "comme `ffmpeg` ou `remotion`) ou réponds directement à l'utilisateur."
+                )
+            else:
+                try:
+                    res = outil.fonction(**args) if outil else f"[ERREUR] Outil inconnu : {nom_outil}"
+                except Exception as e:
+                    res = f"[ERREUR] Échec de l'outil {nom_outil} : {e}"
 
             dt_outil = round(time.time() - t_outil, 2)
             

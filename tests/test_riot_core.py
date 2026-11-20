@@ -612,6 +612,57 @@ def test_seo_audit_html_nextjs_and_ssrf(tmp_path):
     assert "Score :" in rapport
 
 
+def test_correctifs_logs_memoire_routage_navigateur_grill_me(tmp_path, monkeypatch):
+    import webbrowser
+    from core import memoire, registre
+    from tools import grill_me, navigateur
+
+    if len(registre.tous()) < 20:
+        registre.charger_outils()
+
+    # 1. Anti-empoisonnement mémoire : un refus assistant ne doit JAMAIS déclencher d'extraction
+    db_mem = tmp_path / "mem_anti_poison.db"
+    memoire.reinitialiser_connexion(db_mem)
+
+    class _FailIfCalledLLM:
+        def disponible(self):
+            return True
+
+        def repondre(self, *args, **kwargs):
+            raise AssertionError("Le LLM d'extraction ne doit pas etre appele sur un refus assistant")
+
+    res_poison = memoire.extraire_et_memoriser_depuis_echange(
+        "Je prefere que tu verifies directement mon projet sur le PC",
+        "Je ne peux pas directement piloter ton PC ou verifier tes fichiers locaux.",
+        surface="studio",
+        forcer=True,
+        provider=_FailIfCalledLLM(),
+    )
+    assert res_poison == {"entities": 0, "recipes": 0}
+
+    # 2. Routage outils compact sur requete triviale + routage Remotion/FFmpeg
+    sel_math = registre.router_outils("cmb font 1+1 ?")
+    assert len(sel_math) <= len(registre._PACK_REFLEXES) + 2
+    sel_remotion = registre.router_outils("aide moi a lancer remotion render et ffmpeg")
+    assert "executer_terminal" in sel_remotion
+    assert "lire_code" in sel_remotion
+
+    # 3. Fallback navigateur par defaut quand Chrome CDP 9222 est absent
+    ouverts = []
+    monkeypatch.setattr(navigateur, "_connexion", lambda: None)
+    monkeypatch.setattr(navigateur, "lancer_navigateur_chrome", lambda: None)
+    monkeypatch.setattr(webbrowser, "open", lambda url, new=2: ouverts.append((url, new)) or True)
+    msg_nav = navigateur.browser_open(url="youtube.com")
+    assert ouverts == [("https://youtube.com", 2)]
+    assert "inutile de réessayer" in msg_nav.lower()
+
+    # 4. Garde-fou grill-me sur questions de statut / commandes directes
+    consigne = grill_me.consigne_grill_me(True).lower()
+    assert "la video est prete" in consigne
+    assert "ouvre youtube" in consigne
+
+
+
 
 
 

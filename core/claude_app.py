@@ -3465,7 +3465,7 @@ def monter_routes(app):
 
 
 
-                        "5. CONTRÔLE SYSTÈME WINDOWS : Tu pilotes également le PC via `ouvrir_application`, `controler_media`, `regler_volume`, `verrouiller_pc`, `capture_screen`.\n"
+                        "5. CONTRÔLE SYSTÈME WINDOWS, REMOTION & FFMPEG : Tu pilotes directement le PC via `executer_terminal` (PowerShell/CMD, `npx remotion studio`, `npx remotion render`, `ffmpeg`, `ffprobe`, scripts Node/Python), `lister_dossier`, `chercher_fichiers`, `ouvrir_application`, `controler_media`, `regler_volume`, `verrouiller_pc`, `capture_screen`. N'affirme JAMAIS ne pas pouvoir piloter le PC : exécute directement.\n"
 
 
 
@@ -3513,7 +3513,7 @@ def monter_routes(app):
 
 
 
-                        "5. CONTRÔLE SYSTÈME WINDOWS : Tu pilotes également le PC via `ouvrir_application`, `controler_media`, `regler_volume`, `verrouiller_pc`, `capture_screen`."
+                        "5. CONTRÔLE SYSTÈME WINDOWS, CODE, REMOTION & FFMPEG : Tu pilotes directement le PC et ses outils CLI via `executer_terminal` (PowerShell, `npx remotion studio`, `npx remotion render`, `ffmpeg`, `ffprobe`, Node, Python), `lister_dossier`, `chercher_fichiers`, `lire_code`, `ecrire_code`, `patcher_code`, `ouvrir_application`, `controler_media`, `regler_volume`, `verrouiller_pc`, `capture_screen`. N'affirme JAMAIS 'Je ne peux pas directement piloter ton PC' : utilise tes outils directement."
 
 
 
@@ -3529,7 +3529,19 @@ def monter_routes(app):
 
 
 
-                    "chercher_dans_code", "executer_test_ou_commande", "trade_app_statut",
+                    "chercher_dans_code", "executer_test_ou_commande", "executer_terminal",
+
+
+
+                    "ouvrir_terminal_interactif", "lister_dossier", "chercher_fichiers",
+
+
+
+                    "supprimer_fichier", "ouvrir_fichier", "inspecter_port",
+
+
+
+                    "lister_processus", "tuer_processus", "get_system_stats", "trade_app_statut",
 
 
 
@@ -3603,10 +3615,6 @@ def monter_routes(app):
 
 
             import re
-
-
-
-            schemas = [s for s in registre.schemas_api() if (s.get("name") in outils_code_cibles or str(s.get("name", "")).startswith("mcp_"))]
 
 
 
@@ -3799,11 +3807,19 @@ def monter_routes(app):
 
 
 
+            req_routage = instruction_mono + (" navigateur web" if demande_nav else "") + (" code projet" if mode_effectif == "coder" else "")
+
+            schemas = [s for s in registre.schemas_api(requete=req_routage) if (s.get("name") in outils_code_cibles or str(s.get("name", "")).startswith("mcp_"))]
+
+
+
             yield f"data: {json.dumps({'type': 'thinking', 'modele': getattr(provider, 'modele', mode_effectif), 'message': msg_thinking})}\n\n"
 
 
 
             dernier_capture_md = ""
+
+            compteur_appels_studio = {}
 
 
 
@@ -4037,6 +4053,16 @@ def monter_routes(app):
 
                     outil = registre.get(nom_o)
 
+                    try:
+
+                        empreinte_s = f"{nom_o}:{json.dumps(args, sort_keys=True, ensure_ascii=False)}"
+
+                    except Exception:
+
+                        empreinte_s = f"{nom_o}:{args}"
+
+                    compteur_appels_studio[empreinte_s] = compteur_appels_studio.get(empreinte_s, 0) + 1
+
 
 
                     yield f"data: {json.dumps({'type': 'tool_start', 'outil': nom_o, 'args': args})}\n\n"
@@ -4047,19 +4073,31 @@ def monter_routes(app):
 
 
 
-                    try:
+                    if compteur_appels_studio[empreinte_s] > 2:
+
+                        res = (
+
+                            f"[BOUCLE STOPPÉE] `{nom_o}` déjà exécuté {compteur_appels_studio[empreinte_s] - 1} fois "
+
+                            "avec exactement les mêmes paramètres. Change d'outil (ex. `executer_terminal`) ou réponds directement."
+
+                        )
+
+                    else:
+
+                        try:
 
 
 
-                        res = await asyncio.to_thread(outil.fonction, **args) if outil else f"Outil {nom_o} inconnu"
+                            res = await asyncio.to_thread(outil.fonction, **args) if outil else f"Outil {nom_o} inconnu"
 
 
 
-                    except Exception as e:
+                        except Exception as e:
 
 
 
-                        res = f"Erreur : {e}"
+                            res = f"Erreur : {e}"
 
 
 

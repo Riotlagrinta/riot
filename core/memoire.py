@@ -1254,6 +1254,23 @@ def _echange_merite_memoire(
     if u.startswith("/"):
         return False
 
+    # Anti-empoisonnement : ne jamais mémoriser un tour où l'assistant a échoué ou refusé d'agir
+    a_low = a.lower()
+    if any(
+        m in a_low
+        for m in (
+            "[erreur]",
+            "je ne peux pas directement",
+            "je ne peux pas piloter",
+            "je ne peux pas accéder",
+            "impossible de",
+            "impossible d'",
+            "i cannot",
+            "i can't",
+        )
+    ):
+        return False
+
     explicite = bool(re.search(r"(?i)\b(retiens|m[eé]morise|je\s+pr[eé]f[eè]re|dor[eé]navant|r[eè]gle)\b", u))
     if not forcer and not explicite and not _RE_SIGNAL_MEMOIRE.search(f"{u}\n{a[:900]}"):
         return False
@@ -1316,9 +1333,10 @@ def extraire_et_memoriser_depuis_echange(
     sys_prompt = (
         "Tu es un extracteur silencieux de mémoire long terme. "
         "Extrais UNIQUEMENT les informations durables utiles pour les futures sessions "
-        "(préférences utilisateur, projets actifs, personnes/proches, règles de dev strictes, "
-        "ou recettes de résolution de bugs réellement résolus). "
-        "N'invente rien. N'inclus JAMAIS de clés API, tokens, mots de passe ou détails éphémères. "
+        "(préférences utilisateur EXPLICITEMENT exprimées par l'utilisateur, projets actifs, personnes/proches, "
+        "règles de dev strictes, ou recettes de résolution de bugs réellement résolus). "
+        "N'invente rien. N'enregistre JAMAIS une préférence négative ou restriction déduite d'un refus "
+        "ou d'une incapacité de l'assistant. N'inclus JAMAIS de clés API, tokens, mots de passe ou détails éphémères. "
         "Réponds STRICTEMENT en JSON valide sans texte autour :\n"
         '{"entities": [{"categorie": "preferences|projects|people|facts|regles_dev", "cle": "etiquette_courte", "contenu": "..."}], '
         '"recipes": [{"titre": "...", "langage": "python|ts|sql|...", "probleme": "...", "cause": "...", "solution": "...", "tags": "tag1,tag2"}]}'

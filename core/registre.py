@@ -199,12 +199,13 @@ _MOTS_CLES_CATEGORIES = {
     ],
     "code_dev": [
         "code", "python", "fichier", "git", "script", "projet", "erreur", "terminal", "bug",
-        "fonction", "dossier", "npm", "test", "compiler", "classe", "refactor", "commande",
-        "powershell", "bash", "repo", "branche"
+        "fonction", "dossier", "npm", "npx", "node", "test", "compiler", "classe", "refactor", "commande",
+        "powershell", "bash", "repo", "branche", "remotion", "ffmpeg", "ffprobe", "montage", "render",
+        "rendu", "composition", "studio", "tsx", "jsx", "installer", "verifie", "regarde"
     ],
     "navigateur_web": [
         "navigateur", "chrome", "page", "onglet", "clique", "site", "url", "scrolle",
-        "visite", "champ", "bouton", "web", "lien", "navigue"
+        "visite", "champ", "bouton", "web", "lien", "navigue", "youtube", "google", "http"
     ],
     "bureautique_documents": [
         "excel", "powerpoint", "pdf", "tableau", "presentation", "slides", "classeur",
@@ -249,11 +250,10 @@ def router_outils(requete: str = "") -> set:
             if cat != "reflexes" and cat in _CATEGORIES_OUTILS:
                 sel.update(_CATEGORIES_OUTILS[cat])
 
-    # Si aucune catégorie spécifique n'a matché (requête non reconnue ou polyvalente),
-    # on fournit le pack réflexes étendu avec système et web
+    # Si aucune catégorie spécifique n'a matché (requête générale / calcul / discussion),
+    # on reste compact sur le pack réflexes + 2 outils de secours courants (économise ~60% de tokens)
     if not matched_cats:
-        sel.update(_CATEGORIES_OUTILS.get("systeme_pc", set()))
-        sel.update(_CATEGORIES_OUTILS.get("navigateur_web", set()))
+        sel.update({"ouvrir_application", "browser_open"})
 
     # Élimine la redondance entre ouvrir_application et launch_app
     if "ouvrir_application" in sel and "launch_app" in sel:
