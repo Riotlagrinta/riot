@@ -25,6 +25,7 @@ except Exception:
     pass
 
 from core.config import reglage
+from core.model_router import classifier_tache_requete, profil_vers_tache
 
 LOG = logging.getLogger("jarvis")
 
@@ -309,9 +310,13 @@ class GroqProvider(ProviderLLM):
         import requests
 
         derniere_erreur = None
+        tache = classifier_tache_requete(messages=messages, tools=tools)
+        rotation_eff = list(self.rotation)
+        if tache == "fast" and "openai/gpt-oss-20b" in rotation_eff:
+            rotation_eff = ["openai/gpt-oss-20b"] + [m for m in rotation_eff if m != "openai/gpt-oss-20b"]
         cles_a_tester = self.cles or [self.cle]
         for cle_courante in cles_a_tester:
-            for modele_courant in self.rotation:
+            for modele_courant in rotation_eff:
                 payload = {
                     "model": modele_courant,
                     "messages": messages,
@@ -632,9 +637,13 @@ class MistralProvider(ProviderLLM):
     def _chat(self, messages, tools):
         import requests
         derniere_erreur = None
+        tache = classifier_tache_requete(messages=messages, tools=tools)
+        rotation_eff = list(self.rotation)
+        if tache != "code" and "mistral-small-latest" in rotation_eff:
+            rotation_eff = ["mistral-small-latest"] + [m for m in rotation_eff if m != "mistral-small-latest"]
         cles_a_tester = self.cles or [self.cle]
         for cle_courante in cles_a_tester:
-            for modele_courant in self.rotation:
+            for modele_courant in rotation_eff:
                 payload = {
                     "model": modele_courant,
                     "messages": messages,
@@ -747,7 +756,7 @@ class CustomOpenAIProvider(ProviderLLM):
     _outils = GroqProvider._outils
     _parser = GroqProvider._parser
 
-    def _chat(self, messages, tools):
+    def _chat(self, messages, tools, tache_hint: str = ""):
         import requests
 
         derniere_erreur = None
@@ -768,6 +777,8 @@ class CustomOpenAIProvider(ProviderLLM):
                     "Authorization": f"Bearer {cle_courante}",
                     "Content-Type": "application/json",
                 }
+                if tache_hint:
+                    headers["X-Riot-Task"] = tache_hint
                 try:
                     r = requests.post(self.api_url, headers=headers, json=payload, timeout=35)
                     if r.status_code == 400 and tools and "tool" in r.text.lower():
@@ -806,8 +817,9 @@ class CustomOpenAIProvider(ProviderLLM):
         visites.add(self.nom)
         messages = self._traduire(systeme, historique)
         tools = self._outils(outils)
+        tache_hint = profil_vers_tache(self.modele, messages=messages, tools=tools, systeme=systeme)
         try:
-            return self._parser(self._chat(messages, tools))
+            return self._parser(self._chat(messages, tools, tache_hint=tache_hint))
         except Exception as e:
             LOG.warning("custom: echec (%s), declenchement cascade failover...", e)
             return cascade_failover(systeme, historique, outils, visites, **kwargs)
@@ -997,20 +1009,26 @@ def cascade_failover(systeme, historique, outils, visites: set, **kwargs):
     if visites is None:
         visites = set()
 
-    # Ordre de secours intelligent :
-    # 1. Mistral (champion code/français, accepte les 105 outils sans limite TPM)
-    # 2. OpenRouter (agrégateur multi-modèles avec accès gratuit)
-    # 3. Groq (ultra-rapide pour texte et outils légers)
-    # 4. Gemini (Google AI Studio)
-    # 5. Claude (Anthropic si configuré)
-    candidats = [
-        ("Mistral", MistralProvider),
-        ("OpenRouter", OpenRouterProvider),
-        ("Groq", GroqProvider),
-        ("Gemini", GeminiProvider),
-        ("Custom", CustomOpenAIProvider),
-        ("Claude", ClaudeProvider),
-    ]
+    # Ordre de secours adaptatif selon le type de requete
+    tache = classifier_tache_requete(messages=historique, tools=outils, systeme=systeme)
+    if tache == "code":
+        candidats = [
+            ("Mistral", MistralProvider),
+            ("Groq", GroqProvider),
+            ("Gemini", GeminiProvider),
+            ("OpenRouter", OpenRouterProvider),
+            ("Custom", CustomOpenAIProvider),
+            ("Claude", ClaudeProvider),
+        ]
+    else:
+        candidats = [
+            ("Groq", GroqProvider),
+            ("Gemini", GeminiProvider),
+            ("Mistral", MistralProvider),
+            ("OpenRouter", OpenRouterProvider),
+            ("Custom", CustomOpenAIProvider),
+            ("Claude", ClaudeProvider),
+        ]
     for nom, cls_prov in candidats:
         if nom in visites:
             continue

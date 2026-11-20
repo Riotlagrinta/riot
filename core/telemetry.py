@@ -169,6 +169,18 @@ class TelemetryStore:
                             ON CONFLICT (version) DO NOTHING
                             """
                         )
+                        pconn.execute(
+                            """
+                            INSERT INTO releases (version, titre, notes, commande)
+                            VALUES (
+                                '0.3.4',
+                                'RIOT v0.3.4 — Sélection Adaptative de Modèles, Anti-Boucles & Pilotage PC/Remotion',
+                                E'• Sélection adaptative automatique du modèle par requête (fast / agent / code / deep)\\n• Pilotage complet Windows, Remotion & FFmpeg dans Studio/CLI avec garde-fous anti-boucles et fallback navigateur\\n• Protection anti-empoisonnement mémoire & déclenchement strict de grill-me',
+                                'npm install -g @riotlagrinta/riot@latest'
+                            )
+                            ON CONFLICT (version) DO NOTHING
+                            """
+                        )
                 self._pg_ready = True
                 return
             except Exception as e:
@@ -219,11 +231,11 @@ class TelemetryStore:
                         "INSERT INTO releases (ts, version, titre, notes, commande) VALUES (?, ?, ?, ?, ?)",
                         (
                             time.time(),
-                            "0.3.3",
-                            "RIOT v0.3.3 — Mémoire Hybride Neon, Web Anti-Hallucination & Connecteurs MCP",
-                            "• Mémoire long terme hybride SQLite (~/.riot) + Neon PostgreSQL & auto-extraction silencieuse\n"
-                            "• Recherche Internet sourcée & lecture web Firecrawl/Perplexity/DDG (/v1/web/search & /v1/web/scrape)\n"
-                            "• Catalogue de 15 connecteurs MCP prêts en 1 commande (/mcp catalog, /mcp add firecrawl/github/supabase...)",
+                            "0.3.4",
+                            "RIOT v0.3.4 — Sélection Adaptative de Modèles, Anti-Boucles & Pilotage PC/Remotion",
+                            "• Sélection adaptative automatique du modèle par requête (fast / agent / code / deep)\n"
+                            "• Pilotage complet Windows, Remotion & FFmpeg dans Studio/CLI avec garde-fous anti-boucles et fallback navigateur\n"
+                            "• Protection anti-empoisonnement mémoire & déclenchement strict de grill-me",
                             "npm install -g @riotlagrinta/riot@latest",
                         ),
                     )

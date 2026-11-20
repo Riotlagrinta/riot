@@ -142,16 +142,16 @@ def test_spiral_icons_and_creator_monitoring(monkeypatch, tmp_path):
     assert pc.get("/status/public").status_code == 200
     assert "prompt" not in pc.get("/status/public").text
     assert pc.get("/releases").status_code == 200
-    assert pc.get("/releases/latest").json()["version"] == "0.3.3"
+    assert pc.get("/releases/latest").json()["version"] == "0.3.4"
     assert pc.get("/admin/metrics").status_code == 401
     assert pc.get("/admin/metrics", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
     assert pc.get("/admin/logs", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
     r_rel = pc.post(
         "/admin/releases",
         headers={"X-Admin-Token": "secret_creator_tok"},
-        json={"version": "0.3.4", "titre": "Test Release", "notes": "- Note 1"},
+        json={"version": "0.3.5", "titre": "Test Release", "notes": "- Note 1"},
     )
-    assert r_rel.status_code == 200 and pc.get("/releases/latest").json()["version"] == "0.3.4"
+    assert r_rel.status_code == 200 and pc.get("/releases/latest").json()["version"] == "0.3.5"
 
 
 def test_proxy_chat_completions_usage_and_opaque_model(monkeypatch, tmp_path):
@@ -660,6 +660,94 @@ def test_correctifs_logs_memoire_routage_navigateur_grill_me(tmp_path, monkeypat
     consigne = grill_me.consigne_grill_me(True).lower()
     assert "la video est prete" in consigne
     assert "ouvre youtube" in consigne
+
+
+def test_selection_adaptative_modele_par_requete(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+    from core import model_router
+    from core.telemetry import TelemetryStore
+    from proxy import server as proxy_srv
+
+    # 1. Classification deterministe par intention / complexite
+    fake_tools = [{"type": "function", "function": {"name": "browser_open"}}]
+    assert model_router.classifier_tache_requete(
+        messages=[{"role": "user", "content": "cmb font 1+1 ?"}], tools=fake_tools
+    ) == "fast"
+    assert model_router.classifier_tache_requete(
+        messages=[{"role": "user", "content": "la vidéo est prête ?"}], tools=fake_tools
+    ) == "fast"
+    assert model_router.classifier_tache_requete(
+        messages=[{"role": "user", "content": "ouvre youtube sur chrome"}], tools=fake_tools
+    ) == "agent"
+    assert model_router.classifier_tache_requete(
+        messages=[{"role": "user", "content": "corrige ce composant remotion Video.tsx"}], tools=fake_tools
+    ) == "code"
+    assert model_router.classifier_tache_requete(
+        messages=[{"role": "user", "content": "fais un audit et une architecture complete de ce SaaS"}]
+    ) == "deep"
+
+    # 2. Cascade adaptative dans proxy/server.py
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_dummy")
+    monkeypatch.setenv("MISTRAL_API_KEY", "ms_dummy")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "ds_dummy")
+
+    routes_fast = proxy_srv._routes_pour_profil("riot-auto", tache="fast", has_tools=True)
+    assert routes_fast[0]["provider"] == "Groq" and routes_fast[0]["model"] == "openai/gpt-oss-20b"
+
+    routes_code = proxy_srv._routes_pour_profil("riot-auto", tache="code", has_tools=True)
+    assert routes_code[0]["provider"] == "Mistral" and routes_code[0]["model"] == "codestral-latest"
+
+    routes_agent = proxy_srv._routes_pour_profil("riot-auto", tache="agent", has_tools=True)
+    assert routes_agent[0]["provider"] == "Groq" and routes_agent[0]["model"] == "openai/gpt-oss-120b"
+
+    routes_deep_tools = proxy_srv._routes_pour_profil("riot-auto", tache="deep", has_tools=True)
+    assert routes_deep_tools[0]["provider"] == "DeepSeek" and routes_deep_tools[0]["model"] == "deepseek-chat"
+    routes_deep_plain = proxy_srv._routes_pour_profil("riot-auto", tache="deep", has_tools=False)
+    assert routes_deep_plain[0]["provider"] == "DeepSeek" and routes_deep_plain[0]["model"] == "deepseek-reasoner"
+
+    # 3. End-to-end /v1/chat/completions sur riot-auto
+    store = TelemetryStore(db_path=tmp_path / "adapt.db")
+    monkeypatch.setattr(proxy_srv, "_STORE", store)
+    monkeypatch.delenv("RIOT_IDENTITY_DATABASE_URL", raising=False)
+    monkeypatch.setenv("RIOT_PROXY_TOKEN", "tok_adapt")
+
+    modeles_envoyes = []
+
+    class _FakeResp:
+        status_code = 200
+        headers = {"content-type": "application/json"}
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "id": "cmp_adapt",
+                "model": "upstream-real",
+                "choices": [{"index": 0, "message": {"role": "assistant", "content": "OK"}}],
+                "usage": {"prompt_tokens": 5, "completion_tokens": 2},
+            }
+
+    def _fake_post(url, headers=None, json=None, timeout=20):
+        modeles_envoyes.append(json.get("model"))
+        return _FakeResp()
+
+    monkeypatch.setattr(proxy_srv.requests, "post", _fake_post)
+    pc = TestClient(proxy_srv.app)
+    r1 = pc.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer tok_adapt"},
+        json={"model": "riot-auto", "messages": [{"role": "user", "content": "cmb font 1+1 ?"}]},
+    )
+    r2 = pc.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer tok_adapt"},
+        json={"model": "riot-auto", "messages": [{"role": "user", "content": "corrige ce script python"}]},
+    )
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert r1.json()["model"] == "riot-engine" and r2.json()["model"] == "riot-engine"
+    assert modeles_envoyes == ["openai/gpt-oss-20b", "codestral-latest"]
+
 
 
 

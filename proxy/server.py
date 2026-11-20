@@ -34,6 +34,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from core.model_router import profil_vers_tache
 from core.telemetry import TelemetryStore, envoyer_alerte_ntfy, envoyer_alerte_webhook, masquer_secrets
 
 app = FastAPI(title="RIOT Engine Gateway")
@@ -216,20 +217,34 @@ def _extraire_reponse_texte(data: Dict[str, Any]) -> str:
     return txt
 
 
-def _routes_pour_profil(model_req: str) -> List[Dict[str, str]]:
-    """Definit la cascade de fournisseurs secrets cote serveur selon le profil opaque."""
-    m = (model_req or "riot-auto").lower()
+def _routes_pour_profil(
+    model_req: str,
+    tache: Optional[str] = None,
+    has_tools: bool = False,
+) -> List[Dict[str, str]]:
+    """Definit la cascade de fournisseurs secrets cote serveur selon le profil opaque et la tache."""
+    m = (tache or profil_vers_tache(model_req or "riot-auto")).lower()
+    mistral_model = (
+        os.environ.get("RIOT_UPSTREAM_CODE_MODEL", "codestral-latest")
+        if m == "code"
+        else os.environ.get("RIOT_UPSTREAM_FAST_MISTRAL_MODEL", "mistral-small-latest")
+    )
     mistral = {
         "provider": "Mistral",
         "url": "https://api.mistral.ai/v1/chat/completions",
         "key": os.environ.get("MISTRAL_API_KEY", "").strip(),
-        "model": os.environ.get("RIOT_UPSTREAM_CODE_MODEL", "codestral-latest"),
+        "model": mistral_model,
     }
+    groq_model = (
+        os.environ.get("RIOT_UPSTREAM_FAST_MODEL", "openai/gpt-oss-20b")
+        if m == "fast"
+        else os.environ.get("RIOT_UPSTREAM_SMART_MODEL", "openai/gpt-oss-120b")
+    )
     groq = {
         "provider": "Groq",
         "url": "https://api.groq.com/openai/v1/chat/completions",
         "key": os.environ.get("GROQ_API_KEY", "").strip(),
-        "model": os.environ.get("RIOT_UPSTREAM_FAST_MODEL", "openai/gpt-oss-20b" if "fast" in m else "openai/gpt-oss-120b"),
+        "model": groq_model,
     }
     openrouter = {
         "provider": "OpenRouter",
@@ -259,7 +274,10 @@ def _routes_pour_profil(model_req: str) -> List[Dict[str, str]]:
         "provider": "DeepSeek",
         "url": "https://api.deepseek.com/chat/completions",
         "key": os.environ.get("DEEPSEEK_API_KEY", "").strip(),
-        "model": os.environ.get("RIOT_UPSTREAM_DEEPSEEK_MODEL", "deepseek-reasoner" if "deep" in m else "deepseek-chat"),
+        "model": os.environ.get(
+            "RIOT_UPSTREAM_DEEPSEEK_MODEL",
+            "deepseek-reasoner" if (m == "deep" and not has_tools) else "deepseek-chat",
+        ),
     }
     together = {
         "provider": "Together",
@@ -286,14 +304,14 @@ def _routes_pour_profil(model_req: str) -> List[Dict[str, str]]:
         "model": os.environ.get("RIOT_UPSTREAM_CUSTOM_MODEL", "auto"),
     }
 
-    if "fast" in m:
-        ordre = [cerebras, groq, gemini, fireworks, together, mistral, nvidia, deepseek, openrouter, custom]
-    elif "code" in m:
-        ordre = [mistral, deepseek, cerebras, nvidia, fireworks, together, groq, gemini, openrouter, custom]
-    elif "deep" in m:
-        ordre = [deepseek, openrouter, nvidia, together, cerebras, mistral, gemini, groq, custom]
-    else:
-        ordre = [mistral, cerebras, groq, deepseek, gemini, nvidia, together, fireworks, openrouter, custom]
+    if m == "fast":
+        ordre = [groq, cerebras, gemini, mistral, fireworks, together, deepseek, nvidia, openrouter, custom]
+    elif m == "code":
+        ordre = [mistral, deepseek, cerebras, groq, fireworks, together, nvidia, gemini, openrouter, custom]
+    elif m == "deep":
+        ordre = [deepseek, groq, cerebras, nvidia, together, gemini, mistral, fireworks, openrouter, custom]
+    else:  # agent / general avec tool-calling fiable
+        ordre = [groq, cerebras, gemini, deepseek, nvidia, mistral, together, fireworks, openrouter, custom]
     return [c for c in ordre if c["key"] and c["url"]]
 
 
@@ -350,7 +368,7 @@ def public_releases(limit: int = 20):
 def public_latest_release():
     rel = _STORE.derniere_release()
     if not rel:
-        return {"ok": True, "version": "0.3.3", "release": None}
+        return {"ok": True, "version": "0.3.4", "release": None}
     return {"ok": True, "version": rel["version"], "release": rel}
 
 
@@ -360,10 +378,18 @@ async def chat_completions(request: Request):
     body: Dict[str, Any] = await request.json()
     profil = str(body.get("model", "riot-auto"))
     prompt_user = _extraire_dernier_prompt(body)
-    candidats = _routes_pour_profil(profil)
+    tache_hint = (request.headers.get("x-riot-task", "") or "").strip().lower()
+    tache_effective = profil_vers_tache(
+        profil,
+        messages=body.get("messages"),
+        tools=body.get("tools"),
+        prompt_hint=tache_hint,
+    )
+    profil_log = f"{profil}:{tache_effective}" if profil.lower() == "riot-auto" else profil
+    candidats = _routes_pour_profil(profil, tache=tache_effective, has_tools=bool(body.get("tools")))
     if not candidats:
         _STORE.enregistrer(
-            source="proxy", client_id=client_hash, profil=profil,
+            source="proxy", client_id=client_hash, profil=profil_log,
             ok=False, status_code=503, prompt=prompt_user,
             erreur="Aucun fournisseur configure cote serveur.",
         )
@@ -404,7 +430,7 @@ async def chat_completions(request: Request):
             _STORE.enregistrer(
                 source="proxy",
                 client_id=client_hash,
-                profil=profil,
+                profil=profil_log,
                 provider_reel=c["provider"],
                 modele_reel=c["model"],
                 ok=True,
@@ -418,7 +444,7 @@ async def chat_completions(request: Request):
             if os.environ.get("RIOT_NTFY_ALL_REQUESTS", "1").strip() != "0":
                 envoyer_alerte_ntfy(
                     f"RIOT IA : {c['provider']} ({lat_ms}ms)",
-                    f"Client : {client_hash}\nProfil : {profil} → {c['provider']} / {c['model']}\nTokens : {tin} in + {tout} out",
+                    f"Client : {client_hash}\nProfil : {profil_log} → {c['provider']} / {c['model']}\nTokens : {tin} in + {tout} out",
                     priority="low",
                     tags="zap,robot",
                 )
@@ -432,7 +458,7 @@ async def chat_completions(request: Request):
     _STORE.enregistrer(
         source="proxy",
         client_id=client_hash,
-        profil=profil,
+        profil=profil_log,
         provider_reel="Cascade",
         modele_reel="-",
         ok=False,
