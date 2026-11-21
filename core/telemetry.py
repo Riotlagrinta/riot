@@ -195,6 +195,18 @@ class TelemetryStore:
                             ON CONFLICT (version) DO NOTHING
                             """
                         )
+                        pconn.execute(
+                            """
+                            INSERT INTO releases (version, titre, notes, commande)
+                            VALUES (
+                                '0.3.6',
+                                'RIOT v0.3.6 — Pool Multi-Clés, Rotation Intra-Groq 28k TPM & Schémas Compacts',
+                                E'• Rotation multi-modèles intra-Groq (gpt-oss-120b -> llama-3.3-70b-versatile 12k TPM -> gpt-oss-20b) + failover HTTP 413\\n• Support pool multi-clés Round-Robin (GROQ_API_KEY="cle1,cle2", MISTRAL_API_KEY, etc.)\\n• Compression automatique (-45%) des schémas d\\'outils et de l\\'historique en CLI, IDE, Studio et Proxy',
+                                'npm install -g @riotlagrinta/riot@latest'
+                            )
+                            ON CONFLICT (version) DO NOTHING
+                            """
+                        )
                 self._pg_ready = True
                 return
             except Exception as e:
@@ -245,11 +257,11 @@ class TelemetryStore:
                         "INSERT INTO releases (ts, version, titre, notes, commande) VALUES (?, ?, ?, ?, ?)",
                         (
                             time.time(),
-                            "0.3.5",
-                            "RIOT v0.3.5 — Protection Tokens Vercel, Anti-Saturation Quotas & Contexte Compact",
-                            "• Masquage strict des tokens Vercel (vcp_/vercel_), provider keys et secrets en télémétrie & mémoire\n"
-                            "• Routage adaptatif affiné : auto-mémoire sur modèle rapide, contexte long orienté Gemini avant Groq/OpenRouter\n"
-                            "• Compactage automatique de l'historique Studio pour rester sous les limites TPM et éviter les bascules lentes",
+                            "0.3.6",
+                            "RIOT v0.3.6 — Pool Multi-Clés, Rotation Intra-Groq 28k TPM & Schémas Compacts",
+                            "• Rotation multi-modèles intra-Groq (gpt-oss-120b -> llama-3.3-70b-versatile 12k TPM -> gpt-oss-20b) + failover HTTP 413\n"
+                            "• Support pool multi-clés Round-Robin (GROQ_API_KEY=\"cle1,cle2\", MISTRAL_API_KEY, etc.)\n"
+                            "• Compression automatique (-45%) des schémas d'outils et de l'historique en CLI, IDE, Studio et Proxy",
                             "npm install -g @riotlagrinta/riot@latest",
                         ),
                     )

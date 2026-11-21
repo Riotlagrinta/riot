@@ -142,16 +142,16 @@ def test_spiral_icons_and_creator_monitoring(monkeypatch, tmp_path):
     assert pc.get("/status/public").status_code == 200
     assert "prompt" not in pc.get("/status/public").text
     assert pc.get("/releases").status_code == 200
-    assert pc.get("/releases/latest").json()["version"] == "0.3.5"
+    assert pc.get("/releases/latest").json()["version"] == "0.3.6"
     assert pc.get("/admin/metrics").status_code == 401
     assert pc.get("/admin/metrics", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
     assert pc.get("/admin/logs", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
     r_rel = pc.post(
         "/admin/releases",
         headers={"X-Admin-Token": "secret_creator_tok"},
-        json={"version": "0.3.6", "titre": "Test Release", "notes": "- Note 1"},
+        json={"version": "0.3.7", "titre": "Test Release", "notes": "- Note 1"},
     )
-    assert r_rel.status_code == 200 and pc.get("/releases/latest").json()["version"] == "0.3.6"
+    assert r_rel.status_code == 200 and pc.get("/releases/latest").json()["version"] == "0.3.7"
 
 
 def test_proxy_chat_completions_usage_and_opaque_model(monkeypatch, tmp_path):
