@@ -217,116 +217,218 @@ def _extraire_reponse_texte(data: Dict[str, Any]) -> str:
     return txt
 
 
+_RR_LOCK = threading.Lock()
+_RR_COUNTER = 0
+
+
+def _extraire_cles_env(var_name: str, rotate: bool = False) -> List[str]:
+    """Recupere un pool de cles API depuis VAR, VARS et VAR_1..VAR_5 (separees par virgules/espaces)."""
+    global _RR_COUNTER
+    brutes: List[str] = []
+    for k in (var_name, f"{var_name}S", *[f"{var_name}_{i}" for i in range(1, 6)]):
+        val = os.environ.get(k, "").strip()
+        if val:
+            for morceau in val.replace(";", ",").replace("\n", ",").split(","):
+                c = morceau.strip().strip("\"'")
+                if c and c not in brutes:
+                    brutes.append(c)
+    if len(brutes) > 1 and rotate:
+        with _RR_LOCK:
+             idx = _RR_COUNTER % len(brutes)
+             _RR_COUNTER += 1
+        brutes = brutes[idx:] + brutes[:idx]
+    return brutes
+
+
+def _compacter_payload_entree(body: Dict[str, Any]) -> Dict[str, Any]:
+    """Allege les schemas d'outils et les anciens messages volumineux pour maximiser le budget TPM."""
+    out = dict(body)
+    tools = out.get("tools")
+    if isinstance(tools, list) and tools:
+        tools_compacts = []
+        for t in tools:
+            if not isinstance(t, dict) or not isinstance(t.get("function"), dict):
+                tools_compacts.append(t)
+                continue
+            fn = dict(t["function"])
+            desc = " ".join(str(fn.get("description") or "").split())
+            if len(desc) > 150:
+                fn["description"] = desc[:149].rstrip() + "…"
+            params = fn.get("parameters")
+            if isinstance(params, dict) and isinstance(params.get("properties"), dict):
+                p_copy = dict(params)
+                props_out = {}
+                for pk, pv in params["properties"].items():
+                    if isinstance(pv, dict) and "description" in pv:
+                        pv_c = dict(pv)
+                        pdesc = " ".join(str(pv_c.get("description") or "").split())
+                        if len(pdesc) > 90:
+                            pv_c["description"] = pdesc[:89].rstrip() + "…"
+                        props_out[pk] = pv_c
+                    else:
+                        props_out[pk] = pv
+                p_copy["properties"] = props_out
+                fn["parameters"] = p_copy
+            t_copy = dict(t)
+            t_copy["function"] = fn
+            tools_compacts.append(t_copy)
+        out["tools"] = tools_compacts
+
+    msgs = out.get("messages")
+    if isinstance(msgs, list) and len(msgs) > 5:
+        msgs_compacts = []
+        seuil_recent = len(msgs) - 4
+        for i, m in enumerate(msgs):
+            if not isinstance(m, dict) or i >= seuil_recent or m.get("role") == "system":
+                msgs_compacts.append(m)
+                continue
+            c = m.get("content")
+            if isinstance(c, str) and len(c) > 1400:
+                m_c = dict(m)
+                m_c["content"] = c[:950] + "\n... [historique compacté]\n" + c[-300:]
+                msgs_compacts.append(m_c)
+            else:
+                msgs_compacts.append(m)
+        out["messages"] = msgs_compacts
+    return out
+
+
 def _routes_pour_profil(
     model_req: str,
     tache: Optional[str] = None,
     has_tools: bool = False,
     long_context: bool = False,
+    rotate_keys: bool = False,
 ) -> List[Dict[str, str]]:
-    """Definit la cascade de fournisseurs secrets cote serveur selon le profil opaque et la tache."""
+    """Definit la cascade de fournisseurs/modeles/cles cote serveur selon le profil opaque et la tache.
+
+    Inclut :
+      - Pool multi-cles par fournisseur (GROQ_API_KEY="cle1,cle2", GROQ_API_KEY_2, etc.)
+      - Rotation multi-modeles intra-Groq (gpt-oss-120b 8k TPM -> llama-3.3-70b-versatile 12k TPM -> gpt-oss-20b)
+        pour tripler le quota TPM disponible sur chaque cle Groq avant de basculer.
+    """
     m = (tache or profil_vers_tache(model_req or "riot-auto")).lower()
-    mistral_model = (
-        os.environ.get("RIOT_UPSTREAM_CODE_MODEL", "codestral-latest")
+    mistral_models = (
+        [
+            os.environ.get("RIOT_UPSTREAM_CODE_MODEL", "codestral-latest"),
+            os.environ.get("RIOT_UPSTREAM_FAST_MISTRAL_MODEL", "mistral-small-latest"),
+        ]
         if m == "code"
-        else os.environ.get("RIOT_UPSTREAM_FAST_MISTRAL_MODEL", "mistral-small-latest")
+        else [
+            os.environ.get("RIOT_UPSTREAM_FAST_MISTRAL_MODEL", "mistral-small-latest"),
+            os.environ.get("RIOT_UPSTREAM_CODE_MODEL", "codestral-latest"),
+        ]
     )
-    mistral = {
-        "provider": "Mistral",
-        "url": "https://api.mistral.ai/v1/chat/completions",
-        "key": os.environ.get("MISTRAL_API_KEY", "").strip(),
-        "model": mistral_model,
-    }
-    groq_model = (
-        os.environ.get("RIOT_UPSTREAM_FAST_MODEL", "openai/gpt-oss-20b")
+    groq_fast = os.environ.get("RIOT_UPSTREAM_FAST_MODEL", "openai/gpt-oss-20b")
+    groq_smart = os.environ.get("RIOT_UPSTREAM_SMART_MODEL", "openai/gpt-oss-120b")
+    groq_alt = os.environ.get("RIOT_UPSTREAM_GROQ_ALT_MODEL", "llama-3.3-70b-versatile")
+    groq_models = (
+        [groq_fast, groq_alt, groq_smart]
         if m == "fast"
-        else os.environ.get("RIOT_UPSTREAM_SMART_MODEL", "openai/gpt-oss-120b")
+        else [groq_smart, groq_alt, groq_fast]
     )
-    groq = {
-        "provider": "Groq",
-        "url": "https://api.groq.com/openai/v1/chat/completions",
-        "key": os.environ.get("GROQ_API_KEY", "").strip(),
-        "model": groq_model,
-    }
-    openrouter = {
-        "provider": "OpenRouter",
-        "url": "https://openrouter.ai/api/v1/chat/completions",
-        "key": os.environ.get("OPENROUTER_API_KEY", "").strip(),
-        "model": os.environ.get("RIOT_UPSTREAM_DEEP_MODEL", "openrouter/free"),
-    }
-    gemini = {
-        "provider": "Gemini",
-        "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-        "key": os.environ.get("GEMINI_API_KEY", "").strip(),
-        "model": os.environ.get("RIOT_UPSTREAM_GEMINI_MODEL", "gemini-flash-lite-latest"),
-    }
-    cerebras = {
-        "provider": "Cerebras",
-        "url": "https://api.cerebras.ai/v1/chat/completions",
-        "key": os.environ.get("CEREBRAS_API_KEY", "").strip(),
-        "model": os.environ.get("RIOT_UPSTREAM_CEREBRAS_MODEL", "gpt-oss-120b"),
-    }
-    nvidia = {
-        "provider": "NVIDIA",
-        "url": "https://integrate.api.nvidia.com/v1/chat/completions",
-        "key": os.environ.get("NVIDIA_API_KEY", "").strip(),
-        "model": os.environ.get("RIOT_UPSTREAM_NVIDIA_MODEL", "meta/llama-3.3-70b-instruct"),
-    }
-    deepseek = {
-        "provider": "DeepSeek",
-        "url": "https://api.deepseek.com/chat/completions",
-        "key": os.environ.get("DEEPSEEK_API_KEY", "").strip(),
-        "model": os.environ.get(
-            "RIOT_UPSTREAM_DEEPSEEK_MODEL",
-            "deepseek-reasoner" if (m == "deep" and not has_tools) else "deepseek-chat",
-        ),
-    }
-    together = {
-        "provider": "Together",
-        "url": "https://api.together.xyz/v1/chat/completions",
-        "key": os.environ.get("TOGETHER_API_KEY", "").strip(),
-        "model": os.environ.get("RIOT_UPSTREAM_TOGETHER_MODEL", "meta-llama/Llama-3.3-70B-Instruct-Turbo"),
-    }
-    fireworks = {
-        "provider": "Fireworks",
-        "url": "https://api.fireworks.ai/inference/v1/chat/completions",
-        "key": os.environ.get("FIREWORKS_API_KEY", "").strip(),
-        "model": os.environ.get("RIOT_UPSTREAM_FIREWORKS_MODEL", "accounts/fireworks/models/llama-v3p3-70b-instruct"),
-    }
+
+    def _expand(provider: str, url: str, env_var: str, models: List[str]) -> List[Dict[str, str]]:
+        cles = _extraire_cles_env(env_var, rotate=rotate_keys)
+        if not cles or not url:
+            return []
+        seen_m: List[str] = []
+        for mod in models:
+            if mod and mod not in seen_m:
+                seen_m.append(mod)
+        # On alterne d'abord les cles sur le modele principal, puis sur les modeles secondaires (compteurs TPM distincts)
+        items: List[Dict[str, str]] = []
+        for mod in seen_m:
+            for cle in cles:
+                items.append({"provider": provider, "url": url, "key": cle, "model": mod})
+        return items
+
+    mistral = _expand("Mistral", "https://api.mistral.ai/v1/chat/completions", "MISTRAL_API_KEY", mistral_models)
+    groq = _expand("Groq", "https://api.groq.com/openai/v1/chat/completions", "GROQ_API_KEY", groq_models)
+    openrouter = _expand(
+        "OpenRouter",
+        "https://openrouter.ai/api/v1/chat/completions",
+        "OPENROUTER_API_KEY",
+        [os.environ.get("RIOT_UPSTREAM_DEEP_MODEL", "openrouter/free")],
+    )
+    gemini = _expand(
+        "Gemini",
+        "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        "GEMINI_API_KEY",
+        [os.environ.get("RIOT_UPSTREAM_GEMINI_MODEL", "gemini-flash-lite-latest")],
+    )
+    cerebras = _expand(
+        "Cerebras",
+        "https://api.cerebras.ai/v1/chat/completions",
+        "CEREBRAS_API_KEY",
+        [os.environ.get("RIOT_UPSTREAM_CEREBRAS_MODEL", "gpt-oss-120b")],
+    )
+    nvidia = _expand(
+        "NVIDIA",
+        "https://integrate.api.nvidia.com/v1/chat/completions",
+        "NVIDIA_API_KEY",
+        [os.environ.get("RIOT_UPSTREAM_NVIDIA_MODEL", "meta/llama-3.3-70b-instruct")],
+    )
+    deepseek = _expand(
+        "DeepSeek",
+        "https://api.deepseek.com/chat/completions",
+        "DEEPSEEK_API_KEY",
+        [
+            os.environ.get(
+                "RIOT_UPSTREAM_DEEPSEEK_MODEL",
+                "deepseek-reasoner" if (m == "deep" and not has_tools) else "deepseek-chat",
+            )
+        ],
+    )
+    together = _expand(
+        "Together",
+        "https://api.together.xyz/v1/chat/completions",
+        "TOGETHER_API_KEY",
+        [os.environ.get("RIOT_UPSTREAM_TOGETHER_MODEL", "meta-llama/Llama-3.3-70B-Instruct-Turbo")],
+    )
+    fireworks = _expand(
+        "Fireworks",
+        "https://api.fireworks.ai/inference/v1/chat/completions",
+        "FIREWORKS_API_KEY",
+        [os.environ.get("RIOT_UPSTREAM_FIREWORKS_MODEL", "accounts/fireworks/models/llama-v3p3-70b-instruct")],
+    )
     custom_base = (os.environ.get("CUSTOM_BASE_URL", "") or os.environ.get("FREELLMAPI_BASE_URL", "")).strip().rstrip("/")
     custom_url = ""
     if custom_base:
         custom_url = custom_base if custom_base.endswith("/chat/completions") else (
             f"{custom_base}/chat/completions" if custom_base.endswith("/v1") else f"{custom_base}/v1/chat/completions"
         )
-    custom = {
-        "provider": "Custom",
-        "url": custom_url,
-        "key": (os.environ.get("CUSTOM_API_KEY", "") or os.environ.get("FREELLMAPI_KEY", "")).strip(),
-        "model": os.environ.get("RIOT_UPSTREAM_CUSTOM_MODEL", "auto"),
-    }
+    custom_key = (os.environ.get("CUSTOM_API_KEY", "") or os.environ.get("FREELLMAPI_KEY", "")).strip()
+    custom = (
+        [{"provider": "Custom", "url": custom_url, "key": custom_key, "model": os.environ.get("RIOT_UPSTREAM_CUSTOM_MODEL", "auto")}]
+        if (custom_key and custom_url)
+        else []
+    )
 
     if long_context and m != "fast":
-        # Contexte volumineux (> ~6.5k tokens) : privilegier Gemini (1M ctx) / DeepSeek / Cerebras
-        # avant Groq (8000 TPM free tier) et garder OpenRouter en dernier secours
-        ordre = [gemini, deepseek, cerebras, nvidia, together, fireworks, mistral, groq, openrouter, custom]
+        # Contexte volumineux (> ~6.5k tokens) : privilegier Gemini (1M ctx) / DeepSeek / Cerebras / Mistral (40k TPM)
+        # avant Groq (8k-12k TPM par modele) et garder OpenRouter en dernier secours
+        groupes = [gemini, deepseek, cerebras, nvidia, together, fireworks, mistral, groq, openrouter, custom]
     elif m == "fast":
-        ordre = [groq, cerebras, gemini, mistral, fireworks, together, deepseek, nvidia, openrouter, custom]
+        groupes = [groq, cerebras, gemini, mistral, fireworks, together, deepseek, nvidia, openrouter, custom]
     elif m == "code":
-        ordre = [mistral, deepseek, cerebras, groq, fireworks, together, nvidia, gemini, openrouter, custom]
+        groupes = [mistral, deepseek, cerebras, groq, fireworks, together, nvidia, gemini, openrouter, custom]
     elif m == "deep":
-        ordre = [deepseek, groq, gemini, cerebras, nvidia, together, mistral, fireworks, openrouter, custom]
+        groupes = [deepseek, groq, gemini, cerebras, nvidia, together, mistral, fireworks, openrouter, custom]
     else:  # agent / general avec tool-calling fiable
-        ordre = [groq, cerebras, gemini, deepseek, nvidia, mistral, together, fireworks, openrouter, custom]
-    return [c for c in ordre if c["key"] and c["url"]]
+        groupes = [groq, cerebras, gemini, deepseek, nvidia, mistral, together, fireworks, openrouter, custom]
+    return [c for grp in groupes for c in grp]
 
 
 @app.get("/health")
 def health():
-    actifs = len(_routes_pour_profil("riot-auto"))
+    toutes = _routes_pour_profil("riot-auto")
+    actifs = len({c["provider"] for c in toutes})
     return {
         "ok": True,
         "service": "RIOT Engine Gateway",
         "routes_actives": actifs,
+        "candidats_failover": len(toutes),
         "telemetry_backend": _STORE.backend_name,
         "memory_backend": _get_memory_store().backend_name,
         "identity_auth": bool(os.environ.get("RIOT_IDENTITY_DATABASE_URL", "").strip()),
@@ -380,7 +482,8 @@ def public_latest_release():
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
     client_hash = _verifier_acces(request)
-    body: Dict[str, Any] = await request.json()
+    raw_body: Dict[str, Any] = await request.json()
+    body = _compacter_payload_entree(raw_body)
     profil = str(body.get("model", "riot-auto"))
     prompt_user = _extraire_dernier_prompt(body)
     tache_hint = (request.headers.get("x-riot-task", "") or "").strip().lower()
@@ -403,6 +506,7 @@ async def chat_completions(request: Request):
         tache=tache_effective,
         has_tools=bool(body.get("tools")),
         long_context=long_context,
+        rotate_keys=True,
     )
     if not candidats:
         _STORE.enregistrer(
@@ -429,7 +533,7 @@ async def chat_completions(request: Request):
                 capturer_reponse(c["provider"], c["key"], c["model"], r.status_code, dict(r.headers))
             except Exception:
                 pass
-            if r.status_code in (429, 503) or r.status_code >= 500:
+            if r.status_code in (413, 429, 503) or r.status_code >= 500:
                 derniere_err = f"{c['provider']} HTTP {r.status_code}"
                 dernier_statut = r.status_code
                 envoyer_alerte_webhook(

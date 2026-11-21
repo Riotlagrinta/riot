@@ -262,8 +262,40 @@ def router_outils(requete: str = "") -> set:
     return sel
 
 
+def _compacter_texte_court(txt: str, max_chars: int = 160) -> str:
+    s = " ".join(str(txt or "").split())
+    if len(s) <= max_chars:
+        return s
+    point = s.find(". ")
+    if 25 <= point <= max_chars:
+        return s[: point + 1]
+    return s[: max_chars - 1].rstrip() + "…"
+
+
+def compacter_schema_outil(nom: str, description: str, parametres: dict) -> dict:
+    """Compacte les descriptions d'un schema d'outil pour economiser ~45% de tokens d'entree."""
+    schema_in = parametres if isinstance(parametres, dict) else {"type": "object", "properties": {}}
+    props_in = schema_in.get("properties") if isinstance(schema_in.get("properties"), dict) else {}
+    props_out = {}
+    for k, v in props_in.items():
+        if not isinstance(v, dict):
+            props_out[k] = v
+            continue
+        v_copy = dict(v)
+        if "description" in v_copy:
+            v_copy["description"] = _compacter_texte_court(v_copy["description"], max_chars=90)
+        props_out[k] = v_copy
+    schema_out = dict(schema_in)
+    schema_out["properties"] = props_out
+    return {
+        "name": nom,
+        "description": _compacter_texte_court(description or nom, max_chars=150),
+        "input_schema": schema_out,
+    }
+
+
 def schemas_api(local_seulement=False, requete=None):
-    """Schemas au format Anthropic (name, description, input_schema).
+    """Schemas au format Anthropic (name, description, input_schema) compactes.
 
     local_seulement=True : ne renvoie que les outils utilisables par un modele
     local (mode Ollama), en excluant les outils internet/vision (_NON_LOCAUX).
@@ -272,9 +304,11 @@ def schemas_api(local_seulement=False, requete=None):
     """
     noms_cibles = router_outils(requete) if requete else set(_REGISTRE.keys())
 
-    return [{"name": o.nom, "description": o.description, "input_schema": o.parametres}
-            for o in _REGISTRE.values()
-            if o.nom in noms_cibles and not (local_seulement and o.nom in _NON_LOCAUX)]
+    return [
+        compacter_schema_outil(o.nom, o.description, o.parametres)
+        for o in _REGISTRE.values()
+        if o.nom in noms_cibles and not (local_seulement and o.nom in _NON_LOCAUX)
+    ]
 
 
 def noms_lents():

@@ -775,6 +775,40 @@ def test_selection_adaptative_modele_par_requete(monkeypatch, tmp_path):
     provs_long = [r["provider"] for r in routes_long]
     assert provs_long.index("Gemini") < provs_long.index("Groq") < provs_long.index("OpenRouter")
 
+    # 5. Pool multi-cles + rotation intra-Groq (413 TPM failover vers llama-3.3-70b-versatile) + compaction schemas
+    from core import registre
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_k1,gsk_k2")
+    routes_pool = [r for r in proxy_srv._routes_pour_profil("riot-auto", tache="agent") if r["provider"] == "Groq"]
+    assert [(r["key"], r["model"]) for r in routes_pool[:4]] == [
+        ("gsk_k1", "openai/gpt-oss-120b"),
+        ("gsk_k2", "openai/gpt-oss-120b"),
+        ("gsk_k1", "llama-3.3-70b-versatile"),
+        ("gsk_k2", "llama-3.3-70b-versatile"),
+    ]
+
+    compacted = registre.compacter_schema_outil(
+        "outil_verbeux",
+        "A" * 350,
+        {"type": "object", "properties": {"p1": {"type": "string", "description": "B" * 250}}},
+    )
+    assert len(compacted["description"]) <= 150
+    assert len(compacted["input_schema"]["properties"]["p1"]["description"]) <= 90
+
+    body_comp = proxy_srv._compacter_payload_entree({
+        "messages": [
+            {"role": "user", "content": "X" * 3000},
+            {"role": "assistant", "content": "Y" * 3000},
+            {"role": "user", "content": "msg3"},
+            {"role": "assistant", "content": "msg4"},
+            {"role": "user", "content": "msg5"},
+            {"role": "user", "content": "dernier"},
+        ],
+        "tools": [{"type": "function", "function": {"name": "t1", "description": "D" * 400}}],
+    })
+    assert len(body_comp["messages"][0]["content"]) < 1400
+    assert len(body_comp["tools"][0]["function"]["description"]) <= 150
+
+
 
 
 
