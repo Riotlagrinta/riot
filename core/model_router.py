@@ -22,7 +22,8 @@ _RE_CODE = re.compile(
 
 _RE_DEEP = re.compile(
     r"(?i)\b("
-    r"architect\w*|audit\w*|strat[eé]gi\w*|planif\w*|analy\w*\s+approfond\w*|"
+    r"architect\w*|audit\w*|strat[eé]gi\w*|planif\w*|en\s+profondeur|"
+    r"analy\w*\s+(?:approfond\w*|tout|compl[eè]t\w*)|"
     r"pre-mortem|comparatif|pour\s+et\s+contre|benchmark|grill-me|"
     r"cahier\s+des\s+charges|business\s+plan|seo-audit|content-strategy|"
     r"anti-ai-slop|conception|refonte|roadmap"
@@ -88,6 +89,13 @@ def classifier_tache_requete(
     tools_list = list(tools or [])
     has_tools = len(tools_list) > 0
 
+    # 0. Taches internes d'auto-memoire silencieuse -> modele rapide/economique (jamais Mistral 2 RPM)
+    if not has_tools and (
+        "extracteur silencieux de mémoire" in sys_low
+        or prompt_low.startswith("[surface:")
+    ):
+        return "fast"
+
     # 1. Requetes courtes triviales / salutations / calcul mental -> modele rapide
     if prompt_low and len(prompt_low) <= 95 and _RE_TRIVIAL.match(prompt_low):
         return "fast"
@@ -99,16 +107,20 @@ def classifier_tache_requete(
             return "deep"
         return "code"
 
-    # 3. Raisonnement approfondi / audit / architecture / contexte long -> modele deep
-    if _RE_DEEP.search(prompt_low) or total_chars > 6500:
+    # 3. Raisonnement approfondi / audit / architecture / contexte tres long -> modele deep
+    if _RE_DEEP.search(prompt_low) or total_chars > 18000:
         return "deep"
 
     # 4. Pilotage PC, navigateur web ou orchestration d'outils -> modele agent robuste en tool-calling
     if _RE_AGENT.search(prompt_low) or (has_tools and len(prompt_low) > 70):
         return "agent"
 
-    # 5. Par defaut : court = fast, sinon agent si outils presents
-    if len(prompt_low) <= 180 and total_chars <= 2400:
+    # 5. Suivi court dans une session avec outils -> agent (evite fast/deep inadaptes sur 'LE LIEN DU SITE ?')
+    if has_tools and len(prompt_low) <= 95:
+        return "agent"
+
+    # 6. Par defaut : court = fast, sinon agent si outils presents
+    if len(prompt_low) <= 180 and total_chars <= 4500:
         return "fast"
     return "agent" if has_tools else "deep"
 

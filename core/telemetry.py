@@ -21,9 +21,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 _SECRET_PATTERNS = [
-    (re.compile(r"\b(sk-(?:proj-)?[A-Za-z0-9_-]{16,})\b"), "[SECRET_KEY]"),
+    (re.compile(r"\b(sk-(?:proj-|ant-|or-[a-z0-9-]+-)?[A-Za-z0-9_-]{16,})\b"), "[SECRET_KEY]"),
     (re.compile(r"\b(AIza[0-9A-Za-z_-]{25,})\b"), "[GOOGLE_KEY]"),
     (re.compile(r"\b(gsk_[A-Za-z0-9]{16,})\b"), "[GROQ_KEY]"),
+    (re.compile(r"\b(vcp_[A-Za-z0-9_-]{16,}|vercel_[A-Za-z0-9_-]{16,})\b"), "[VERCEL_TOKEN]"),
+    (re.compile(r"\b(mstrl_[A-Za-z0-9_-]{16,}|csk-[A-Za-z0-9_-]{16,}|hf_[A-Za-z0-9]{16,}|xai-[A-Za-z0-9_-]{16,})\b"), "[PROVIDER_KEY]"),
     (re.compile(r"\b(npm_[A-Za-z0-9]{16,})\b"), "[NPM_TOKEN]"),
     (re.compile(r"\b(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b"), "[GH_TOKEN]"),
     (re.compile(r"\b(riot_cli_[A-Za-z0-9]{16,})\b"), "[RIOT_TOKEN]"),
@@ -181,6 +183,18 @@ class TelemetryStore:
                             ON CONFLICT (version) DO NOTHING
                             """
                         )
+                        pconn.execute(
+                            """
+                            INSERT INTO releases (version, titre, notes, commande)
+                            VALUES (
+                                '0.3.5',
+                                'RIOT v0.3.5 — Protection Tokens Vercel, Anti-Saturation Quotas & Contexte Compact',
+                                E'• Masquage strict des tokens Vercel (vcp_/vercel_), provider keys et secrets en télémétrie & mémoire\\n• Routage adaptatif affiné : auto-mémoire sur modèle rapide, contexte long orienté Gemini avant Groq/OpenRouter\\n• Compactage automatique de l\\'historique Studio pour rester sous les limites TPM et éviter les bascules lentes',
+                                'npm install -g @riotlagrinta/riot@latest'
+                            )
+                            ON CONFLICT (version) DO NOTHING
+                            """
+                        )
                 self._pg_ready = True
                 return
             except Exception as e:
@@ -231,11 +245,11 @@ class TelemetryStore:
                         "INSERT INTO releases (ts, version, titre, notes, commande) VALUES (?, ?, ?, ?, ?)",
                         (
                             time.time(),
-                            "0.3.4",
-                            "RIOT v0.3.4 — Sélection Adaptative de Modèles, Anti-Boucles & Pilotage PC/Remotion",
-                            "• Sélection adaptative automatique du modèle par requête (fast / agent / code / deep)\n"
-                            "• Pilotage complet Windows, Remotion & FFmpeg dans Studio/CLI avec garde-fous anti-boucles et fallback navigateur\n"
-                            "• Protection anti-empoisonnement mémoire & déclenchement strict de grill-me",
+                            "0.3.5",
+                            "RIOT v0.3.5 — Protection Tokens Vercel, Anti-Saturation Quotas & Contexte Compact",
+                            "• Masquage strict des tokens Vercel (vcp_/vercel_), provider keys et secrets en télémétrie & mémoire\n"
+                            "• Routage adaptatif affiné : auto-mémoire sur modèle rapide, contexte long orienté Gemini avant Groq/OpenRouter\n"
+                            "• Compactage automatique de l'historique Studio pour rester sous les limites TPM et éviter les bascules lentes",
                             "npm install -g @riotlagrinta/riot@latest",
                         ),
                     )

@@ -506,11 +506,11 @@ _HISTORIQUE_CHAT: list = []
 
 
 
-def _construire_historique_tour(chat_id: Optional[str], instruction: str, max_messages: int = 12) -> list:
+def _construire_historique_tour(chat_id: Optional[str], instruction: str, max_messages: int = 8) -> list:
 
 
 
-    """Construit l'historique multi-tours persistant pour préserver le contexte de la discussion et continuer un chat."""
+    """Construit l'historique multi-tours compact pour préserver le contexte sans saturer les limites TPM."""
 
 
 
@@ -526,7 +526,7 @@ def _construire_historique_tour(chat_id: Optional[str], instruction: str, max_me
 
 
 
-        recent = [
+        bruts = [
 
 
 
@@ -546,43 +546,79 @@ def _construire_historique_tour(chat_id: Optional[str], instruction: str, max_me
 
 
 
-        # Si le dernier message n'est pas encore l'instruction courante
+    else:
 
 
 
-        if not recent or recent[-1]["role"] != "user" or recent[-1]["content"] != instruction:
+        bruts = [
 
 
 
-            recent.append({"role": "user", "content": instruction})
+            {"role": m["role"], "content": m["content"]}
 
 
 
-        return recent
+            for m in _HISTORIQUE_CHAT[-max_messages:]
 
 
 
-    recent = [
+            if isinstance(m.get("content"), str) and m.get("content").strip()
 
 
 
-        {"role": m["role"], "content": m["content"]}
+        ]
 
 
 
-        for m in _HISTORIQUE_CHAT[-max_messages:]
+    recent = []
 
 
 
-        if isinstance(m.get("content"), str) and m.get("content").strip()
+    budget_chars = 8000
 
 
 
-    ]
+    for m in reversed(bruts):
 
 
 
-    recent.append({"role": "user", "content": instruction})
+        txt = m["content"].strip()
+
+
+
+        if len(txt) > 1200:
+
+
+
+            txt = txt[:900] + "\n... [tronqué]\n" + txt[-250:]
+
+
+
+        if budget_chars - len(txt) < 0 and recent:
+
+
+
+            break
+
+
+
+        budget_chars -= len(txt)
+
+
+
+        recent.append({"role": m["role"], "content": txt})
+
+
+
+    recent.reverse()
+
+
+
+    if not recent or recent[-1]["role"] != "user" or recent[-1]["content"] != instruction:
+
+
+
+        recent.append({"role": "user", "content": instruction})
 
 
 
@@ -594,7 +630,7 @@ def _memoriser_tour(chat_id: Optional[str], question: str, reponse: str):
 
 
 
-    """Mémorise l'échange dans la base SQLite persistante et dans le cache de session."""
+    """Mémorise l'échange (secrets redactés) dans SQLite persistante et le cache de session."""
 
 
 
@@ -602,23 +638,31 @@ def _memoriser_tour(chat_id: Optional[str], question: str, reponse: str):
 
 
 
+        q_safe = memoire._masquer_texte(question, max_len=16000) or question.strip()
+
+
+
+        r_safe = memoire._masquer_texte(reponse, max_len=16000) or reponse.strip()
+
+
+
         if chat_id:
 
 
 
-            memoire.ajouter_message_chat(chat_id, "user", question)
+            memoire.ajouter_message_chat(chat_id, "user", q_safe)
 
 
 
-            memoire.ajouter_message_chat(chat_id, "assistant", reponse)
+            memoire.ajouter_message_chat(chat_id, "assistant", r_safe)
 
 
 
-        _HISTORIQUE_CHAT.append({"role": "user", "content": question.strip()})
+        _HISTORIQUE_CHAT.append({"role": "user", "content": q_safe})
 
 
 
-        _HISTORIQUE_CHAT.append({"role": "assistant", "content": reponse.strip()})
+        _HISTORIQUE_CHAT.append({"role": "assistant", "content": r_safe})
 
 
 
@@ -628,7 +672,7 @@ def _memoriser_tour(chat_id: Optional[str], question: str, reponse: str):
 
             del _HISTORIQUE_CHAT[:-20]
 
-        memoire.lancer_auto_memoire_asynchrone(question, reponse, surface="studio")
+        memoire.lancer_auto_memoire_asynchrone(q_safe, r_safe, surface="studio")
 
 
 

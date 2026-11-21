@@ -221,6 +221,7 @@ def _routes_pour_profil(
     model_req: str,
     tache: Optional[str] = None,
     has_tools: bool = False,
+    long_context: bool = False,
 ) -> List[Dict[str, str]]:
     """Definit la cascade de fournisseurs secrets cote serveur selon le profil opaque et la tache."""
     m = (tache or profil_vers_tache(model_req or "riot-auto")).lower()
@@ -304,12 +305,16 @@ def _routes_pour_profil(
         "model": os.environ.get("RIOT_UPSTREAM_CUSTOM_MODEL", "auto"),
     }
 
-    if m == "fast":
+    if long_context and m != "fast":
+        # Contexte volumineux (> ~6.5k tokens) : privilegier Gemini (1M ctx) / DeepSeek / Cerebras
+        # avant Groq (8000 TPM free tier) et garder OpenRouter en dernier secours
+        ordre = [gemini, deepseek, cerebras, nvidia, together, fireworks, mistral, groq, openrouter, custom]
+    elif m == "fast":
         ordre = [groq, cerebras, gemini, mistral, fireworks, together, deepseek, nvidia, openrouter, custom]
     elif m == "code":
         ordre = [mistral, deepseek, cerebras, groq, fireworks, together, nvidia, gemini, openrouter, custom]
     elif m == "deep":
-        ordre = [deepseek, groq, cerebras, nvidia, together, gemini, mistral, fireworks, openrouter, custom]
+        ordre = [deepseek, groq, gemini, cerebras, nvidia, together, mistral, fireworks, openrouter, custom]
     else:  # agent / general avec tool-calling fiable
         ordre = [groq, cerebras, gemini, deepseek, nvidia, mistral, together, fireworks, openrouter, custom]
     return [c for c in ordre if c["key"] and c["url"]]
@@ -368,7 +373,7 @@ def public_releases(limit: int = 20):
 def public_latest_release():
     rel = _STORE.derniere_release()
     if not rel:
-        return {"ok": True, "version": "0.3.4", "release": None}
+        return {"ok": True, "version": "0.3.5", "release": None}
     return {"ok": True, "version": rel["version"], "release": rel}
 
 
@@ -385,8 +390,20 @@ async def chat_completions(request: Request):
         tools=body.get("tools"),
         prompt_hint=tache_hint,
     )
+    try:
+        payload_chars = len(json.dumps(body.get("messages") or [], ensure_ascii=False)) + len(
+            json.dumps(body.get("tools") or [], ensure_ascii=False)
+        )
+    except Exception:
+        payload_chars = len(prompt_user)
+    long_context = payload_chars > 22000
     profil_log = f"{profil}:{tache_effective}" if profil.lower() == "riot-auto" else profil
-    candidats = _routes_pour_profil(profil, tache=tache_effective, has_tools=bool(body.get("tools")))
+    candidats = _routes_pour_profil(
+        profil,
+        tache=tache_effective,
+        has_tools=bool(body.get("tools")),
+        long_context=long_context,
+    )
     if not candidats:
         _STORE.enregistrer(
             source="proxy", client_id=client_hash, profil=profil_log,

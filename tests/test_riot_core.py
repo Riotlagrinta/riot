@@ -142,16 +142,16 @@ def test_spiral_icons_and_creator_monitoring(monkeypatch, tmp_path):
     assert pc.get("/status/public").status_code == 200
     assert "prompt" not in pc.get("/status/public").text
     assert pc.get("/releases").status_code == 200
-    assert pc.get("/releases/latest").json()["version"] == "0.3.4"
+    assert pc.get("/releases/latest").json()["version"] == "0.3.5"
     assert pc.get("/admin/metrics").status_code == 401
     assert pc.get("/admin/metrics", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
     assert pc.get("/admin/logs", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
     r_rel = pc.post(
         "/admin/releases",
         headers={"X-Admin-Token": "secret_creator_tok"},
-        json={"version": "0.3.5", "titre": "Test Release", "notes": "- Note 1"},
+        json={"version": "0.3.6", "titre": "Test Release", "notes": "- Note 1"},
     )
-    assert r_rel.status_code == 200 and pc.get("/releases/latest").json()["version"] == "0.3.5"
+    assert r_rel.status_code == 200 and pc.get("/releases/latest").json()["version"] == "0.3.6"
 
 
 def test_proxy_chat_completions_usage_and_opaque_model(monkeypatch, tmp_path):
@@ -747,6 +747,34 @@ def test_selection_adaptative_modele_par_requete(monkeypatch, tmp_path):
     assert r1.status_code == 200 and r2.status_code == 200
     assert r1.json()["model"] == "riot-engine" and r2.json()["model"] == "riot-engine"
     assert modeles_envoyes == ["openai/gpt-oss-20b", "codestral-latest"]
+
+    # 4. Correctifs 0.3.5 : masquage tokens Vercel, auto-memoire fast, deep 'en profondeur' & long_context Gemini
+    from core.telemetry import masquer_secrets
+    masked = masquer_secrets("1-vcp_dummyVercelTokenForUnitTest0000000000 2-KERANOS")
+    assert "vcp_dummy" not in masked and "[VERCEL_TOKEN]" in masked
+
+    assert model_router.classifier_tache_requete(
+        messages=[{"role": "user", "content": "[Surface: studio]\nUtilisateur: cree un script python"}],
+        tools=[],
+    ) == "fast"
+    assert model_router.classifier_tache_requete(
+        messages=[{"role": "user", "content": "analyse en profondeur tout le projet"}],
+        tools=fake_tools,
+    ) == "deep"
+    assert model_router.classifier_tache_requete(
+        messages=[
+            {"role": "assistant", "content": "x" * 9000},
+            {"role": "user", "content": "LE LIEN DU SITE ?"},
+        ],
+        tools=fake_tools,
+    ) == "agent"
+
+    monkeypatch.setenv("GEMINI_API_KEY", "gem_dummy")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or_dummy")
+    routes_long = proxy_srv._routes_pour_profil("riot-auto", tache="deep", has_tools=True, long_context=True)
+    provs_long = [r["provider"] for r in routes_long]
+    assert provs_long.index("Gemini") < provs_long.index("Groq") < provs_long.index("OpenRouter")
+
 
 
 
