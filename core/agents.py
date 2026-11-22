@@ -20,6 +20,7 @@ from rich.table import Table
 
 from core import auth, registre, theme
 from core.llm import llm
+from core.model_router import JournalContinuite, tache_pour_sous_agent
 
 
 def _pal():
@@ -64,22 +65,38 @@ def _executer_boucle_agent(
     console: Console,
     max_tours: int = 4,
     provider_override: Optional[Any] = None,
-    prefill: Optional[str] = None
+    prefill: Optional[str] = None,
+    role: str = "",
 ) -> str:
-    """Exécute un sous-agent isolé avec son propre contexte et ses outils restreints."""
+    """Exécute un sous-agent isolé avec modèle adapté au rôle et journal de continuité inter-modèles."""
     provider = provider_override or llm()
     if not provider.disponible():
         return f"[ERREUR] Fournisseur LLM ({provider.nom}) indisponible."
 
+    tache_role = tache_pour_sous_agent(role or nom_agent)
     schemas = _filtrer_schemas(outils_autorises)
     historique = [{"role": "user", "content": mission}]
     reponse_texte = ""
+    journal = JournalContinuite(mission)
+    compteur_appels: Dict[str, int] = {}
+    termine_proprement = False
 
     acc = _pal()["cli_accent"]
     for tour in range(max_tours):
+        bloc_cont = journal.rendre_bloc()
+        system_tour = f"{system_prompt}{bloc_cont}" if bloc_cont else system_prompt
         try:
-            with console.status(f"[bold {acc}]⠋ {nom_agent} est au travail...[/bold {acc}]", spinner="dots"):
-                rep = provider.repondre(system_prompt, historique, schemas, prefill=prefill if tour == 0 else None)
+            with console.status(
+                f"[bold {acc}]⠋ {nom_agent} ({tache_role}) est au travail...[/bold {acc}]",
+                spinner="dots",
+            ):
+                rep = provider.repondre(
+                    system_tour,
+                    historique,
+                    schemas,
+                    prefill=prefill if tour == 0 else None,
+                    tache_hint=tache_role,
+                )
         except Exception as e:
             return f"[ERREUR] Échec de {nom_agent} : {e}"
 
@@ -90,6 +107,7 @@ def _executer_boucle_agent(
 
         # Pas d'outil appelé -> Réponse finale de cet agent
         if getattr(rep, "stop_reason", None) != "tool_use":
+            termine_proprement = True
             break
 
         # Traitement des appels d'outils
@@ -102,16 +120,22 @@ def _executer_boucle_agent(
             nom_o = b.name
             args = b.input or {}
             outil = registre.get(nom_o)
+            empreinte = f"{nom_o}:{sorted((args or {}).items())}"
+            compteur_appels[empreinte] = compteur_appels.get(empreinte, 0) + 1
 
             arg_str = ", ".join(f"{k}='{str(v)[:40]}'" for k, v in args.items())
             console.print(f"  [dim]{nom_agent} ➔[/dim] [bold white]{nom_o}[/bold white]([dim]{arg_str}[/dim])")
 
             t0 = time.time()
-            try:
-                res = outil.fonction(**args) if outil else f"[ERREUR] Outil {nom_o} inconnu."
-            except Exception as e:
-                res = f"[ERREUR] Échec outil {nom_o} : {e}"
+            if compteur_appels[empreinte] > 2:
+                res = f"[BOUCLE STOPPÉE] `{nom_o}` déjà exécuté avec les mêmes paramètres. Passe à l'étape suivante."
+            else:
+                try:
+                    res = outil.fonction(**args) if outil else f"[ERREUR] Outil {nom_o} inconnu."
+                except Exception as e:
+                    res = f"[ERREUR] Échec outil {nom_o} : {e}"
             dt = round(time.time() - t0, 2)
+            journal.enregistrer_appel(nom_o, args, str(res))
 
             res_resume = str(res).strip().splitlines()[0] if str(res).strip() else "OK"
             if "[ERREUR]" in str(res) or "⚠️" in str(res):
@@ -130,6 +154,21 @@ def _executer_boucle_agent(
                 "role": "user",
                 "content": resultats_du_tour,
             })
+
+    if not termine_proprement and not reponse_texte:
+        try:
+            bloc_cont = journal.rendre_bloc()
+            rep_fin = provider.repondre(
+                f"{system_prompt}{bloc_cont}",
+                historique,
+                [],
+                tache_hint=tache_role,
+            )
+            reponse_texte = " ".join(
+                b.text for b in getattr(rep_fin, "content", []) if getattr(b, "type", None) == "text" and b.text
+            ).strip()
+        except Exception:
+            reponse_texte = journal.resume_court()
 
     return reponse_texte
 
@@ -158,7 +197,8 @@ def executer_architecte(mission: str, dossier_projet: Path, console: Console) ->
         mission=f"Établis le plan d'action technique pour réaliser cette mission : {mission}",
         outils_autorises=outils_architect,
         console=console,
-        max_tours=3
+        max_tours=5,
+        role="architect",
     )
     dt = round(time.time() - t0, 1)
     console.print()
@@ -198,7 +238,8 @@ def executer_ingenieur(mission: str, dossier_projet: Path, console: Console, pla
         mission=contexte,
         outils_autorises=outils_engineer,
         console=console,
-        max_tours=5
+        max_tours=8,
+        role="engineer",
     )
     dt = round(time.time() - t0, 1)
     console.print()
@@ -235,7 +276,8 @@ def executer_testeur(mission: str, dossier_projet: Path, console: Console, rappo
         mission=contexte,
         outils_autorises=outils_tester,
         console=console,
-        max_tours=3
+        max_tours=5,
+        role="tester",
     )
     dt = round(time.time() - t0, 1)
     console.print()
@@ -278,7 +320,8 @@ def executer_reviewer(mission: str, dossier_projet: Path, console: Console, plan
         mission=contexte,
         outils_autorises=outils_reviewer,
         console=console,
-        max_tours=2
+        max_tours=3,
+        role="reviewer",
     )
     dt = round(time.time() - t0, 1)
     console.print()
@@ -390,6 +433,7 @@ def executer_pipeline_dev(instruction: str, dossier_projet: Optional[Path], cons
             outils_autorises={"explorer_projet", "lire_code", "chercher_dans_code", "generer_pdf", "extraire_texte_pdf", "fusionner_pdfs", "generer_excel", "lire_excel", "generer_powerpoint", "lire_powerpoint", "generer_graphique", "generer_diagramme", "generer_image", "lister_images_generees", "creer_produit_digital", "auditer_schema_sql", "optimiser_requete_postgis", "generer_politiques_rls", "generer_composant_mobile", "scaffolder_app_mobile_expo", "surveiller_marche_crypto", "recueillir_veille_web", "generer_bulletin_veille"},
             console=console,
             max_tours=3,
+            role="coordinator",
         )
         p = _pal()
         console.print(Panel(Markdown(rep or "Réponse générée."), title=f"[bold {p['cli_accent']}]⚡ RIOT[/bold {p['cli_accent']}]", border_style=p["cli_accent"], box=ROUNDED))
@@ -471,7 +515,8 @@ def executer_trader(mission: str, console: Console, dossier_projet: Optional[Pat
         mission=mission,
         outils_autorises=outils_trader,
         console=console,
-        max_tours=4
+        max_tours=4,
+        role="trader",
     )
     dt = round(time.time() - t0, 1)
     console.print()

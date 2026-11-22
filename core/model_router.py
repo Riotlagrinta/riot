@@ -9,7 +9,7 @@ Classifie deterministiquement (< 1 ms, sans appel LLM supplementaire) chaque req
 from __future__ import annotations
 
 import re
-from typing import Any, Iterable, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 _RE_CODE = re.compile(
     r"(?i)(?:\b("
@@ -145,3 +145,112 @@ def profil_vers_tache(
     if prompt_hint and prompt_hint.strip().lower() in ("fast", "agent", "code", "deep"):
         return prompt_hint.strip().lower()
     return classifier_tache_requete(messages=messages, tools=tools, systeme=systeme)
+
+
+SOUS_AGENTS_TACHES: Dict[str, str] = {
+    "engineer": "code",       # Meilleur modele de code (claude-sonnet-4-5 / codestral-latest)
+    "architect": "deep",      # Raisonnement & grand contexte (claude-sonnet / nemotron-3-ultra / deepseek)
+    "reviewer": "deep",       # Audit securite & qualite
+    "tester": "agent",        # Tests rapides & fiable en outils (gpt-oss-120b / qwen3.6-27b)
+    "trader": "agent",        # Donnees financieres & calculs
+    "coordinator": "fast",    # Reponse directe economique sans gaspiller le modele codeur
+    "coordinateur": "fast",   # Alias francais de coordinator
+    "coder": "code",
+}
+
+
+def tache_pour_sous_agent(role: str) -> str:
+    """Retourne le profil de tache optimal ('code'|'deep'|'agent'|'fast') d'un sous-agent."""
+    r = (role or "").strip().lower()
+    for cle, tache in SOUS_AGENTS_TACHES.items():
+        if cle in r:
+            return tache
+    return "agent"
+
+
+class JournalContinuite:
+    """Memoire de travail structuree qui survive aux rotations d'IA/modeles et a la compaction."""
+
+    def __init__(self, objectif: str = "", dossier: str = ""):
+        self.objectif = " ".join(str(objectif or "").split())[:220]
+        self.dossier = str(dossier or "").strip()
+        self.fichiers_lus: List[str] = []
+        self.fichiers_modifies: List[str] = []
+        self.commandes: List[str] = []
+        self.actions: List[str] = []
+
+    def _ajouter_unique(self, cible: List[str], val: str, limite: int = 8) -> None:
+        v = str(val or "").strip()
+        if not v:
+            return
+        if v in cible:
+            cible.remove(v)
+        cible.append(v)
+        if len(cible) > limite:
+            del cible[:-limite]
+
+    def enregistrer_appel(self, outil: str, args: Optional[Dict[str, Any]], resultat: str) -> None:
+        a = args if isinstance(args, dict) else {}
+        nom = str(outil or "").strip()
+        res_l1 = str(resultat or "").strip().splitlines()[0][:110] if str(resultat or "").strip() else "OK"
+        try:
+            from core.telemetry import masquer_secrets
+            res_l1 = masquer_secrets(res_l1, max_len=110)
+        except Exception:
+            pass
+
+        chemin = str(a.get("fichier") or a.get("chemin") or a.get("dossier") or "").strip()
+        if nom in ("explorer_projet", "lister_dossier") and chemin:
+            if not self.dossier:
+                self.dossier = chemin
+        elif nom == "lire_code" and chemin:
+            self._ajouter_unique(self.fichiers_lus, chemin)
+        elif nom in ("ecrire_code", "patcher_code", "supprimer_fichier") and chemin and "[ERREUR]" not in res_l1:
+            self._ajouter_unique(self.fichiers_modifies, f"{chemin} ({nom})")
+        elif nom in ("executer_terminal", "executer_test_ou_commande"):
+            cmd = " ".join(str(a.get("commande") or "").split())[:60]
+            try:
+                from core.telemetry import masquer_secrets
+                cmd = masquer_secrets(cmd, max_len=60)
+            except Exception:
+                pass
+            if cmd:
+                self._ajouter_unique(self.commandes, f"`{cmd}` -> {res_l1[:50]}", limite=4)
+
+        arg_court = chemin or " ".join(str(a.get("commande") or a.get("url") or "").split())[:45]
+        entree = f"{nom}({arg_court}) -> {res_l1}" if arg_court else f"{nom}() -> {res_l1}"
+        self.actions.append(entree)
+        if len(self.actions) > 8:
+            del self.actions[:-8]
+
+    def resume_court(self) -> str:
+        if not self.actions and not self.fichiers_modifies:
+            return ""
+        morceaux = []
+        if self.dossier:
+            morceaux.append(f"Dossier={self.dossier}")
+        if self.fichiers_modifies:
+            morceaux.append("Modifiés=" + ", ".join(self.fichiers_modifies[-4:]))
+        elif self.actions:
+            morceaux.append("Actions=" + " ; ".join(self.actions[-3:]))
+        return "[CONTINUITÉ SESSION : " + " | ".join(morceaux) + "]"
+
+    def rendre_bloc(self) -> str:
+        if not self.actions and not self.dossier:
+            return ""
+        lignes = ["\n\n[JOURNAL DE CONTINUITÉ INTER-MODÈLES — NE PAS RECOMMENCER À ZÉRO]"]
+        if self.objectif:
+            lignes.append(f"• Objectif initial : {self.objectif}")
+        if self.dossier:
+            lignes.append(f"• Dossier projet actif : {self.dossier}")
+        if self.fichiers_lus:
+            lignes.append("• Fichiers déjà lus : " + ", ".join(self.fichiers_lus[-6:]))
+        if self.fichiers_modifies:
+            lignes.append("• Fichiers modifiés/créés : " + ", ".join(self.fichiers_modifies[-6:]))
+        if self.commandes:
+            lignes.append("• Commandes récentes : " + " | ".join(self.commandes[-3:]))
+        if self.actions:
+            lignes.append("• Dernières étapes : " + " -> ".join(self.actions[-5:]))
+        lignes.append("RÈGLE : Même en cas de rotation de modèle/provider, continue exactement à l'étape suivante sans redemander ni refaire ce qui est déjà fait.")
+        return "\n".join(lignes)
+

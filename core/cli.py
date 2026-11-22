@@ -643,12 +643,22 @@ def _compacter_historique(historique: List[dict], max_messages: int = 12) -> Lis
         role = m.get("role")
         c = m.get("content")
         if isinstance(c, str) and c.strip():
-            resume_ligne = c.strip().splitlines()[0][:80]
+            resume_ligne = c.strip().splitlines()[0][:90]
             points.append(f"• [{role}] {resume_ligne}")
+        elif isinstance(c, list):
+            elements = []
+            for item in c:
+                if getattr(item, "type", None) == "tool_use":
+                    elements.append(f"appel {getattr(item, 'name', '?')}")
+                elif isinstance(item, dict) and item.get("type") == "tool_result":
+                    l1 = str(item.get("content", "")).strip().splitlines()[0][:70] if str(item.get("content", "")).strip() else "OK"
+                    elements.append(f"résultat: {l1}")
+            if elements:
+                points.append(f"• [{role}] " + " | ".join(elements[:4]))
 
     resume_text = (
         "[RÉSUMÉ DES ÉCHANGES PRÉCÉDENTS (Auto-Compaction)]\n" +
-        "\n".join(points[:8]) +
+        "\n".join(points[-10:]) +
         "\n[Fin du résumé contextuel, poursuivre avec les messages récents]"
     )
 
@@ -771,14 +781,18 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
     else:
         schemas = tous_schemas
 
+    from core.model_router import JournalContinuite
     p = _pal()
     acc = p["cli_accent"]
     compteur_appels = {}
+    journal = JournalContinuite(phrase, dossier=str(projet_actuel or ""))
     for tour in range(10):
         t0 = time.time()
+        bloc_cont = journal.rendre_bloc()
+        systeme_tour = f"{systeme}{bloc_cont}" if bloc_cont else systeme
         try:
             with console.status(f"[bold {acc}]⠋ Réflexion en cours...[/bold {acc}]", spinner="dots"):
-                rep = provider.repondre(systeme, historique_conversation, schemas)
+                rep = provider.repondre(systeme_tour, historique_conversation, schemas)
         except Exception as e:
             console.print(f"[bold red]❌ Erreur LLM : {e}[/bold red]")
             return
@@ -789,7 +803,9 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
         if getattr(rep, "stop_reason", None) != "tool_use":
             texte = " ".join(b.text for b in rep.content if getattr(b, "type", None) == "text").strip()
             reponse_finale = texte or "Action terminée avec succès."
-            historique_conversation.append({"role": "assistant", "content": reponse_finale})
+            resume_cont = journal.resume_court()
+            contenu_hist = f"{reponse_finale}\n{resume_cont}" if resume_cont else reponse_finale
+            historique_conversation.append({"role": "assistant", "content": contenu_hist})
 
             # Affichage Claude Code : minimaliste, aéré, élégant
             console.print()
@@ -833,6 +849,7 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
                     res = f"[ERREUR] Échec de l'outil {nom_outil} : {e}"
 
             dt_outil = round(time.time() - t_outil, 2)
+            journal.enregistrer_appel(nom_outil, args, str(res))
             
             # Affichage du résultat résumé
             premiere_ligne = str(res).strip().splitlines()[0] if str(res).strip() else "OK"

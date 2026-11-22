@@ -306,11 +306,11 @@ class GroqProvider(ProviderLLM):
             })
         return tools
 
-    def _chat(self, messages, tools):
+    def _chat(self, messages, tools, tache_hint: str = ""):
         import requests
 
         derniere_erreur = None
-        tache = classifier_tache_requete(messages=messages, tools=tools)
+        tache = tache_hint or classifier_tache_requete(messages=messages, tools=tools)
         rotation_eff = list(self.rotation)
         if tache == "fast" and "openai/gpt-oss-20b" in rotation_eff:
             rotation_eff = ["openai/gpt-oss-20b"] + [m for m in rotation_eff if m != "openai/gpt-oss-20b"]
@@ -404,7 +404,7 @@ class GroqProvider(ProviderLLM):
         messages = self._traduire(systeme, historique)
         tools = self._outils(outils)
         try:
-            return self._parser(self._chat(messages, tools))
+            return self._parser(self._chat(messages, tools, tache_hint=str(kwargs.get("tache_hint", "") or "")))
         except Exception as e:
             LOG.warning("groq: echec (%s), declenchement cascade failover...", e)
             return cascade_failover(systeme, historique, outils, visites, **kwargs)
@@ -857,7 +857,9 @@ class CustomOpenAIProvider(ProviderLLM):
         visites.add(self.nom)
         messages = self._traduire(systeme, historique)
         tools = self._outils(outils)
-        tache_hint = profil_vers_tache(self.modele, messages=messages, tools=tools, systeme=systeme)
+        tache_hint = str(kwargs.get("tache_hint", "") or "").strip().lower() or profil_vers_tache(
+            self.modele, messages=messages, tools=tools, systeme=systeme
+        )
         try:
             return self._parser(self._chat(messages, tools, tache_hint=tache_hint))
         except Exception as e:
@@ -883,7 +885,7 @@ class ClaudeProvider(ProviderLLM):
         # La reponse native Anthropic a deja la bonne forme (.stop_reason/.content).
         rep = self.client.messages.create(
             model=self.modele,
-            max_tokens=1024,
+            max_tokens=4096,
             system=[{"type": "text", "text": systeme,
                      "cache_control": {"type": "ephemeral"}}],
             messages=historique,
@@ -1050,7 +1052,9 @@ def cascade_failover(systeme, historique, outils, visites: set, **kwargs):
         visites = set()
 
     # Ordre de secours adaptatif selon le type de requete
-    tache = classifier_tache_requete(messages=historique, tools=outils, systeme=systeme)
+    tache = str(kwargs.get("tache_hint", "") or "").strip().lower() or classifier_tache_requete(
+        messages=historique, tools=outils, systeme=systeme
+    )
     if tache == "code":
         candidats = [
             ("Mistral", MistralProvider),

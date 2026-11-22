@@ -3879,11 +3879,15 @@ def monter_routes(app):
 
 
 
+            from core.model_router import JournalContinuite
+
             dernier_capture_md = ""
 
             compteur_appels_studio = {}
 
             reponse_envoyee = False
+
+            journal_studio = JournalContinuite(instruction_mono, dossier=str(_projet_actif_courant() or ""))
 
 
 
@@ -3893,9 +3897,11 @@ def monter_routes(app):
 
                 try:
 
+                    bloc_cont_s = journal_studio.rendre_bloc()
 
+                    systeme_tour = f"{systeme}{bloc_cont_s}" if bloc_cont_s else systeme
 
-                    rep = await asyncio.to_thread(provider.repondre, systeme, historique, schemas)
+                    rep = await asyncio.to_thread(provider.repondre, systeme_tour, historique, schemas)
 
 
 
@@ -4063,7 +4069,11 @@ def monter_routes(app):
 
 
 
-                    _memoriser_tour(chat_id, instruction_mono, texte_final)
+                    resume_s = journal_studio.resume_court()
+
+                    texte_hist_s = f"{texte_final}\n{resume_s}" if resume_s else texte_final
+
+                    _memoriser_tour(chat_id, instruction_mono, texte_hist_s)
 
 
 
@@ -4169,6 +4179,8 @@ def monter_routes(app):
 
                     dt_o = round(time.time() - t_o, 2)
 
+                    journal_studio.enregistrer_appel(nom_o, args, str(res))
+
 
 
                     if nom_o in ("lire_code", "ecrire_code", "patcher_code"):
@@ -4223,13 +4235,17 @@ def monter_routes(app):
 
                 try:
 
-                    rep_fin = await asyncio.to_thread(provider.repondre, systeme, historique, [])
+                    bloc_cont_s = journal_studio.rendre_bloc()
+
+                    rep_fin = await asyncio.to_thread(provider.repondre, f"{systeme}{bloc_cont_s}", historique, [])
 
                     texte_fin = " ".join(b.text for b in getattr(rep_fin, "content", []) if getattr(b, "type", None) == "text").strip()
 
                     if texte_fin:
 
-                        _memoriser_tour(chat_id, instruction_mono, texte_fin)
+                        resume_s = journal_studio.resume_court()
+
+                        _memoriser_tour(chat_id, instruction_mono, f"{texte_fin}\n{resume_s}" if resume_s else texte_fin)
 
                         for mot in texte_fin.split(" "):
 

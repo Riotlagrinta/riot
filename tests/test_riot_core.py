@@ -868,6 +868,50 @@ def test_freellmapi_port_31415_et_routage_adaptatif(monkeypatch):
     assert rot_long[0] == "nemotron-3.5-lightning"
 
 
+def test_sous_agents_modeles_et_continuite_inter_modeles(monkeypatch):
+    from core import cli, model_router
+    from core.llm import CustomOpenAIProvider
+
+    # 1. Chaque sous-agent pointe vers son niveau de modele dedie (le meilleur modele pour l'ingenieur code)
+    assert model_router.tache_pour_sous_agent("RIOT-Engineer") == "code"
+    assert model_router.tache_pour_sous_agent("RIOT-Architect") == "deep"
+    assert model_router.tache_pour_sous_agent("RIOT-Reviewer") == "deep"
+    assert model_router.tache_pour_sous_agent("RIOT-Tester") == "agent"
+    assert model_router.tache_pour_sous_agent("RIOT-Trader") == "agent"
+    assert model_router.tache_pour_sous_agent("RIOT (Coordinateur)") == "fast"
+
+    monkeypatch.setenv("CUSTOM_BASE_URL", "http://127.0.0.1:31415/v1")
+    monkeypatch.setenv("CUSTOM_API_KEY", "freellmapi-test-local-0000")
+    prov = CustomOpenAIProvider(modele="auto")
+    assert prov._rotation_adaptative([{"role": "user", "content": "ok"}], [], tache_hint="code")[0] == "claude-sonnet-4-5"
+    assert prov._rotation_adaptative([{"role": "user", "content": "ok"}], [], tache_hint="agent")[0] == "gpt-oss-120b"
+    assert prov._rotation_adaptative([{"role": "user", "content": "ok"}], [], tache_hint="fast")[0] == "auto"
+
+    # 2. Journal de continuite inter-modeles + redaction de secrets
+    j = model_router.JournalContinuite("Corriger auth.py", dossier="E:\\PROJETS\\demo")
+    j.enregistrer_appel("lire_code", {"fichier": "auth.py"}, "def login(): ...")
+    j.enregistrer_appel("patcher_code", {"fichier": "auth.py"}, "✓ Patch appliqué (+2 lignes)")
+    j.enregistrer_appel("executer_terminal", {"commande": "pytest"}, "[Code retour: 0]")
+    bloc = j.rendre_bloc()
+    assert "auth.py" in bloc and "JOURNAL DE CONTINUITÉ" in bloc
+    assert "Corriger auth.py" in bloc
+
+    # 3. _compacter_historique conserve la trace des appels d'outils au lieu de les jeter
+    class _FakeToolBlock:
+        type = "tool_use"
+        name = "patcher_code"
+
+    hist = [
+        {"role": "user", "content": "corrige app.py"},
+        {"role": "assistant", "content": [_FakeToolBlock()]},
+        {"role": "user", "content": [{"type": "tool_result", "content": "✓ Patch appliqué sur app.py"}]},
+    ] + [{"role": "user", "content": f"msg {i}"} for i in range(12)]
+    compacte = cli._compacter_historique(hist, max_messages=8)
+    assert "patcher_code" in compacte[0]["content"]
+    assert "✓ Patch appliqué sur app.py" in compacte[0]["content"]
+
+
+
 
 
 
