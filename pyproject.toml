@@ -89,10 +89,11 @@ py-modules = ["riot", "keranos", "hud", "overlay"]
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["core*", "tools*", "musique*", "gestes*", "jarvis*", "web*"]
+include = ["core*", "tools*", "musique*", "gestes*", "jarvis*", "web*", "data*"]
 
 [tool.setuptools.package-data]
 web = ["*.html", "*.css", "*.js", "*.svg", "*.png", "*.json"]
+data = ["*.json"]
 
 [tool.uv]
 package = true

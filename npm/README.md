@@ -16,7 +16,8 @@ riot
 - `riot --app` *(ou `/studio`)* : **RIOT Studio** (interface web sécurisée + génération de maquettes/images).
 - `riot --server` : Serveur backend headless (piloté par l'app bureau **RIOT Desktop Windows** avec System Tray, raccourci `Ctrl+Alt+R` & appairage QR).
 - **App Native Mobile (`mobile-app/`)** : Client Expo / React Native (Android & iOS) avec appairage QR à usage unique, terminal sécurisé par biométrie et **Notifications Push natives**.
-- `/memory [sync|forget <sujet>]` : **Mémoire persistante hybride** (`~/.riot/riot_memory.db` SQLite FTS5 + synchronisation Cloud Neon multi-postes + auto-extraction silencieuse).
+- `/memory [sync|forget <sujet>]` & **Playbook gouverné (`🧠 Playbook`)** : **Mémoire persistante hybride** stockée dans `~/.riot/riot_memory.db` (SQLite FTS5 + synchronisation Cloud Neon + score de confiance par leçon et auto-import du Playbook public curé).
+- `/mentor [on|off|status|prune|export]` *(mode entraînement créateur)* : active la boucle Mentor Antigravity (`google-antigravity`) et gère l'export du Playbook public.
 - `/mcp [catalog|add <slug> [cle]|reload]` : **Catalogue de 15 connecteurs MCP** prêts en 1 ligne (`context7`, `playwright`, `firecrawl`, `github`, `supabase`, `neon`, `postgres`, `notion`, `slack`, `stripe`...).
 - `/grill-me [on|off|<sujet>]` : **Cadrage actif** — pose 1 à 4 questions ciblées avec recommandations avant d'agir.
 - **Outil `content-strategy` (activé par défaut)** : génère une stratégie éditoriale complète (piliers, matrice canaux, calendrier 4 semaines, hooks & KPIs) exportée en Markdown.

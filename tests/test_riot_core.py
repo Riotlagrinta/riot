@@ -1219,13 +1219,27 @@ def test_mentor_antigravity_gouvernance_memoire_et_playbook(monkeypatch, tmp_pat
         res_fail2 = memoire.evaluer_lecon(rid_bad, False)
         assert res_fail2["confiance"] < 0.30 and res_fail2["statut"] == "archived"
 
-        # 4. Export playbook public (exclut project:* et archived) + reimport
+        # 4. Export playbook public (exclut project:* et archived) + reimport auto via RACINE
         pb_path = tmp_path / "playbook_pub.json"
         rep_exp = memoire.exporter_playbook_public(chemin_sortie=pb_path, min_confiance=0.70)
         assert rep_exp["ok"] is True and rep_exp["exportees"] == 1
         contenu_pb = pb_path.read_text(encoding="utf-8")
         assert "Validation FastAPI stricte" in contenu_pb
         assert "projet_a" not in contenu_pb and "Mauvaise heuristique" not in contenu_pb
+
+        # Teste aussi l'export/auto-import par defaut via memoire.RACINE
+        fake_root = tmp_path / "fake_riot_root"
+        (fake_root / "data").mkdir(parents=True)
+        monkeypatch.setattr(memoire, "RACINE", fake_root)
+        rep_def = memoire.exporter_playbook_public(min_confiance=0.70)
+        assert rep_def["ok"] is True and (fake_root / "data" / "riot_playbook_public.json").exists()
+        db_clean = tmp_path / "test_fresh_boot.db"
+        memoire.reinitialiser_connexion(db_clean)
+        conn_fresh = memoire.get_connexion()
+        rows_fresh = memoire.lister_lecons_gouvernees(statut="active")
+        assert any(r["titre"] == "Validation FastAPI stricte" for r in rows_fresh)
+        assert conn_fresh.execute("SELECT valeur FROM memoire_meta WHERE cle = 'playbook_public_hash';").fetchone() is not None
+        memoire.reinitialiser_connexion(db_tmp)
 
         # 5. Boucle Mentor Antigravity mockee (Directives + Audit -> lecon stockee)
         def _fake_exec(sys_inst, prompt, dossier, schema, enable_edit=False, timeout_s=45.0):

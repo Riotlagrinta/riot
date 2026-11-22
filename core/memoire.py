@@ -133,6 +133,7 @@ def get_connexion() -> sqlite3.Connection:
             _CONNEXION.execute("PRAGMA synchronous = NORMAL;")
             _initialiser_base(_CONNEXION)
             _migrer_anciens_fichiers(_CONNEXION)
+            _auto_importer_playbook_si_nouveau(_CONNEXION)
         return _CONNEXION
 
 
@@ -943,7 +944,7 @@ def exporter_playbook_public(
             "tags": l.get("tags") or "",
             "confiance": round(float(l.get("confiance") or 0.7), 3),
         })
-    cible = Path(chemin_sortie) if chemin_sortie else (_RACINE / "data" / "riot_playbook_public.json")
+    cible = Path(chemin_sortie) if chemin_sortie else (RACINE / "data" / "riot_playbook_public.json")
     cible.parent.mkdir(parents=True, exist_ok=True)
     cible.write_text(
         json.dumps({"version": 1, "lecons": exportables}, ensure_ascii=False, indent=2),
@@ -954,7 +955,7 @@ def exporter_playbook_public(
 
 def importer_playbook_public(chemin_source: Optional[Path] = None) -> int:
     """Importe un playbook public JSON dans la base locale sans ecraser les lecons plus fiables."""
-    cible = Path(chemin_source) if chemin_source else (_RACINE / "data" / "riot_playbook_public.json")
+    cible = Path(chemin_source) if chemin_source else (RACINE / "data" / "riot_playbook_public.json")
     if not cible.exists():
         return 0
     try:
@@ -985,6 +986,28 @@ def importer_playbook_public(chemin_source: Optional[Path] = None) -> int:
         return ajoutes
     except Exception:
         return 0
+
+
+def _auto_importer_playbook_si_nouveau(conn: sqlite3.Connection) -> None:
+    """Importe automatiquement data/riot_playbook_public.json si nouveau ou mis a jour."""
+    cible = RACINE / "data" / "riot_playbook_public.json"
+    if not cible.exists() or not cible.is_file():
+        return
+    try:
+        import hashlib
+        contenu = cible.read_bytes()
+        empreinte = hashlib.sha256(contenu).hexdigest()[:24]
+        row = conn.execute("SELECT valeur FROM memoire_meta WHERE cle = 'playbook_public_hash';").fetchone()
+        if row and str(row["valeur"]) == empreinte:
+            return
+        importer_playbook_public(cible)
+        with _VERROU, conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO memoire_meta(cle, valeur) VALUES ('playbook_public_hash', ?);",
+                (empreinte,),
+            )
+    except Exception:
+        pass
 
 
 # ------------------------------------------------------------------ Documents d'étude
