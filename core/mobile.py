@@ -34,6 +34,81 @@ _RACINE = Path(__file__).resolve().parent.parent
 _HTML = _RACINE / "web" / "mobile.html"
 _CODES_APPAIRAGE: dict[str, float] = {}
 _TTL_APPAIRAGE_SEC = 300.0
+_PUSH_TOKENS_FICHIER = Path.home() / ".riot" / "mobile_push_tokens.json"
+
+
+def _qr_svg(data: str) -> str:
+    """Genere localement un QR code SVG sans envoyer le jeton a un service tiers."""
+    try:
+        import segno
+        qr = segno.make(data)
+        return qr.svg_inline(scale=5, dark="#111827", light="#FFFFFF", border=2)
+    except Exception as e:
+        LOG.warning("Generation QR SVG indisponible: %s", e)
+        return ""
+
+
+def _charger_push_tokens() -> list[dict]:
+    try:
+        if not _PUSH_TOKENS_FICHIER.exists():
+            return []
+        brut = json.loads(_PUSH_TOKENS_FICHIER.read_text(encoding="utf-8"))
+        return brut if isinstance(brut, list) else []
+    except Exception:
+        return []
+
+
+def _sauver_push_tokens(items: list[dict]) -> None:
+    try:
+        _PUSH_TOKENS_FICHIER.parent.mkdir(parents=True, exist_ok=True)
+        _PUSH_TOKENS_FICHIER.write_text(json.dumps(items[:10], ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        LOG.warning("Sauvegarde push tokens impossible: %s", e)
+
+
+def envoyer_notification_push(titre: str, corps: str, data: dict | None = None) -> dict:
+    """Envoie une notification push Expo aux appareils mobiles enregistres."""
+    items = _charger_push_tokens()
+    tokens = [str(it.get("token", "")).strip() for it in items if str(it.get("token", "")).strip()]
+    if not tokens:
+        return {"ok": False, "sent": 0, "raison": "Aucun appareil mobile enregistré pour le push."}
+
+    messages = [
+        {
+            "to": tok,
+            "sound": "default",
+            "title": str(titre)[:120],
+            "body": str(corps)[:300],
+            "channelId": "riot-alerts",
+            "data": data or {},
+        }
+        for tok in tokens
+    ]
+    try:
+        import requests
+        r = requests.post(
+            "https://exp.host/--/api/v2/push/send",
+            json=messages,
+            headers={"Accept": "application/json", "Content-Type": "application/json"},
+            timeout=6,
+        )
+        return {"ok": r.status_code < 400, "sent": len(messages), "status": r.status_code}
+    except Exception as e:
+        LOG.warning("Envoi push Expo echoue: %s", e)
+        return {"ok": False, "sent": 0, "raison": str(e)}
+
+
+def notifier_push_async(titre: str, corps: str, data: dict | None = None) -> None:
+    """Declenche une notification push Expo en tache de fond non-bloquante."""
+    import threading
+    if not _charger_push_tokens():
+        return
+    threading.Thread(
+        target=envoyer_notification_push,
+        args=(titre, corps, data),
+        daemon=True,
+        name="riot-push-notify",
+    ).start()
 
 
 def _ip_locale():
@@ -344,6 +419,7 @@ def monter_routes(app):
             "lan_url": lan_url,
             "public_url": public_url,
             "qr_payload": qr_payload,
+            "qr_svg": _qr_svg(qr_payload),
         }
 
     @app.post("/api/mobile/pair/echanger")
@@ -385,6 +461,51 @@ def monter_routes(app):
         rep = JSONResponse({"ok": True})
         rep.delete_cookie("keranos_token")
         return rep
+
+    @app.post("/api/mobile/push/enregistrer")
+    async def route_push_enregistrer(request: Request):
+        if not _est_authentifie(request):
+            return JSONResponse({"ok": False, "message": "Non authentifié."}, status_code=401)
+        try:
+            body = await request.json() or {}
+        except Exception:
+            body = {}
+        tok = str(body.get("push_token", "")).strip()
+        if not (tok.startswith("ExponentPushToken[") or tok.startswith("ExpoPushToken[")):
+            return JSONResponse({"ok": False, "message": "Jeton Push Expo invalide."}, status_code=400)
+        plateforme = str(body.get("plateforme", "unknown")).strip().lower()[:20]
+        nom = str(body.get("nom", "Smartphone")).strip()[:60]
+        items = [it for it in _charger_push_tokens() if it.get("token") != tok]
+        items.insert(0, {"token": tok, "plateforme": plateforme, "nom": nom, "maj": int(time.time())})
+        _sauver_push_tokens(items)
+        auth.audit("PUSH_ENREGISTRE", _ip_client(request), plateforme)
+        return {"ok": True, "count": len(items[:10])}
+
+    @app.post("/api/mobile/push/supprimer")
+    async def route_push_supprimer(request: Request):
+        if not _est_authentifie(request):
+            return JSONResponse({"ok": False, "message": "Non authentifié."}, status_code=401)
+        try:
+            body = await request.json() or {}
+        except Exception:
+            body = {}
+        tok = str(body.get("push_token", "")).strip()
+        items = [it for it in _charger_push_tokens() if it.get("token") != tok]
+        _sauver_push_tokens(items)
+        return {"ok": True, "count": len(items)}
+
+    @app.post("/api/mobile/push/test")
+    async def route_push_test(request: Request):
+        if not _est_authentifie(request):
+            return JSONResponse({"ok": False, "message": "Non authentifié."}, status_code=401)
+        res = await asyncio.to_thread(
+            envoyer_notification_push,
+            "RIOT Mobile — Test",
+            "Les notifications push natives sont actives sur votre appareil.",
+            {"screen": "cockpit"},
+        )
+        code = 200 if res.get("ok") else 400
+        return JSONResponse(res, status_code=code)
 
     @app.get("/api/mobile/telemetry")
     async def telemetrie(request: Request):

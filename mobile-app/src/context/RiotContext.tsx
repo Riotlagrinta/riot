@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { Platform } from "react-native";
 import * as Haptics from "expo-haptics";
 import {
   buildWsUrl,
@@ -7,8 +8,12 @@ import {
   loginWithPin,
   logoutSession,
   normalizeBaseUrl,
+  registerPushToken,
   resolveReachableUrl,
+  sendTestPush,
+  unregisterPushToken,
 } from "../lib/api";
+import { requestExpoPushToken } from "../lib/notifications";
 import { clearSession, loadSession, saveSession } from "../lib/storage";
 import type { ChatMessage, PairingPayload, SessionConfig, TelemetrySnapshot, WsServerEvent } from "../types/riot";
 
@@ -19,6 +24,8 @@ interface RiotContextValue {
   streaming: boolean;
   telemetry: TelemetrySnapshot | null;
   messages: ChatMessage[];
+  pushToken: string | null;
+  pushStatus: string;
   signInWithPin: (serverUrl: string, pin: string) => Promise<void>;
   signInWithQr: (payload: PairingPayload) => Promise<void>;
   signOut: () => Promise<void>;
@@ -27,6 +34,8 @@ interface RiotContextValue {
   clearMessages: () => void;
   setRequireBiometric: (enabled: boolean) => Promise<void>;
   switchActiveRoute: () => Promise<string>;
+  enablePushNotifications: () => Promise<void>;
+  testPushNotification: () => Promise<string>;
 }
 
 const RiotContext = createContext<RiotContextValue | null>(null);
@@ -37,6 +46,8 @@ export function RiotProvider({ children }: { children: React.ReactNode }) {
   const [wsConnected, setWsConnected] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [telemetry, setTelemetry] = useState<TelemetrySnapshot | null>(null);
+  const [pushToken, setPushToken] = useState<string | null>(null);
+  const [pushStatus, setPushStatus] = useState("Non configurées");
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "welcome",
@@ -195,14 +206,47 @@ export function RiotProvider({ children }: { children: React.ReactNode }) {
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }, []);
 
+  const enablePushNotifications = useCallback(async () => {
+    if (!session) return;
+    setPushStatus("Activation en cours...");
+    const res = await requestExpoPushToken();
+    if (!res.ok || !res.token) {
+      setPushStatus(res.reason || "Push indisponible");
+      return;
+    }
+    try {
+      await registerPushToken(session, res.token, Platform.OS);
+      setPushToken(res.token);
+      setPushStatus("Activées ✓");
+    } catch (e) {
+      setPushStatus(e instanceof Error ? e.message : "Échec enregistrement push");
+    }
+  }, [session]);
+
+  const testPushNotification = useCallback(async () => {
+    if (!session) throw new Error("Session requise.");
+    return sendTestPush(session);
+  }, [session]);
+
+  useEffect(() => {
+    if (session && !pushToken) {
+      void enablePushNotifications();
+    }
+  }, [session, pushToken, enablePushNotifications]);
+
   const signOut = useCallback(async () => {
     if (session) {
+      if (pushToken) {
+        await unregisterPushToken(session, pushToken);
+      }
       await logoutSession(session);
     }
     await clearSession();
+    setPushToken(null);
+    setPushStatus("Non configurées");
     setSession(null);
     setTelemetry(null);
-  }, [session]);
+  }, [session, pushToken]);
 
   const sendChatMessage = useCallback(
     (text: string) => {
@@ -264,6 +308,8 @@ export function RiotProvider({ children }: { children: React.ReactNode }) {
         streaming,
         telemetry,
         messages,
+        pushToken,
+        pushStatus,
         signInWithPin,
         signInWithQr,
         signOut,
@@ -272,6 +318,8 @@ export function RiotProvider({ children }: { children: React.ReactNode }) {
         clearMessages,
         setRequireBiometric,
         switchActiveRoute,
+        enablePushNotifications,
+        testPushNotification,
       }}
     >
       {children}

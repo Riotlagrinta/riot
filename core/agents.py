@@ -473,6 +473,15 @@ def executer_pipeline_dev(instruction: str, dossier_projet: Optional[Path], cons
     duree_totale = round(time.time() - t_global, 1)
     console.print()
     console.print(f"[bold green]✓ Pipeline Multi-Agents achevé avec succès en {duree_totale}s.[/bold green]\n")
+    try:
+        from core.mobile import notifier_push_async
+        notifier_push_async(
+            "RIOT Swarm terminé",
+            f"Pipeline achevé en {duree_totale}s sur {dossier_projet.name}.",
+            {"screen": "chat"},
+        )
+    except Exception:
+        pass
     return verdict_reviewer
 
 

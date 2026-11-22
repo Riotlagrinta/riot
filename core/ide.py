@@ -834,6 +834,7 @@ def monter_routes(app) -> None:
                 journal = JournalContinuite(objectif=message, dossier=str(projet))
 
                 texte_final = ""
+                patches_crees = 0
                 appels_vus: Dict[str, int] = {}
                 boucle_epuisee = False
                 for tour in range(8):
@@ -872,6 +873,7 @@ def monter_routes(app) -> None:
                                     f"Proposition de patch #{pinfo['id']} sur `{pinfo['chemin']}` "
                                     f"(+{pinfo['plus']} / -{pinfo['moins']} lignes) mise en attente de validation utilisateur."
                                 )
+                                patches_crees += 1
                                 _emit({"type": "pending_patch", "patch": pinfo})
                             else:
                                 out_str = f"[ERREUR] {staged.get('erreur', 'Echec staging patch')}"
@@ -920,6 +922,16 @@ def monter_routes(app) -> None:
                         texte_final = "\n".join(textes_fin)
 
                 _emit({"type": "done", "texte": texte_final or "Tache terminee."})
+                if patches_crees > 0:
+                    try:
+                        from core.mobile import notifier_push_async
+                        notifier_push_async(
+                            "RIOT IDE — Revue requise",
+                            f"{patches_crees} patch(es) prêt(s) sur {projet.name}.",
+                            {"screen": "chat"},
+                        )
+                    except Exception:
+                        pass
                 if texte_final:
                     memoire.lancer_auto_memoire_asynchrone(message, texte_final, surface="ide")
             except Exception as e:

@@ -1,13 +1,32 @@
 import React, { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { LogOut, RefreshCw, Shield } from "lucide-react-native";
+import { LogOut, Bell, RefreshCw, Shield } from "lucide-react-native";
 import { useRiot } from "../../src/context/RiotContext";
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { session, switchActiveRoute, setRequireBiometric, signOut } = useRiot();
+  const {
+    session,
+    pushStatus,
+    switchActiveRoute,
+    setRequireBiometric,
+    enablePushNotifications,
+    testPushNotification,
+    signOut,
+  } = useRiot();
   const [routeMsg, setRouteMsg] = useState("");
+  const [pushMsg, setPushMsg] = useState("");
+
+  async function handleTestPush() {
+    setPushMsg("Envoi en cours...");
+    try {
+      const msg = await testPushNotification();
+      setPushMsg(msg);
+    } catch (e) {
+      setPushMsg(e instanceof Error ? e.message : "Erreur push");
+    }
+  }
 
   async function handleTestRoute() {
     setRouteMsg("Test des routes en cours...");
@@ -50,6 +69,28 @@ export default function SettingsScreen() {
             trackColor={{ false: "#374151", true: "#D97757" }}
           />
         </View>
+      </View>
+
+      <View style={styles.card}>
+        <View style={styles.rowLeft}>
+          <Bell size={18} color="#10B981" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>Notifications Push Natives</Text>
+            <Text style={styles.sub}>Statut : {pushStatus}</Text>
+          </View>
+        </View>
+        <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
+          <Pressable style={[styles.btn, { flex: 1, marginTop: 0 }]} onPress={() => void enablePushNotifications()}>
+            <Text style={styles.btnText}>Activer</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.btn, { flex: 1, marginTop: 0, backgroundColor: "#10B981" }]}
+            onPress={() => void handleTestPush()}
+          >
+            <Text style={styles.btnText}>Tester</Text>
+          </Pressable>
+        </View>
+        {pushMsg ? <Text style={styles.info}>{pushMsg}</Text> : null}
       </View>
 
       <Pressable style={styles.logoutBtn} onPress={() => void handleLogout()}>

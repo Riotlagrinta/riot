@@ -368,6 +368,36 @@ ipcMain.handle("riot:restart-backend", async () => {
   return ensureBackendReady();
 });
 
+ipcMain.on("riot:set-overlay", (_ev, open) => {
+  if (contentView && typeof contentView.setVisible === "function") {
+    contentView.setVisible(!open);
+  }
+});
+
+ipcMain.handle("riot:pair-qr", () => {
+  return new Promise((resolve) => {
+    const req = http.request(
+      `${BASE_URL}/api/mobile/pair/generer`,
+      { method: "POST", timeout: 4000, headers: { "Content-Type": "application/json" } },
+      (res) => {
+        let body = "";
+        res.on("data", (chunk) => { body += chunk; });
+        res.on("end", () => {
+          try {
+            resolve(JSON.parse(body || "{}"));
+          } catch {
+            resolve({ ok: false, message: "Réponse QR invalide." });
+          }
+        });
+      }
+    );
+    req.on("error", (err) => resolve({ ok: false, message: err.message }));
+    req.on("timeout", () => { req.destroy(); resolve({ ok: false, message: "Serveur RIOT non joignable." }); });
+    req.write("{}");
+    req.end();
+  });
+});
+
 ipcMain.on("riot:open-external", (_ev, url) => {
   if (url && /^https?:\/\//i.test(url)) {
     shell.openExternal(url);

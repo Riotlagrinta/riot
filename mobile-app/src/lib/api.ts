@@ -183,6 +183,63 @@ export async function logoutSession(session: SessionConfig): Promise<void> {
   }
 }
 
+export async function registerPushToken(
+  session: SessionConfig,
+  pushToken: string,
+  plateforme: string
+): Promise<void> {
+  const res = await fetchWithTimeout(
+    `${session.activeUrl}/api/mobile/push/enregistrer`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-keranos-token": session.token,
+      },
+      body: JSON.stringify({ push_token: pushToken, plateforme }),
+    },
+    5000
+  );
+  if (!res.ok) {
+    throw new Error(`Enregistrement push impossible (${res.status})`);
+  }
+}
+
+export async function unregisterPushToken(session: SessionConfig, pushToken: string): Promise<void> {
+  try {
+    await fetchWithTimeout(
+      `${session.activeUrl}/api/mobile/push/supprimer`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-keranos-token": session.token,
+        },
+        body: JSON.stringify({ push_token: pushToken }),
+      },
+      3000
+    );
+  } catch {
+    // Ignore erreur reseau au logout
+  }
+}
+
+export async function sendTestPush(session: SessionConfig): Promise<string> {
+  const res = await fetchWithTimeout(
+    `${session.activeUrl}/api/mobile/push/test`,
+    {
+      method: "POST",
+      headers: { "x-keranos-token": session.token },
+    },
+    8000
+  );
+  const data = (await res.json()) as { ok?: boolean; raison?: string; sent?: number };
+  if (!res.ok || data.ok === false) {
+    throw new Error(data.raison || `Échec test push (${res.status})`);
+  }
+  return `Notification envoyée à ${data.sent ?? 1} appareil(s).`;
+}
+
 export function buildWsUrl(baseUrl: string): string {
   const clean = normalizeBaseUrl(baseUrl);
   return `${clean.replace(/^http/i, "ws")}/ws/riot`;

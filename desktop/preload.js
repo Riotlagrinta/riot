@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld("riotDesktop", {
   getStatus: () => ipcRenderer.invoke("riot:get-status"),
   updateBackend: () => ipcRenderer.invoke("riot:update-backend"),
   restartBackend: () => ipcRenderer.invoke("riot:restart-backend"),
+  getPairQr: () => ipcRenderer.invoke("riot:pair-qr"),
+  setOverlay: (open) => ipcRenderer.send("riot:set-overlay", Boolean(open)),
   openExternal: (url) => ipcRenderer.send("riot:open-external", url),
   onStatus: (cb) => {
     if (typeof cb !== "function") return () => {};

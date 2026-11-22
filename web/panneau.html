@@ -139,6 +139,23 @@
         <span class="rngval" id="val-seuil">—</span></div>
       <div id="wake-msg" class="msg"></div>
     </div>
+    <div class="card"><h2>📱 Appairage Smartphone (App Native RIOT Mobile)</h2>
+      <div class="fld">
+        <div class="lab"><b>QR Code de connexion rapide (5 min, usage unique)</b>
+          <small>Scanne ce QR depuis l'écran d'appairage de l'app native RIOT Mobile (LAN + Tunnel automatique).</small>
+        </div>
+        <button class="act" type="button" onclick="genererQrMobile(this)">Générer QR Code</button>
+      </div>
+      <div id="qr-mobile-zone" style="display:none;margin-top:12px;gap:14px;align-items:center;flex-wrap:wrap">
+        <div id="qr-mobile-svg" style="background:#fff;padding:10px;border-radius:10px;display:inline-flex"></div>
+        <div style="font-size:12.5px;color:#b8c1cc;line-height:1.6">
+          <div><b>LAN :</b> <span id="qr-mobile-lan" class="mono"></span></div>
+          <div><b>Tunnel :</b> <span id="qr-mobile-pub" class="mono"></span></div>
+          <div style="margin-top:6px;color:#9CA3AF">Valable 5 minutes · Usage unique sécurisé</div>
+        </div>
+      </div>
+    </div>
+
     <small class="note">Ces réglages s'écrivent dans <span class="mono">config.yaml</span> — <b>redémarre Jarvis</b> pour les appliquer.</small>
   </section>
 
@@ -407,6 +424,20 @@ async function revoquer(nom,btn){
 function flash(r,cell){
   const el = cell? $('.msg',cell) : $('#etat-msg');
   if(el) el.innerHTML=`<span style="color:var(--${r.ok?'ok':'ko'})">${r.message||''}</span>`;
+}
+async function genererQrMobile(btn){
+  if(btn) btn.disabled=true;
+  try{
+    const d=await post('/api/mobile/pair/generer',{});
+    if(d&&d.ok&&d.qr_svg){
+      $('#qr-mobile-svg').innerHTML=d.qr_svg;
+      $('#qr-mobile-lan').textContent=d.lan_url||'-';
+      $('#qr-mobile-pub').textContent=d.public_url||'Non démarré';
+      $('#qr-mobile-zone').style.display='flex';
+    }
+  }finally{
+    if(btn) btn.disabled=false;
+  }
 }
 chargerModeles();
 </script>

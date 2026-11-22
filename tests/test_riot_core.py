@@ -1095,11 +1095,12 @@ def test_mobile_qr_pairing_one_time_exchange(monkeypatch):
     )
     assert r_rem.status_code == 403
 
-    # 2. Generation locale -> code unique
+    # 2. Generation locale -> code unique + QR SVG local sans tiers externe
     r_gen = client.post("/api/mobile/pair/generer")
     assert r_gen.status_code == 200
     data = r_gen.json()
     assert data["ok"] is True and data["code"] and data["qr_payload"].startswith("riot://pair?")
+    assert "<svg" in data.get("qr_svg", "")
 
     # 3. Echange du code -> session creee, puis rejeu bloque (usage unique)
     tokens_crees = []
@@ -1110,6 +1111,57 @@ def test_mobile_qr_pairing_one_time_exchange(monkeypatch):
 
     r_replay = client.post("/api/mobile/pair/echanger", json={"code": data["code"]})
     assert r_replay.status_code == 401
+
+
+def test_mobile_push_token_registration_and_dispatch(monkeypatch, tmp_path):
+    from core import auth, mobile, serveur
+
+    monkeypatch.setattr(mobile, "_PUSH_TOKENS_FICHIER", tmp_path / "push_tokens.json")
+    monkeypatch.setattr(auth, "session_valide", lambda tok: tok == "tok_push_ok")
+
+    client = TestClient(serveur.app(), base_url="http://127.0.0.1:8790", client=("127.0.0.1", 50000))
+
+    # Rejet token invalide
+    r_bad = client.post(
+        "/api/mobile/push/enregistrer",
+        headers={"x-keranos-token": "tok_push_ok"},
+        json={"push_token": "invalid-token"},
+    )
+    assert r_bad.status_code == 400
+
+    # Enregistrement token Expo valide
+    r_ok = client.post(
+        "/api/mobile/push/enregistrer",
+        headers={"x-keranos-token": "tok_push_ok"},
+        json={"push_token": "ExponentPushToken[abcdef123456]", "plateforme": "android"},
+    )
+    assert r_ok.status_code == 200 and r_ok.json()["count"] == 1
+
+    # Mock appel reseau Expo Push et verification envoi
+    envoyes = []
+    import requests as req_mod
+
+    class _FakeResp:
+        status_code = 200
+
+    def _fake_post(url, json=None, headers=None, timeout=6):
+        envoyes.append({"url": url, "messages": json})
+        return _FakeResp()
+
+    monkeypatch.setattr(req_mod, "post", _fake_post)
+    r_test = client.post("/api/mobile/push/test", headers={"x-keranos-token": "tok_push_ok"})
+    assert r_test.status_code == 200 and r_test.json()["sent"] == 1
+    assert envoyes[0]["url"] == "https://exp.host/--/api/v2/push/send"
+    assert envoyes[0]["messages"][0]["to"] == "ExponentPushToken[abcdef123456]"
+
+    # Suppression token au logout
+    r_del = client.post(
+        "/api/mobile/push/supprimer",
+        headers={"x-keranos-token": "tok_push_ok"},
+        json={"push_token": "ExponentPushToken[abcdef123456]"},
+    )
+    assert r_del.status_code == 200 and r_del.json()["count"] == 0
+
 
 
 

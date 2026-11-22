@@ -125,6 +125,37 @@
     }
     .win-btn:hover { background: #1F2430; color: #FFFFFF; }
     .win-btn.close:hover { background: #DC2626; color: #FFFFFF; }
+    .qr-overlay {
+      position: fixed;
+      inset: 40px 0 0 0;
+      background: #0B0C0E;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      padding: 20px;
+    }
+    .qr-overlay.open { display: flex; }
+    .qr-card {
+      background: #14171F;
+      border: 1px solid #262C3A;
+      border-radius: 16px;
+      padding: 24px;
+      width: min(440px, 92vw);
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    .qr-box {
+      background: #FFFFFF;
+      padding: 12px;
+      border-radius: 12px;
+      display: inline-flex;
+    }
+    .qr-meta { font-size: 12px; color: #9CA3AF; line-height: 1.5; word-break: break-all; }
+    .qr-actions { display: flex; gap: 8px; margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -147,6 +178,7 @@
         <span class="dot" id="status-dot"></span>
         <span id="status-text">Démarrage...</span>
       </div>
+      <button type="button" class="tool-btn" id="btn-mobile-qr" title="Appairer votre smartphone RIOT Mobile par QR Code">📱 Mobile</button>
       <button type="button" class="tool-btn" id="btn-update" title="Mettre à jour le moteur RIOT sans réinstaller l'app">↻ Màj</button>
       <div class="win-controls">
         <button type="button" class="win-btn" id="win-min" title="Réduire">─</button>
@@ -156,6 +188,19 @@
     </div>
   </header>
 
+  <div class="qr-overlay" id="qr-overlay">
+    <div class="qr-card">
+      <h3 style="margin:0;font-size:16px;">📱 Connecter RIOT Mobile</h3>
+      <div class="qr-meta">Scannez ce QR Code dans l'app native Android / iOS (valable 5 min, usage unique).</div>
+      <div class="qr-box" id="qr-svg-wrap">Chargement...</div>
+      <div class="qr-meta" id="qr-meta-urls"></div>
+      <div class="qr-actions">
+        <button type="button" class="tool-btn" id="qr-refresh">↻ Régénérer</button>
+        <button type="button" class="tool-btn" id="qr-close">Fermer</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     (function () {
       const api = window.riotDesktop;
@@ -163,6 +208,36 @@
       const dot = document.getElementById("status-dot");
       const statusText = document.getElementById("status-text");
       const btnUpdate = document.getElementById("btn-update");
+      const btnQr = document.getElementById("btn-mobile-qr");
+      const qrOverlay = document.getElementById("qr-overlay");
+      const qrSvgWrap = document.getElementById("qr-svg-wrap");
+      const qrMetaUrls = document.getElementById("qr-meta-urls");
+
+      async function loadPairQr() {
+        if (!api) return;
+        qrSvgWrap.textContent = "Génération du QR...";
+        qrMetaUrls.textContent = "";
+        const res = await api.getPairQr();
+        if (res && res.ok && res.qr_svg) {
+          qrSvgWrap.innerHTML = res.qr_svg;
+          qrMetaUrls.textContent = `LAN: ${res.lan_url || "-"}${res.public_url ? " · Tunnel: " + res.public_url : ""}`;
+        } else {
+          qrSvgWrap.textContent = (res && res.message) || "Moteur RIOT non prêt.";
+        }
+      }
+
+      if (btnQr) {
+        btnQr.addEventListener("click", () => {
+          qrOverlay.classList.add("open");
+          if (api) api.setOverlay(true);
+          void loadPairQr();
+        });
+      }
+      document.getElementById("qr-refresh").addEventListener("click", () => void loadPairQr());
+      document.getElementById("qr-close").addEventListener("click", () => {
+        qrOverlay.classList.remove("open");
+        if (api) api.setOverlay(false);
+      });
 
       function setActiveTab(tab) {
         tabs.forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
