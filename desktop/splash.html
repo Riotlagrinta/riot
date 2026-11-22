@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RIOT — Démarrage</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: #0B0C0E;
+      color: #F3F4F6;
+      font-family: "Segoe UI", Inter, system-ui, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      text-align: center;
+      max-width: 460px;
+      padding: 32px;
+      border-radius: 16px;
+      background: #12141A;
+      border: 1px solid #242936;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+    }
+    img {
+      width: 64px;
+      height: 64px;
+      margin-bottom: 14px;
+      animation: pulse 1.8s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 0.92; }
+      50% { transform: scale(1.05); opacity: 1; }
+    }
+    h1 { margin: 0 0 8px; font-size: 20px; letter-spacing: 0.04em; }
+    p { margin: 0; color: #9CA3AF; font-size: 13.5px; line-height: 1.5; }
+    .err {
+      margin-top: 16px;
+      padding: 12px;
+      border-radius: 10px;
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #FCA5A5;
+      font-size: 12.5px;
+      text-align: left;
+      display: none;
+    }
+    .actions { margin-top: 16px; display: none; gap: 8px; justify-content: center; }
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      background: #D97757;
+      color: #0B0C0E;
+    }
+    button.sec { background: #1E2330; color: #E5E7EB; border: 1px solid #2D3343; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <img src="assets/icon.png" alt="RIOT" />
+    <h1>RIOT Desktop</h1>
+    <p id="msg">Initialisation du moteur local (IDE &amp; Studio)...</p>
+    <div class="err" id="err-box"></div>
+    <div class="actions" id="actions">
+      <button type="button" id="btn-retry">Réessayer</button>
+      <button type="button" class="sec" id="btn-docs">Installer @riotlagrinta/riot</button>
+    </div>
+  </div>
+  <script>
+    const api = window.riotDesktop;
+    const msg = document.getElementById("msg");
+    const errBox = document.getElementById("err-box");
+    const actions = document.getElementById("actions");
+    if (api) {
+      api.onStatus((st) => {
+        if (!st) return;
+        if (st.label) msg.textContent = st.label;
+        if (st.state === "error") {
+          errBox.style.display = "block";
+          errBox.textContent = st.detail || "Moteur Python RIOT introuvable sur ce poste. Installez avec : npm install -g @riotlagrinta/riot";
+          actions.style.display = "flex";
+        } else {
+          errBox.style.display = "none";
+          actions.style.display = "none";
+        }
+      });
+      document.getElementById("btn-retry").addEventListener("click", () => api.restartBackend());
+      document.getElementById("btn-docs").addEventListener("click", () => api.openExternal("https://www.npmjs.com/package/@riotlagrinta/riot"));
+    }
+  </script>
+</body>
+</html>

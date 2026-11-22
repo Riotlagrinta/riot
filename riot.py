@@ -30,6 +30,30 @@ def main():
         keranos.main()
         return
 
+    # Mode Serveur Headless (utilise par RIOT Desktop / service arriere-plan)
+    if "--server" in args or "--headless" in args:
+        from core import serveur, cli
+        import time, signal
+        arret = False
+
+        def _stop(*_a):
+            nonlocal arret
+            arret = True
+
+        try:
+            signal.signal(signal.SIGINT, _stop)
+            signal.signal(signal.SIGTERM, _stop)
+        except Exception:
+            pass
+        serveur.demarrer()
+        try:
+            while not arret:
+                time.sleep(0.5)
+        except KeyboardInterrupt:
+            pass
+        cli.console.print("\n[dim]Arrêt du serveur RIOT.[/dim]")
+        return
+
     # Mode Application Bureau RIOT Studio (Windowed Chromium)
     if "--app" in args or "-a" in args or (args and args[0].lower() in ("/app", "app", "/studio", "studio")):
         from core import serveur, studio_app, theme

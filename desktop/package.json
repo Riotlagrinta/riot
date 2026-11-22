@@ -1,0 +1,58 @@
+{
+  "name": "riot-desktop",
+  "version": "0.3.8",
+  "description": "RIOT Desktop — Application Windows native pour RIOT IDE & RIOT Studio",
+  "main": "main.js",
+  "author": "Riot",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --win --dir",
+    "build:win": "electron-builder --win nsis portable"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "dev.riot.desktop",
+    "productName": "RIOT",
+    "copyright": "Copyright (c) RIOT",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "shell.html",
+      "splash.html",
+      "assets/*"
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "RIOT",
+      "artifactName": "RIOT-Setup-${version}-win-x64.${ext}"
+    },
+    "portable": {
+      "artifactName": "RIOT-Portable-${version}-win-x64.${ext}"
+    }
+  }
+}

@@ -767,6 +767,13 @@
     els["ide-folder-os"].addEventListener("click", async function () {
       els["ide-folder-os"].disabled = true;
       try {
+        if (window.riotDesktop && typeof window.riotDesktop.pickFolder === "function") {
+          var chosen = await window.riotDesktop.pickFolder(els["ide-folder-path"].value.trim());
+          if (chosen && await activateProjectFolder(chosen)) {
+            els["ide-folder-modal"].classList.add("hidden");
+          }
+          return;
+        }
         var r = await fetch("/api/ide/choisir-dossier-os", { method: "POST" });
         var d = await r.json();
         if (d.ok && d.chemin) {

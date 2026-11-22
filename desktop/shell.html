@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RIOT Desktop</title>
+  <style>
+    * { box-sizing: border-box; user-select: none; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #0B0C0E;
+      color: #E5E7EB;
+      font-family: "Segoe UI", Inter, system-ui, sans-serif;
+    }
+    .titlebar {
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 8px 0 12px;
+      background: #0F1115;
+      border-bottom: 1px solid #222631;
+      -webkit-app-region: drag;
+    }
+    .left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      -webkit-app-region: no-drag;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 0.04em;
+      color: #F3F4F6;
+      margin-right: 6px;
+    }
+    .brand img {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+    }
+    .tabs {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: #0B0C0E;
+      padding: 3px;
+      border-radius: 8px;
+      border: 1px solid #222631;
+    }
+    .tab-btn {
+      border: none;
+      background: transparent;
+      color: #9CA3AF;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 4px 11px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.14s ease;
+    }
+    .tab-btn:hover { color: #F9FAFB; background: #1A1D24; }
+    .tab-btn.active {
+      background: #D97757;
+      color: #0B0C0E;
+      font-weight: 600;
+    }
+    .right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      -webkit-app-region: no-drag;
+    }
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: #9CA3AF;
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: #14171F;
+      border: 1px solid #222631;
+    }
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #F59E0B;
+    }
+    .dot.ok { background: #10B981; }
+    .dot.err { background: #EF4444; }
+    .tool-btn {
+      border: 1px solid #262A36;
+      background: #14171F;
+      color: #D1D5DB;
+      font-size: 11.5px;
+      padding: 4px 9px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .tool-btn:hover { border-color: #D97757; color: #FFFFFF; }
+    .tool-btn:disabled { opacity: 0.5; cursor: wait; }
+    .win-controls {
+      display: flex;
+      align-items: center;
+      margin-left: 6px;
+    }
+    .win-btn {
+      width: 34px;
+      height: 28px;
+      border: none;
+      background: transparent;
+      color: #9CA3AF;
+      font-size: 13px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .win-btn:hover { background: #1F2430; color: #FFFFFF; }
+    .win-btn.close:hover { background: #DC2626; color: #FFFFFF; }
+  </style>
+</head>
+<body>
+  <header class="titlebar">
+    <div class="left">
+      <div class="brand">
+        <img src="assets/icon.png" alt="RIOT" />
+        <span>RIOT</span>
+      </div>
+      <nav class="tabs" id="tabs">
+        <button type="button" class="tab-btn active" data-tab="ide">IDE</button>
+        <button type="button" class="tab-btn" data-tab="studio">Studio</button>
+        <button type="button" class="tab-btn" data-tab="mobile">Mobile</button>
+        <button type="button" class="tab-btn" data-tab="panneau">Réglages</button>
+      </nav>
+    </div>
+
+    <div class="right">
+      <div class="status-pill" id="status-pill" title="Ctrl+Alt+R pour afficher/masquer la fenêtre">
+        <span class="dot" id="status-dot"></span>
+        <span id="status-text">Démarrage...</span>
+      </div>
+      <button type="button" class="tool-btn" id="btn-update" title="Mettre à jour le moteur RIOT sans réinstaller l'app">↻ Màj</button>
+      <div class="win-controls">
+        <button type="button" class="win-btn" id="win-min" title="Réduire">─</button>
+        <button type="button" class="win-btn" id="win-max" title="Agrandir / Restaurer">☐</button>
+        <button type="button" class="win-btn close" id="win-close" title="Masquer dans le Tray (Ctrl+Alt+R pour rouvrir)">✕</button>
+      </div>
+    </div>
+  </header>
+
+  <script>
+    (function () {
+      const api = window.riotDesktop;
+      const tabs = document.querySelectorAll(".tab-btn");
+      const dot = document.getElementById("status-dot");
+      const statusText = document.getElementById("status-text");
+      const btnUpdate = document.getElementById("btn-update");
+
+      function setActiveTab(tab) {
+        tabs.forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+      }
+
+      tabs.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const tab = btn.dataset.tab;
+          setActiveTab(tab);
+          if (api) api.switchTab(tab);
+        });
+      });
+
+      document.getElementById("win-min").addEventListener("click", () => api && api.windowAction("minimize"));
+      document.getElementById("win-max").addEventListener("click", () => api && api.windowAction("maximize"));
+      document.getElementById("win-close").addEventListener("click", () => api && api.windowAction("close"));
+
+      btnUpdate.addEventListener("click", async () => {
+        if (!api) return;
+        btnUpdate.disabled = true;
+        btnUpdate.textContent = "⟳ Màj...";
+        try {
+          const res = await api.updateBackend();
+          statusText.textContent = res && res.ok ? "Màj terminée" : (res && res.error ? res.error : "Échec Màj");
+        } finally {
+          btnUpdate.disabled = false;
+          btnUpdate.textContent = "↻ Màj";
+        }
+      });
+
+      function applyStatus(st) {
+        if (!st) return;
+        dot.classList.remove("ok", "err");
+        if (st.state === "ready") dot.classList.add("ok");
+        else if (st.state === "error") dot.classList.add("err");
+        statusText.textContent = st.label || "Prêt";
+        if (st.activeTab) setActiveTab(st.activeTab);
+      }
+
+      if (api) {
+        api.onStatus(applyStatus);
+        api.getStatus().then(applyStatus).catch(() => {});
+      }
+    })();
+  </script>
+</body>
+</html>
