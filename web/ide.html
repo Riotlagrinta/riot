@@ -39,6 +39,9 @@
     </div>
 
     <div class="ide-topbar-right">
+      <button id="ide-btn-playbook" type="button" class="ide-pill ide-pill-btn" title="Gérer le Playbook & la mémoire gouvernée (Confiance, Scope, Export)">
+        🧠 Playbook
+      </button>
       <button id="ide-btn-mcp" type="button" class="ide-pill ide-pill-btn" title="Connecteurs MCP (Firecrawl, GitHub, Context7, Supabase...)">
         🔌 MCP
       </button>
@@ -179,6 +182,10 @@
           <input type="checkbox" id="ide-grill-me" />
           <span>Clarifier avant d'agir (grill-me)</span>
         </label>
+        <label id="ide-mentor-wrap" class="ide-review-toggle hidden" title="Entraînement Mentor Antigravity : plan + audit/correction + apprentissage en mémoire">
+          <input type="checkbox" id="ide-mentor-mode" />
+          <span>🎓 Mentor AGY</span>
+        </label>
         <span id="ide-pending-count" class="ide-pending-pill hidden" title="Cliquer pour passer au patch suivant">0 patch</span>
         <button type="button" id="ide-agent-clear" class="ide-btn-sm" title="Réinitialiser la conversation agent">Effacer</button>
       </div>
@@ -239,6 +246,30 @@
           <button type="button" id="ide-folder-open" class="ide-btn-sm ide-btn-accent">Ouvrir le dossier courant</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- MODAL PLAYBOOK / MEMOIRE GOUVERNEE -->
+  <div id="ide-playbook-modal" class="ide-modal hidden">
+    <div class="ide-modal-card" style="width:min(760px,95vw);max-height:86vh;display:flex;flex-direction:column;gap:10px;">
+      <div class="ide-modal-head">
+        <h3>🧠 Playbook RIOT &amp; Mémoire Gouvernée</h3>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button type="button" id="ide-pb-prune" class="ide-btn-sm" title="Archiver les leçons obsolètes (< 30% confiance)">🧹 Purger</button>
+          <button type="button" id="ide-pb-export" class="ide-btn-sm ide-btn-accent" title="Exporter le Playbook public anonymisé (data/riot_playbook_public.json)">📤 Exporter Public</button>
+          <button type="button" id="ide-pb-close" class="ide-icon-btn">✕</button>
+        </div>
+      </div>
+      <div id="ide-pb-stats" class="ide-hint">Chargement des statistiques mémoire...</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <select id="ide-pb-statut" class="ide-select" style="max-width:140px;">
+          <option value="active">Actives</option>
+          <option value="archived">Archivées</option>
+          <option value="">Toutes</option>
+        </select>
+        <input id="ide-pb-search" class="ide-input-sm" style="flex:1;" type="search" placeholder="Filtrer par titre, techno, interdit ou tag..." />
+      </div>
+      <div id="ide-pb-list" class="ide-folder-list" style="max-height:52vh;overflow:auto;"></div>
     </div>
   </div>
 

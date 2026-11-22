@@ -292,11 +292,25 @@ def _initialiser_base(conn: sqlite3.Connection):
             );
         """)
 
-        # Migration douce recettes_code : colonne mis_a_jour_a + trigger UPDATE FTS5
+        # Migration douce recettes_code : colonnes gouvernance + trigger UPDATE FTS5
         cols = {r[1] for r in conn.execute("PRAGMA table_info(recettes_code);").fetchall()}
         if "mis_a_jour_a" not in cols:
             conn.execute("ALTER TABLE recettes_code ADD COLUMN mis_a_jour_a TEXT DEFAULT '';")
             conn.execute("UPDATE recettes_code SET mis_a_jour_a = cree_a WHERE mis_a_jour_a = '';")
+        migrations_recettes = {
+            "scope": "TEXT DEFAULT 'global'",
+            "interdits": "TEXT DEFAULT ''",
+            "verification": "TEXT DEFAULT ''",
+            "confiance": "REAL DEFAULT 0.65",
+            "utilisations": "INTEGER DEFAULT 0",
+            "echecs": "INTEGER DEFAULT 0",
+            "source": "TEXT DEFAULT 'dev'",
+            "statut": "TEXT DEFAULT 'active'",
+        }
+        for col, ddl in migrations_recettes.items():
+            if col not in cols:
+                conn.execute(f"ALTER TABLE recettes_code ADD COLUMN {col} {ddl};")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_recettes_statut_scope ON recettes_code(statut, scope, confiance DESC);")
         conn.execute("""
             CREATE TRIGGER IF NOT EXISTS trg_recettes_au AFTER UPDATE ON recettes_code BEGIN
                 DELETE FROM recettes_fts WHERE id = old.id;
@@ -578,7 +592,12 @@ def rechercher_recettes_code(requete: str, limite: int = 5) -> List[Dict[str, An
         if q_fts:
             try:
                 cur = conn.execute("""
-                    SELECT r.id, r.titre, r.langage, r.probleme, r.cause, r.solution, r.tags, r.cree_a
+                    SELECT r.id, r.titre, r.langage, r.probleme, r.cause, r.solution, r.tags, r.cree_a,
+                           COALESCE(r.scope, 'global') AS scope,
+                           COALESCE(r.interdits, '') AS interdits,
+                           COALESCE(r.verification, '') AS verification,
+                           COALESCE(r.confiance, 0.65) AS confiance,
+                           COALESCE(r.statut, 'active') AS statut
                     FROM recettes_fts f
                     JOIN recettes_code r ON f.id = r.id
                     WHERE recettes_fts MATCH ?
@@ -592,7 +611,12 @@ def rechercher_recettes_code(requete: str, limite: int = 5) -> List[Dict[str, An
         if not resultats and requete.strip():
             motif = f"%{requete.strip()}%"
             cur = conn.execute("""
-                SELECT id, titre, langage, probleme, cause, solution, tags, cree_a
+                SELECT id, titre, langage, probleme, cause, solution, tags, cree_a,
+                       COALESCE(scope, 'global') AS scope,
+                       COALESCE(interdits, '') AS interdits,
+                       COALESCE(verification, '') AS verification,
+                       COALESCE(confiance, 0.65) AS confiance,
+                       COALESCE(statut, 'active') AS statut
                 FROM recettes_code
                 WHERE titre LIKE ? OR probleme LIKE ? OR solution LIKE ? OR tags LIKE ?
                 ORDER BY id DESC LIMIT ?;
@@ -635,21 +659,332 @@ def supprimer_regle_dev(cle: str) -> bool:
     return supprimer_entite("regles_dev", cle)
 
 
-def recup_recettes_pertinentes(contexte: str, limite: int = 3) -> str:
-    """Recherche des recettes de code et règles pertinentes pour enrichir le prompt de RIOT."""
+def recup_recettes_pertinentes(
+    contexte: str,
+    limite: int = 4,
+    *,
+    scope_stack: Optional[str] = None,
+    scope_projet: Optional[str] = None,
+) -> str:
+    """Recherche des recettes/lecons actives pertinentes (filtrees par scope et confiance)."""
     if not contexte or len(contexte.strip()) < 3:
         return ""
-    recettes = rechercher_recettes_code(contexte, limite=limite)
+    recettes = rechercher_recettes_code(contexte, limite=max(8, limite * 2))
     if not recettes:
         return ""
-    blocs = ["\n[Recettes de code et solutions éprouvées pertinentes] :"]
+
+    stack_cible = f"stack:{scope_stack.strip().lower()}" if scope_stack else ""
+    proj_cible = f"project:{scope_projet.strip().lower()}" if scope_projet else ""
+
+    filtrees: List[Dict[str, Any]] = []
     for r in recettes:
-        blocs.append(
-            f"• Problème: {r['titre']} ({r.get('langage') or 'dev'})\n"
+        statut = str(r.get("statut") or "active").lower()
+        if statut == "archived":
+            continue
+        sc = str(r.get("scope") or "global").strip().lower()
+        if sc.startswith("project:") and proj_cible and sc != proj_cible:
+            continue
+        if sc.startswith("project:") and not proj_cible:
+            continue
+        conf = float(r.get("confiance") if r.get("confiance") is not None else 0.65)
+        if conf < 0.30:
+            continue
+        bonus = 0.25 if (sc == proj_cible and proj_cible) or (sc == stack_cible and stack_cible) else 0.0
+        copie = dict(r)
+        copie["_score"] = conf + bonus
+        filtrees.append(copie)
+
+    if not filtrees:
+        return ""
+    filtrees.sort(key=lambda x: x["_score"], reverse=True)
+    filtrees = filtrees[:limite]
+
+    blocs = ["\n[Playbook RIOT & Leçons Éprouvées Pertinentes] :"]
+    for r in filtrees:
+        conf_pct = int(round(float(r.get("confiance") if r.get("confiance") is not None else 0.65) * 100))
+        ligne = (
+            f"• [#{r['id']} · {r.get('scope') or 'global'} · {conf_pct}%] "
+            f"{r['titre']} ({r.get('langage') or 'dev'})\n"
             f"  Cause: {r.get('cause') or 'N/A'}\n"
-            f"  Solution recommandée: {r['solution']}"
+            f"  À FAIRE: {r['solution']}"
         )
+        if r.get("interdits"):
+            ligne += f"\n  À ÉVITER: {r['interdits']}"
+        if r.get("verification"):
+            ligne += f"\n  Vérification: {r['verification']}"
+        blocs.append(ligne)
     return "\n".join(blocs) + "\n"
+
+
+def _anonymiser_texte_lecon(texte: str, max_len: int = 2000) -> str:
+    s = _masquer_texte(texte, max_len=max_len)
+    s = re.sub(r"[A-Za-z]:\\Users\\[^\\\s\"']+", "<HOME>", s, flags=re.IGNORECASE)
+    s = re.sub(r"[A-Za-z]:\\PROJETS\\[^\\\s\"']+", "<PROJET>", s, flags=re.IGNORECASE)
+    s = re.sub(r"/(?:home|Users)/[^/\s\"']+", "<HOME>", s)
+    return s
+
+
+def enregistrer_lecon_mentor(
+    titre: str,
+    probleme: str,
+    solution: str,
+    *,
+    cause: str = "",
+    langage: str = "",
+    tags: str = "",
+    scope: str = "global",
+    interdits: str = "",
+    verification: str = "",
+    source: str = "antigravity_mentor",
+    confiance: float = 0.68,
+    sync_auto: bool = True,
+) -> int:
+    """Enregistre ou consolide une lecon apprise avec gouvernance (scope, anti-pattern, confiance)."""
+    titre_c = _anonymiser_texte_lecon(titre, max_len=260)
+    prob_c = _anonymiser_texte_lecon(probleme, max_len=1500)
+    sol_c = _anonymiser_texte_lecon(solution, max_len=2000)
+    cause_c = _anonymiser_texte_lecon(cause, max_len=1000)
+    inter_c = _anonymiser_texte_lecon(interdits, max_len=1000)
+    verif_c = _anonymiser_texte_lecon(verification, max_len=500)
+    lang_c = (langage or "").strip().lower()[:60]
+    tags_c = _anonymiser_texte_lecon(tags, max_len=300)
+    sc_c = (scope or "global").strip().lower()[:80] or "global"
+    conf_c = max(0.0, min(1.0, float(confiance)))
+    if not titre_c or not prob_c or not sol_c:
+        return 0
+
+    conn = get_connexion()
+    maintenant = _maintenant_iso()
+    with _VERROU, conn:
+        existante = conn.execute(
+            "SELECT id, confiance FROM recettes_code WHERE lower(trim(titre)) = ? AND lower(trim(langage)) = ? LIMIT 1;",
+            (titre_c.lower(), lang_c),
+        ).fetchone()
+        if existante:
+            rid = int(existante["id"])
+            nouvelle_conf = min(1.0, max(float(existante["confiance"] or 0.65), conf_c) + 0.05)
+            conn.execute("""
+                UPDATE recettes_code
+                SET probleme = ?, cause = ?, solution = ?, tags = ?, scope = ?,
+                    interdits = ?, verification = ?, confiance = ?, source = ?,
+                    statut = 'active', mis_a_jour_a = ?
+                WHERE id = ?;
+            """, (prob_c, cause_c, sol_c, tags_c, sc_c, inter_c, verif_c, nouvelle_conf, source, maintenant, rid))
+        else:
+            cur = conn.execute("""
+                INSERT INTO recettes_code(
+                    titre, langage, probleme, cause, solution, tags,
+                    scope, interdits, verification, confiance, utilisations, echecs, source, statut,
+                    cree_a, mis_a_jour_a
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 'active', ?, ?);
+            """, (titre_c, lang_c, prob_c, cause_c, sol_c, tags_c, sc_c, inter_c, verif_c, conf_c, source, maintenant, maintenant))
+            rid = int(cur.lastrowid or 0)
+    if sync_auto:
+        pousser_synchro_asynchrone()
+    return rid
+
+
+def evaluer_lecon(rid: int, succes: bool) -> Dict[str, Any]:
+    """Met a jour le score de confiance d'une lecon et l'auto-archive si elle echoue repetitivement."""
+    conn = get_connexion()
+    maintenant = _maintenant_iso()
+    with _VERROU, conn:
+        row = conn.execute("SELECT id, confiance, utilisations, echecs, statut FROM recettes_code WHERE id = ?;", (rid,)).fetchone()
+        if not row:
+            return {"ok": False}
+        conf = float(row["confiance"] if row["confiance"] is not None else 0.65)
+        uses = int(row["utilisations"] or 0)
+        fails = int(row["echecs"] or 0)
+        if succes:
+            uses += 1
+            conf = min(1.0, round(conf + 0.12, 3))
+        else:
+            fails += 1
+            conf = max(0.0, round(conf - 0.25, 3))
+        statut = "archived" if (conf < 0.30 or fails >= 3) else "active"
+        conn.execute("""
+            UPDATE recettes_code
+            SET confiance = ?, utilisations = ?, echecs = ?, statut = ?, mis_a_jour_a = ?
+            WHERE id = ?;
+        """, (conf, uses, fails, statut, maintenant, rid))
+    return {"ok": True, "id": rid, "confiance": conf, "utilisations": uses, "echecs": fails, "statut": statut}
+
+
+def lister_lecons_gouvernees(
+    statut: str = "",
+    scope: str = "",
+    requete: str = "",
+    limite: int = 80,
+) -> List[Dict[str, Any]]:
+    """Retourne les lecons avec metadonnees de gouvernance pour inspection/gestion."""
+    conn = get_connexion()
+    clauses = ["1=1"]
+    params: List[Any] = []
+    if statut.strip():
+        clauses.append("lower(COALESCE(statut, 'active')) = ?")
+        params.append(statut.strip().lower())
+    if scope.strip():
+        clauses.append("lower(COALESCE(scope, 'global')) LIKE ?")
+        params.append(f"{scope.strip().lower()}%")
+    if requete.strip():
+        motif = f"%{requete.strip()}%"
+        clauses.append("(titre LIKE ? OR probleme LIKE ? OR solution LIKE ? OR interdits LIKE ? OR tags LIKE ?)")
+        params.extend([motif, motif, motif, motif, motif])
+    params.append(int(limite))
+    sql = f"""
+        SELECT id, titre, langage, probleme, cause, solution, tags,
+               COALESCE(scope, 'global') AS scope,
+               COALESCE(interdits, '') AS interdits,
+               COALESCE(verification, '') AS verification,
+               COALESCE(confiance, 0.65) AS confiance,
+               COALESCE(utilisations, 0) AS utilisations,
+               COALESCE(echecs, 0) AS echecs,
+               COALESCE(source, 'dev') AS source,
+               COALESCE(statut, 'active') AS statut,
+               cree_a, COALESCE(mis_a_jour_a, cree_a) AS mis_a_jour_a
+        FROM recettes_code
+        WHERE {' AND '.join(clauses)}
+        ORDER BY CASE WHEN COALESCE(statut, 'active') = 'active' THEN 0 ELSE 1 END,
+                 COALESCE(confiance, 0.65) DESC, id DESC
+        LIMIT ?;
+    """
+    with _VERROU:
+        return [dict(row) for row in conn.execute(sql, params).fetchall()]
+
+
+def changer_statut_lecon(rid: int, action: str) -> bool:
+    """Action sur une lecon : 'active', 'archived', 'promote_global', 'boost'."""
+    conn = get_connexion()
+    act = (action or "").strip().lower()
+    maintenant = _maintenant_iso()
+    with _VERROU, conn:
+        if act == "active":
+            cur = conn.execute("UPDATE recettes_code SET statut = 'active', mis_a_jour_a = ? WHERE id = ?;", (maintenant, rid))
+        elif act == "archived":
+            cur = conn.execute("UPDATE recettes_code SET statut = 'archived', mis_a_jour_a = ? WHERE id = ?;", (maintenant, rid))
+        elif act == "promote_global":
+            cur = conn.execute("UPDATE recettes_code SET scope = 'global', statut = 'active', confiance = MAX(COALESCE(confiance, 0.65), 0.85), mis_a_jour_a = ? WHERE id = ?;", (maintenant, rid))
+        elif act == "boost":
+            cur = conn.execute("UPDATE recettes_code SET confiance = MIN(1.0, COALESCE(confiance, 0.65) + 0.15), statut = 'active', mis_a_jour_a = ? WHERE id = ?;", (maintenant, rid))
+        else:
+            return False
+        return cur.rowcount > 0
+
+
+def supprimer_lecon(rid: int) -> bool:
+    """Supprime definitivement une lecon de la base locale."""
+    conn = get_connexion()
+    with _VERROU, conn:
+        row = conn.execute("SELECT titre, langage FROM recettes_code WHERE id = ?;", (rid,)).fetchone()
+        if not row:
+            return False
+        conn.execute("DELETE FROM recettes_code WHERE id = ?;", (rid,))
+        conn.execute(
+            "INSERT OR REPLACE INTO memoire_tombstones(kind, mem_key, deleted_at) VALUES ('recipe', ?, ?);",
+            (_cle_recette(row["titre"], row["langage"]), _maintenant_iso()),
+        )
+        return True
+
+
+def purger_lecons_obsoletes(min_confiance: float = 0.30) -> int:
+    """Archive toutes les lecons dont la confiance est passee sous le seuil."""
+    conn = get_connexion()
+    with _VERROU, conn:
+        cur = conn.execute(
+            "UPDATE recettes_code SET statut = 'archived', mis_a_jour_a = ? WHERE COALESCE(statut, 'active') = 'active' AND (COALESCE(confiance, 0.65) < ? OR COALESCE(echecs, 0) >= 3);",
+            (_maintenant_iso(), float(min_confiance)),
+        )
+        return cur.rowcount or 0
+
+
+def statistiques_gouvernance_memoire() -> Dict[str, Any]:
+    conn = get_connexion()
+    with _VERROU:
+        row = conn.execute("""
+            SELECT COUNT(*) AS total,
+                   SUM(CASE WHEN COALESCE(statut, 'active') = 'active' THEN 1 ELSE 0 END) AS actives,
+                   SUM(CASE WHEN COALESCE(statut, 'active') = 'archived' THEN 1 ELSE 0 END) AS archivees,
+                   SUM(CASE WHEN COALESCE(source, 'dev') = 'antigravity_mentor' THEN 1 ELSE 0 END) AS mentor_count,
+                   ROUND(AVG(CASE WHEN COALESCE(statut, 'active') = 'active' THEN COALESCE(confiance, 0.65) END), 3) AS conf_moy
+            FROM recettes_code;
+        """).fetchone()
+        return {
+            "total": int(row["total"] or 0),
+            "actives": int(row["actives"] or 0),
+            "archivees": int(row["archivees"] or 0),
+            "mentor_count": int(row["mentor_count"] or 0),
+            "confiance_moyenne": float(row["conf_moy"] or 0.0),
+        }
+
+
+def exporter_playbook_public(
+    chemin_sortie: Optional[Path] = None,
+    min_confiance: float = 0.70,
+) -> Dict[str, Any]:
+    """Exporte uniquement les lecons globales/stack eprouvees et anonymisees pour distribution publique."""
+    lecons = lister_lecons_gouvernees(statut="active", limite=500)
+    exportables = []
+    for l in lecons:
+        sc = str(l.get("scope") or "global").lower()
+        if sc.startswith("project:"):
+            continue
+        if float(l.get("confiance") or 0.0) < min_confiance:
+            continue
+        exportables.append({
+            "titre": _anonymiser_texte_lecon(l["titre"], 260),
+            "langage": l.get("langage") or "dev",
+            "scope": sc,
+            "probleme": _anonymiser_texte_lecon(l["probleme"], 1500),
+            "cause": _anonymiser_texte_lecon(l.get("cause") or "", 1000),
+            "solution": _anonymiser_texte_lecon(l["solution"], 2000),
+            "interdits": _anonymiser_texte_lecon(l.get("interdits") or "", 1000),
+            "verification": _anonymiser_texte_lecon(l.get("verification") or "", 500),
+            "tags": l.get("tags") or "",
+            "confiance": round(float(l.get("confiance") or 0.7), 3),
+        })
+    cible = Path(chemin_sortie) if chemin_sortie else (_RACINE / "data" / "riot_playbook_public.json")
+    cible.parent.mkdir(parents=True, exist_ok=True)
+    cible.write_text(
+        json.dumps({"version": 1, "lecons": exportables}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return {"ok": True, "fichier": str(cible), "exportees": len(exportables)}
+
+
+def importer_playbook_public(chemin_source: Optional[Path] = None) -> int:
+    """Importe un playbook public JSON dans la base locale sans ecraser les lecons plus fiables."""
+    cible = Path(chemin_source) if chemin_source else (_RACINE / "data" / "riot_playbook_public.json")
+    if not cible.exists():
+        return 0
+    try:
+        brut = json.loads(cible.read_text(encoding="utf-8"))
+        liste = brut.get("lecons") if isinstance(brut, dict) else []
+        if not isinstance(liste, list):
+            return 0
+        ajoutes = 0
+        for item in liste:
+            if not isinstance(item, dict) or not item.get("titre") or not item.get("solution"):
+                continue
+            rid = enregistrer_lecon_mentor(
+                titre=str(item["titre"]),
+                probleme=str(item.get("probleme") or item["titre"]),
+                solution=str(item["solution"]),
+                cause=str(item.get("cause") or ""),
+                langage=str(item.get("langage") or "dev"),
+                tags=str(item.get("tags") or ""),
+                scope=str(item.get("scope") or "global"),
+                interdits=str(item.get("interdits") or ""),
+                verification=str(item.get("verification") or ""),
+                source="curated",
+                confiance=float(item.get("confiance") or 0.78),
+                sync_auto=False,
+            )
+            if rid:
+                ajoutes += 1
+        return ajoutes
+    except Exception:
+        return 0
 
 
 # ------------------------------------------------------------------ Documents d'étude

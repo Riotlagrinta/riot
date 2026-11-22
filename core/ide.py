@@ -280,7 +280,10 @@ def _construire_prompt_ide(
     ctx_memoire = ""
     try:
         texte_mem = memoire.texte_pour_systeme()[:2500]
-        recettes = memoire.recup_recettes_pertinentes(message or (fichier_actif or {}).get("chemin", ""))
+        recettes = memoire.recup_recettes_pertinentes(
+            message or (fichier_actif or {}).get("chemin", ""),
+            scope_projet=projet.name if projet else None,
+        )
         ctx_memoire = f"{texte_mem}{recettes}"
     except Exception:
         ctx_memoire = ""
@@ -798,6 +801,7 @@ def monter_routes(app) -> None:
         mode = str(body.get("mode", "code")).lower()
         review_mode = bool(body.get("review_mode", True))
         grill_me = bool(body.get("grill_me", False)) or mode == "grill-me" or message.lower().startswith("/grill-me")
+        mentor_demande = bool(body.get("mentor", False))
         fichier_actif = body.get("fichier_actif") if isinstance(body.get("fichier_actif"), dict) else None
         historique_client = body.get("historique") if isinstance(body.get("historique"), list) else []
 
@@ -814,6 +818,29 @@ def monter_routes(app) -> None:
         def _worker():
             try:
                 systeme = _construire_prompt_ide(mode, projet, fichier_actif, message=message, grill_me=grill_me)
+                directives_mentor = None
+                utiliser_mentor = False
+                if est_createur() and mode in ("code", "swarm"):
+                    try:
+                        from core import mentor
+                        st_m = mentor.statut_mentor()
+                        utiliser_mentor = bool(st_m["sdk_disponible"] and (mentor_demande or st_m["actif"]))
+                        if utiliser_mentor:
+                            _emit({"type": "step", "label": "Mentor Antigravity : préparation du cadrage..."})
+                            directives_mentor = mentor.preparer_directives_mentor(message, projet)
+                            bloc_m = mentor.formater_directives_pour_prompt(directives_mentor)
+                            if bloc_m:
+                                systeme += bloc_m
+                                _emit({
+                                    "type": "tool",
+                                    "statut": "done",
+                                    "nom": "mentor_directives",
+                                    "args": {},
+                                    "extrait": bloc_m.strip()[:260],
+                                })
+                    except Exception:
+                        utiliser_mentor = False
+
                 if mode == "ask":
                     outils_schemas = []
                 elif mode == "plan":
@@ -920,6 +947,30 @@ def monter_routes(app) -> None:
                     textes_fin = [b.text for b in rep_fin.content if getattr(b, "type", None) == "text" and b.text]
                     if textes_fin:
                         texte_final = "\n".join(textes_fin)
+
+                if utiliser_mentor:
+                    try:
+                        from core import mentor
+                        _emit({"type": "step", "label": "Mentor Antigravity : vérification & apprentissage..."})
+                        verdict = mentor.auditer_et_distiller(
+                            message,
+                            projet,
+                            texte_final or journal.resume_court(),
+                            directives=directives_mentor,
+                            auto_corriger=(not review_mode),
+                        )
+                        if verdict:
+                            _emit({
+                                "type": "tool",
+                                "statut": "done",
+                                "nom": "mentor_audit",
+                                "args": {},
+                                "extrait": f"[{verdict.verdict}] {verdict.resume[:180]} (+{len(verdict.lecons)} leçons)",
+                            })
+                            if verdict.corrections_appliquees:
+                                texte_final = (texte_final + "\n\n**Revue Mentor Antigravity :** " + verdict.resume).strip()
+                    except Exception:
+                        pass
 
                 _emit({"type": "done", "texte": texte_final or "Tache terminee."})
                 if patches_crees > 0:
@@ -1094,3 +1145,65 @@ def monter_routes(app) -> None:
         if not ok:
             return JSONResponse({"ok": False, "erreur": f"Connecteur '{nom}' introuvable."}, status_code=404)
         return {"ok": True, "nom": nom}
+
+    @app.get("/api/ide/mentor/etat")
+    def api_ide_mentor_etat(request: Request):
+        if (r := garde(request)):
+            return r
+        from core import mentor
+        return {"ok": True, "createur": est_createur(), **mentor.statut_mentor()}
+
+    @app.post("/api/ide/mentor/toggle")
+    async def api_ide_mentor_toggle(request: Request):
+        if (r := garde(request)):
+            return r
+        from core import mentor
+        body = await request.json() or {}
+        actif = bool(body.get("actif", False))
+        auto_corr = body.get("auto_corriger")
+        res = mentor.basculer_mentor(actif, None if auto_corr is None else bool(auto_corr))
+        return {"ok": True, **res}
+
+    @app.get("/api/ide/memoire/lecons")
+    def api_ide_memoire_lecons(request: Request, statut: str = "", scope: str = "", q: str = ""):
+        if (r := garde(request)):
+            return r
+        return {
+            "ok": True,
+            "stats": memoire.statistiques_gouvernance_memoire(),
+            "lecons": memoire.lister_lecons_gouvernees(statut=statut, scope=scope, requete=q, limite=100),
+        }
+
+    @app.post("/api/ide/memoire/lecon/{rid}/action")
+    async def api_ide_memoire_action(request: Request, rid: int):
+        if (r := garde(request)):
+            return r
+        body = await request.json() or {}
+        action = str(body.get("action", "")).strip()
+        ok = memoire.changer_statut_lecon(rid, action)
+        if not ok:
+            return JSONResponse({"ok": False, "erreur": "Action ou leçon introuvable."}, status_code=400)
+        return {"ok": True, "id": rid, "action": action, "stats": memoire.statistiques_gouvernance_memoire()}
+
+    @app.delete("/api/ide/memoire/lecon/{rid}")
+    def api_ide_memoire_delete(request: Request, rid: int):
+        if (r := garde(request)):
+            return r
+        ok = memoire.supprimer_lecon(rid)
+        if not ok:
+            return JSONResponse({"ok": False, "erreur": "Leçon introuvable."}, status_code=404)
+        return {"ok": True, "id": rid, "stats": memoire.statistiques_gouvernance_memoire()}
+
+    @app.post("/api/ide/memoire/prune")
+    def api_ide_memoire_prune(request: Request):
+        if (r := garde(request)):
+            return r
+        nb = memoire.purger_lecons_obsoletes()
+        return {"ok": True, "archivees": nb, "stats": memoire.statistiques_gouvernance_memoire()}
+
+    @app.post("/api/ide/memoire/exporter-playbook")
+    def api_ide_memoire_exporter(request: Request):
+        if (r := garde(request)):
+            return r
+        res = memoire.exporter_playbook_public()
+        return res

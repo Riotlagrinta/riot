@@ -93,6 +93,7 @@ _COMMANDES_INTERNES = [
     "/remote", "/mobile",
     "/tokens", "/cost",
     "/grill-me",
+    "/mentor",
     "/memory", "/mem", "/memoire",
     "/recettes",
     "/clear", "/cls",
@@ -887,6 +888,15 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
         console.print(Markdown(reponse_finale))
         console.print(f"[dim]  ⚡ {provider.nom} · {round(time.time() - t_fin, 2)}s[/dim]\n")
         memoire.lancer_auto_memoire_asynchrone(phrase, reponse_finale, surface="cli")
+        try:
+            from core import mentor
+            if llm_mod.est_createur() and projet_actuel and mentor.mentor_est_actif():
+                with console.status("[bold cyan]🎓 Audit Mentor Antigravity...[/bold cyan]", spinner="dots"):
+                    verdict = mentor.auditer_et_distiller(phrase, projet_actuel, reponse_finale)
+                if verdict:
+                    console.print(f"[dim]🎓 Mentor [{verdict.verdict}] : {verdict.resume[:160]} (+{len(verdict.lecons)} leçons)[/dim]\n")
+        except Exception:
+            pass
     except Exception:
         pass
 
@@ -1066,6 +1076,32 @@ def lancer_terminal_interactif():
                 parties = texte.split(maxsplit=1)
                 arg_mcp = parties[1] if len(parties) > 1 else ""
                 commande_mcp(arg_mcp)
+                continue
+            elif cmd.startswith("/mentor"):
+                from core import mentor as mentor_mod
+                parties = texte.split(maxsplit=1)
+                sub = parties[1].strip().lower() if len(parties) > 1 else "status"
+                if sub in ("on", "activer", "1"):
+                    st_m = mentor_mod.basculer_mentor(True)
+                    console.print(f"[bold green]✓ Mentor Antigravity ACTIVÉ[/bold green] [dim](SDK={st_m['sdk_disponible']}, Auth={st_m['auth_disponible']})[/dim]\n")
+                elif sub in ("off", "desactiver", "0"):
+                    mentor_mod.basculer_mentor(False)
+                    console.print("[bold yellow]✓ Mentor Antigravity DÉSACTIVÉ.[/bold yellow]\n")
+                elif sub == "prune":
+                    nb = memoire.purger_lecons_obsoletes()
+                    console.print(f"[bold cyan]✓ {nb} leçon(s) obsolète(s) archivée(s).[/bold cyan]\n")
+                elif sub == "export":
+                    res_exp = memoire.exporter_playbook_public()
+                    console.print(f"[bold green]✓ Playbook public exporté :[/bold green] {res_exp['fichier']} ({res_exp['exportees']} leçon(s))\n")
+                else:
+                    st_m = mentor_mod.statut_mentor()
+                    mem_st = st_m["memoire"]
+                    console.print(
+                        f"[bold cyan]🎓 Mentor Antigravity[/bold cyan] · actif=[bold]{st_m['actif']}[/bold] · "
+                        f"SDK={st_m['sdk_disponible']} · Actives={mem_st['actives']} · "
+                        f"Archivées={mem_st['archivees']} · Confiance moy={mem_st['confiance_moyenne']}\n"
+                        "[dim]Usage : /mentor on | /mentor off | /mentor prune | /mentor export[/dim]\n"
+                    )
                 continue
             elif cmd in ("/app", "/studio"):
                 from core import serveur, studio_app

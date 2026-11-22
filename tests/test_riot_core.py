@@ -1163,6 +1163,114 @@ def test_mobile_push_token_registration_and_dispatch(monkeypatch, tmp_path):
     assert r_del.status_code == 200 and r_del.json()["count"] == 0
 
 
+def test_mentor_antigravity_gouvernance_memoire_et_playbook(monkeypatch, tmp_path):
+    from core import ide, memoire, mentor, serveur
+
+    # Base SQLite temporaire isolee pour tester migration, scoring, isolation scope & export
+    db_tmp = tmp_path / "test_mentor_mem.db"
+    memoire.reinitialiser_connexion(db_tmp)
+    try:
+        # 1. Enregistrement avec anonymisation de chemins et secrets
+        rid_global = memoire.enregistrer_lecon_mentor(
+            titre="Validation FastAPI stricte",
+            probleme="Route POST sans schema dans C:\\Users\\kelvyn\\app.py",
+            solution="Valider le payload avec Pydantic et rejeter 400",
+            cause="Absence de schema",
+            langage="python",
+            scope="global",
+            interdits="Ne jamais faire confiance a request.json() sans validation",
+            verification="pytest tests/ -k api",
+            confiance=0.80,
+            sync_auto=False,
+        )
+        rid_priv = memoire.enregistrer_lecon_mentor(
+            titre="Cle Stripe specifique projet A",
+            probleme="Webhook endpoint projet A",
+            solution="Verifier header stripe-signature",
+            langage="python",
+            scope="project:projet_a",
+            confiance=0.90,
+            sync_auto=False,
+        )
+        assert rid_global > 0 and rid_priv > 0
+
+        # 2. Isolation de portee : projet_b ne voit pas project:projet_a mais voit global
+        ctx_b = memoire.recup_recettes_pertinentes("FastAPI Stripe Webhook", scope_projet="projet_b")
+        assert "Validation FastAPI stricte" in ctx_b
+        assert "À ÉVITER" in ctx_b
+        assert "Cle Stripe specifique projet A" not in ctx_b
+
+        # Verifie l'anonymisation du chemin perso dans le texte stocke
+        lecons = memoire.lister_lecons_gouvernees(statut="active")
+        glob_item = [x for x in lecons if x["id"] == rid_global][0]
+        assert "kelvyn" not in glob_item["probleme"] and "<HOME>" in glob_item["probleme"]
+
+        # 3. Cycle confiance & auto-archivage apres echecs
+        rid_bad = memoire.enregistrer_lecon_mentor(
+            titre="Mauvaise heuristique temporaire",
+            probleme="Test fragile",
+            solution="Sleep fixe 10s",
+            langage="python",
+            scope="global",
+            confiance=0.55,
+            sync_auto=False,
+        )
+        memoire.evaluer_lecon(rid_bad, False)
+        res_fail2 = memoire.evaluer_lecon(rid_bad, False)
+        assert res_fail2["confiance"] < 0.30 and res_fail2["statut"] == "archived"
+
+        # 4. Export playbook public (exclut project:* et archived) + reimport
+        pb_path = tmp_path / "playbook_pub.json"
+        rep_exp = memoire.exporter_playbook_public(chemin_sortie=pb_path, min_confiance=0.70)
+        assert rep_exp["ok"] is True and rep_exp["exportees"] == 1
+        contenu_pb = pb_path.read_text(encoding="utf-8")
+        assert "Validation FastAPI stricte" in contenu_pb
+        assert "projet_a" not in contenu_pb and "Mauvaise heuristique" not in contenu_pb
+
+        # 5. Boucle Mentor Antigravity mockee (Directives + Audit -> lecon stockee)
+        def _fake_exec(sys_inst, prompt, dossier, schema, enable_edit=False, timeout_s=45.0):
+            if schema is mentor.DirectivesMentor:
+                return mentor.DirectivesMentor(
+                    plan_etapes=["Lire auth.py", "Corriger check"],
+                    a_faire=["Verifier JWT"],
+                    a_eviter=["Ne pas hardcoder secret"],
+                    criteres_validation=["pytest"],
+                )
+            return mentor.VerdictMentor(
+                verdict="CORRIGE",
+                resume="Signature JWT renforcee",
+                erreurs_trouvees=["Cle vide toleree"],
+                corrections_appliquees=["Raise ValueError si cle vide"],
+                lecons=[
+                    mentor.LeconDistillee(
+                        titre="Refuser cle JWT vide",
+                        langage="python",
+                        scope="global",
+                        probleme="Acceptation d'une cle JWT vide",
+                        solution="Lever une exception des l'initialisation si JWT_SECRET vide",
+                        interdits="Ne jamais utiliser de chaine vide par defaut",
+                        verification="pytest -k jwt",
+                    )
+                ],
+            )
+
+        monkeypatch.setattr(mentor, "_executer_agent_mentor", _fake_exec)
+        dirs = mentor.preparer_directives_mentor("Securise JWT", tmp_path)
+        assert dirs is not None and "Verifier JWT" in mentor.formater_directives_pour_prompt(dirs)
+        verdict = mentor.auditer_et_distiller("Securise JWT", tmp_path, "OK", directives=dirs, auto_corriger=True)
+        assert verdict is not None and verdict.verdict == "CORRIGE"
+        assert any(x["titre"] == "Refuser cle JWT vide" for x in memoire.lister_lecons_gouvernees(statut="active"))
+
+        # 6. Endpoints IDE Mentor & Playbook en local
+        client = TestClient(serveur.app(), base_url="http://127.0.0.1:8790", client=("127.0.0.1", 50000))
+        assert client.get("/api/ide/mentor/etat").status_code == 200
+        r_lecons = client.get("/api/ide/memoire/lecons")
+        assert r_lecons.status_code == 200 and r_lecons.json()["stats"]["actives"] >= 2
+    finally:
+        memoire.reinitialiser_connexion()
+
+
+
 
 
 

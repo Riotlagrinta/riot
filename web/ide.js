@@ -30,11 +30,13 @@
       "ide-terminal-panel", "ide-term-cwd", "ide-term-output", "ide-term-form",
       "ide-term-input", "ide-term-clear", "ide-agent-feed", "ide-agent-form",
       "ide-agent-input", "ide-agent-send", "ide-attach-active", "ide-active-file-chip",
-      "ide-review-mode", "ide-grill-me", "ide-pending-count", "ide-agent-clear",
+      "ide-review-mode", "ide-grill-me", "ide-mentor-wrap", "ide-mentor-mode", "ide-pending-count", "ide-agent-clear",
       "ide-quickopen-modal", "ide-quickopen-input", "ide-quickopen-list",
       "ide-folder-modal", "ide-folder-close", "ide-folder-cancel", "ide-folder-recents", "ide-folder-roots",
       "ide-folder-breadcrumb", "ide-folder-up", "ide-folder-path", "ide-folder-go", "ide-folder-new", "ide-folder-os",
       "ide-folder-filter", "ide-folder-list", "ide-folder-open",
+      "ide-btn-playbook", "ide-playbook-modal", "ide-pb-close", "ide-pb-prune", "ide-pb-export", "ide-pb-stats",
+      "ide-pb-statut", "ide-pb-search", "ide-pb-list",
       "ide-btn-mcp", "ide-mcp-modal", "ide-mcp-close", "ide-mcp-reload", "ide-mcp-summary", "ide-mcp-list",
       "ide-model-modal", "ide-modal-close", "ide-model-form",
       "ide-cfg-profil-wrap", "ide-cfg-profil", "ide-admin-model-fields",
@@ -349,6 +351,14 @@
         renderPendingPatches();
       }
     } catch (_) {}
+    try {
+      var rm = await fetch("/api/ide/mentor/etat");
+      var dm = await rm.json();
+      if (dm && dm.ok && dm.createur && dm.sdk_disponible && els["ide-mentor-wrap"]) {
+        els["ide-mentor-wrap"].classList.remove("hidden");
+        els["ide-mentor-mode"].checked = Boolean(dm.actif);
+      }
+    } catch (_) {}
   }
 
   function appendAgentMsg(role, text, extraHtml) {
@@ -374,6 +384,7 @@
       mode: state.agentMode,
       review_mode: els["ide-review-mode"].checked,
       grill_me: !!(els["ide-grill-me"] && els["ide-grill-me"].checked),
+      mentor: !!(els["ide-mentor-mode"] && els["ide-mentor-mode"].checked),
       historique: state.history.slice(-8),
       fichier_actif: els["ide-attach-active"].checked && tab ? { chemin: tab.path, contenu: tab.content } : null
     };
@@ -1022,6 +1033,112 @@
       });
     }
 
+    async function loadPlaybookLessons() {
+      if (!els["ide-pb-list"]) return;
+      var st = els["ide-pb-statut"] ? els["ide-pb-statut"].value : "active";
+      var qv = els["ide-pb-search"] ? els["ide-pb-search"].value.trim() : "";
+      var qs = "?statut=" + encodeURIComponent(st) + (qv ? "&q=" + encodeURIComponent(qv) : "");
+      var r = await fetch("/api/ide/memoire/lecons" + qs);
+      var d = await r.json();
+      if (!r.ok || !d.ok) {
+        els["ide-pb-stats"].textContent = "Erreur chargement Playbook.";
+        return;
+      }
+      var s = d.stats || {};
+      els["ide-pb-stats"].textContent =
+        (s.actives || 0) + " active(s) · " + (s.archivees || 0) + " archivée(s) · " +
+        (s.mentor_count || 0) + " apprise(s) via Mentor · Confiance moy. : " + Math.round((s.confiance_moyenne || 0) * 100) + "%";
+      var box = els["ide-pb-list"];
+      box.innerHTML = "";
+      var lecons = d.lecons || [];
+      if (lecons.length === 0) {
+        var empty = document.createElement("div");
+        empty.className = "ide-hint";
+        empty.style.padding = "12px";
+        empty.textContent = "Aucune leçon correspondante pour le moment.";
+        box.appendChild(empty);
+        return;
+      }
+      lecons.forEach(function (l) {
+        var row = document.createElement("div");
+        row.className = "ide-folder-row";
+        row.style.cssText = "flex-direction:column;align-items:stretch;gap:6px;cursor:default;padding:10px;border-bottom:1px solid var(--riot-border);";
+        var confPct = Math.round((l.confiance || 0.65) * 100);
+        var head = document.createElement("div");
+        head.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;";
+        head.innerHTML =
+          "<strong>" + escapeHtml(l.titre) + " <span style='opacity:.7;font-weight:400;'>[" + escapeHtml(l.scope) + " · " + escapeHtml(l.langage || "dev") + " · " + confPct + "%]</span></strong>" +
+          "<span style='font-size:11px;opacity:.75;'>" + escapeHtml(l.source) + " · " + escapeHtml(l.statut) + "</span>";
+        var body = document.createElement("div");
+        body.style.cssText = "font-size:12px;opacity:.88;line-height:1.45;";
+        body.innerHTML =
+          "<div><b>À faire :</b> " + escapeHtml(l.solution) + "</div>" +
+          (l.interdits ? "<div style='color:#fca5a5;'><b>À éviter :</b> " + escapeHtml(l.interdits) + "</div>" : "");
+        var acts = document.createElement("div");
+        acts.style.cssText = "display:flex;gap:6px;flex-wrap:wrap;";
+        function mkBtn(txt, fn) {
+          var b = document.createElement("button");
+          b.type = "button";
+          b.className = "ide-btn-sm";
+          b.textContent = txt;
+          b.addEventListener("click", fn);
+          acts.appendChild(b);
+        }
+        mkBtn("🌐 Global", async function () {
+          await fetch("/api/ide/memoire/lecon/" + l.id + "/action", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "promote_global" }) });
+          await loadPlaybookLessons();
+        });
+        mkBtn("+ Confiance", async function () {
+          await fetch("/api/ide/memoire/lecon/" + l.id + "/action", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "boost" }) });
+          await loadPlaybookLessons();
+        });
+        mkBtn(l.statut === "archived" ? "♻️ Réactiver" : "📦 Archiver", async function () {
+          await fetch("/api/ide/memoire/lecon/" + l.id + "/action", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: l.statut === "archived" ? "active" : "archived" }) });
+          await loadPlaybookLessons();
+        });
+        mkBtn("🗑️", async function () {
+          await fetch("/api/ide/memoire/lecon/" + l.id, { method: "DELETE" });
+          await loadPlaybookLessons();
+        });
+        row.appendChild(head);
+        row.appendChild(body);
+        row.appendChild(acts);
+        box.appendChild(row);
+      });
+    }
+
+    if (els["ide-btn-playbook"]) {
+      els["ide-btn-playbook"].addEventListener("click", function () {
+        els["ide-playbook-modal"].classList.remove("hidden");
+        void loadPlaybookLessons();
+      });
+      els["ide-pb-close"].addEventListener("click", function () { els["ide-playbook-modal"].classList.add("hidden"); });
+      els["ide-playbook-modal"].addEventListener("click", function (ev) {
+        if (ev.target === els["ide-playbook-modal"]) els["ide-playbook-modal"].classList.add("hidden");
+      });
+      els["ide-pb-statut"].addEventListener("change", function () { void loadPlaybookLessons(); });
+      els["ide-pb-search"].addEventListener("input", function () { void loadPlaybookLessons(); });
+      els["ide-pb-prune"].addEventListener("click", async function () {
+        await fetch("/api/ide/memoire/prune", { method: "POST" });
+        await loadPlaybookLessons();
+      });
+      els["ide-pb-export"].addEventListener("click", async function () {
+        var r = await fetch("/api/ide/memoire/exporter-playbook", { method: "POST" });
+        var d = await r.json();
+        if (d.ok) appendAgentMsg("system", "📤 Playbook public exporté (" + d.exportees + " leçons) -> " + d.fichier);
+      });
+    }
+
+    if (els["ide-mentor-mode"]) {
+      els["ide-mentor-mode"].addEventListener("change", async function () {
+        await fetch("/api/ide/mentor/toggle", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ actif: els["ide-mentor-mode"].checked })
+        });
+      });
+    }
+
     if (els["ide-btn-mcp"]) {
       els["ide-btn-mcp"].addEventListener("click", function () {
         els["ide-mcp-modal"].classList.remove("hidden");
@@ -1082,6 +1199,7 @@
       } else if (ev.key === "Escape") {
         els["ide-quickopen-modal"].classList.add("hidden");
         els["ide-folder-modal"].classList.add("hidden");
+        if (els["ide-playbook-modal"]) els["ide-playbook-modal"].classList.add("hidden");
         if (els["ide-mcp-modal"]) els["ide-mcp-modal"].classList.add("hidden");
         els["ide-model-modal"].classList.add("hidden");
       }
