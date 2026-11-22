@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "RIOT Mobile",
+    "slug": "riot-mobile",
+    "version": "0.3.8",
+    "orientation": "portrait",
+    "scheme": "riot",
+    "userInterfaceStyle": "dark",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0B0C0E"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "dev.riot.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Scanner le QR Code d'appairage RIOT Desktop",
+        "NSFaceIDUsageDescription": "Confirmer les commandes terminal sensibles sur votre PC"
+      }
+    },
+    "android": {
+      "package": "dev.riot.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#0B0C0E"
+      },
+      "permissions": ["android.permission.CAMERA", "android.permission.USE_BIOMETRIC"]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-local-authentication",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Autoriser RIOT Mobile à scanner le QR Code d'appairage"
+        }
+      ]
+    ]
+  }
+}

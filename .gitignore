@@ -13,6 +13,13 @@ wheels/
 desktop/node_modules/
 desktop/dist/
 
+# Mobile Expo build artifacts
+mobile-app/node_modules/
+mobile-app/.expo/
+mobile-app/dist/
+mobile-app/android/
+mobile-app/ios/
+
 # Secrets et donnees personnelles (ne JAMAIS versionner)
 config.yaml
 securite.json

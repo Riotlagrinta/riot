@@ -1083,6 +1083,36 @@ def test_ide_folder_navigation_recents_and_create(monkeypatch, tmp_path):
         _SESSION_CTX["projet_actif"] = prev
 
 
+def test_mobile_qr_pairing_one_time_exchange(monkeypatch):
+    from core import auth, serveur
+
+    client = TestClient(serveur.app(), base_url="http://127.0.0.1:8790", client=("127.0.0.1", 50000))
+
+    # 1. Refus depuis un tunnel distant non authentifie
+    r_rem = client.post(
+        "/api/mobile/pair/generer",
+        headers={"x-forwarded-for": "198.51.100.77", "host": "riot.trycloudflare.com"},
+    )
+    assert r_rem.status_code == 403
+
+    # 2. Generation locale -> code unique
+    r_gen = client.post("/api/mobile/pair/generer")
+    assert r_gen.status_code == 200
+    data = r_gen.json()
+    assert data["ok"] is True and data["code"] and data["qr_payload"].startswith("riot://pair?")
+
+    # 3. Echange du code -> session creee, puis rejeu bloque (usage unique)
+    tokens_crees = []
+    monkeypatch.setattr(auth, "creer_session", lambda ip="-": tokens_crees.append(ip) or "tok_pair_mobile_123")
+    r_ok = client.post("/api/mobile/pair/echanger", json={"code": data["code"]})
+    assert r_ok.status_code == 200 and r_ok.json()["token"] == "tok_pair_mobile_123"
+    assert len(tokens_crees) == 1
+
+    r_replay = client.post("/api/mobile/pair/echanger", json={"code": data["code"]})
+    assert r_replay.status_code == 401
+
+
+
 
 
 

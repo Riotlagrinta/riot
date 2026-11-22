@@ -9,10 +9,12 @@ import base64
 import json
 import logging
 import re
+import secrets
 import socket
 import time
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import quote
 
 try:
     import truststore
@@ -30,6 +32,8 @@ from core.llm import llm
 LOG = logging.getLogger("jarvis.mobile")
 _RACINE = Path(__file__).resolve().parent.parent
 _HTML = _RACINE / "web" / "mobile.html"
+_CODES_APPAIRAGE: dict[str, float] = {}
+_TTL_APPAIRAGE_SEC = 300.0
 
 
 def _ip_locale():
@@ -308,6 +312,69 @@ def monter_routes(app):
         rep.set_cookie("keranos_token", valeur, max_age=auth.DUREE_SESSION,
                        httponly=True, samesite="strict")
         return rep
+
+    @app.post("/api/mobile/pair/generer")
+    def route_generer_appairage(request: Request):
+        from core.panneau import _local_seulement
+        est_local = _local_seulement(request) and not request.headers.get("cf-connecting-ip")
+        if not est_local and not _est_authentifie(request):
+            return JSONResponse({"ok": False, "message": "Accès réservé au poste local ou session authentifiée."}, status_code=403)
+        maintenant = time.time()
+        for k in [c for c, exp in _CODES_APPAIRAGE.items() if exp <= maintenant]:
+            _CODES_APPAIRAGE.pop(k, None)
+        while len(_CODES_APPAIRAGE) >= 10:
+            plus_ancien = min(_CODES_APPAIRAGE, key=_CODES_APPAIRAGE.get)
+            _CODES_APPAIRAGE.pop(plus_ancien, None)
+        code = secrets.token_urlsafe(20)
+        _CODES_APPAIRAGE[code] = maintenant + _TTL_APPAIRAGE_SEC
+        port = int(reglage("serveur.port", 8790))
+        lan_url = f"http://{_ip_locale()}:{port}"
+        public_url = ""
+        try:
+            from core import serveur
+            public_url = serveur.url_publique() or ""
+        except Exception:
+            public_url = ""
+        qr_payload = f"riot://pair?code={quote(code)}&lan={quote(lan_url)}&pub={quote(public_url)}"
+        auth.audit("PAIR_QR_GENERE", _ip_client(request))
+        return {
+            "ok": True,
+            "code": code,
+            "expires_in": int(_TTL_APPAIRAGE_SEC),
+            "lan_url": lan_url,
+            "public_url": public_url,
+            "qr_payload": qr_payload,
+        }
+
+    @app.post("/api/mobile/pair/echanger")
+    async def route_echanger_appairage(request: Request):
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        code = str((body or {}).get("code", "")).strip()
+        if not code:
+            return JSONResponse({"ok": False, "message": "Code d'appairage requis."}, status_code=400)
+        exp = _CODES_APPAIRAGE.pop(code, None)
+        if not exp or exp <= time.time():
+            return JSONResponse({"ok": False, "message": "Code d'appairage invalide ou expiré."}, status_code=401)
+        ip = _ip_client(request)
+        token = auth.creer_session(ip)
+        auth.audit("PAIR_MOBILE_OK", ip)
+        port = int(reglage("serveur.port", 8790))
+        public_url = ""
+        try:
+            from core import serveur
+            public_url = serveur.url_publique() or ""
+        except Exception:
+            public_url = ""
+        return {
+            "ok": True,
+            "token": token,
+            "lan_url": f"http://{_ip_locale()}:{port}",
+            "public_url": public_url,
+            "message": "Appairage mobile réussi.",
+        }
 
     @app.post("/api/mobile/logout")
     def route_deconnexion(request: Request):
