@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>RIOT // Studio</title>
   <link rel="icon" type="image/svg+xml" href="/logo.svg">
-  <link rel="manifest" href="/claude/manifest.json">
+  <link rel="manifest" href="/studio/manifest.json">
   <meta name="theme-color" content="#0B0C0E">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -26,25 +26,25 @@
 
   <style>
     :root {
-      --claude-bg: var(--riot-bg);
-      --claude-sidebar: var(--riot-sidebar);
-      --claude-card: var(--riot-card);
-      --claude-card-subtle: var(--riot-card-2);
-      --claude-border: var(--riot-border);
-      --claude-border-subtle: var(--riot-border-subtle);
+      --studio-bg: var(--riot-bg);
+      --studio-sidebar: var(--riot-sidebar);
+      --studio-card: var(--riot-card);
+      --studio-card-subtle: var(--riot-card-2);
+      --studio-border: var(--riot-border);
+      --studio-border-subtle: var(--riot-border-subtle);
       
-      --claude-coral: var(--riot-accent);
-      --claude-coral-hover: var(--riot-accent-hover);
-      --claude-coral-dim: var(--riot-accent-dim);
+      --studio-coral: var(--riot-accent);
+      --studio-coral-hover: var(--riot-accent-hover);
+      --studio-coral-dim: var(--riot-accent-dim);
       
-      --claude-text: var(--riot-text);
-      --claude-text-muted: var(--riot-text-muted);
-      --claude-text-dim: var(--riot-text-dim);
+      --studio-text: var(--riot-text);
+      --studio-text-muted: var(--riot-text-muted);
+      --studio-text-dim: var(--riot-text-dim);
 
-      --claude-green: var(--riot-ok);
-      --claude-gold: var(--riot-warn);
-      --claude-cyan: var(--riot-secondary);
-      --claude-red: var(--riot-err);
+      --studio-green: var(--riot-ok);
+      --studio-gold: var(--riot-warn);
+      --studio-cyan: var(--riot-secondary);
+      --studio-red: var(--riot-err);
     }
 
     * {
@@ -55,8 +55,8 @@
     }
 
     body {
-      background: var(--claude-bg);
-      color: var(--claude-text);
+      background: var(--studio-bg);
+      color: var(--studio-text);
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       height: 100vh;
       height: 100dvh;
@@ -82,16 +82,16 @@
       border-radius: 4px;
     }
     ::-webkit-scrollbar-thumb:hover {
-      background: var(--claude-coral);
+      background: var(--studio-coral);
     }
 
     /* ------------------------------------------------------------- */
-    /* LAYOUT 3 COLONNES CLAUDE                                      */
+    /* LAYOUT 3 COLONNES RIOT STUDIO                                      */
     /* ------------------------------------------------------------- */
     #sidebar {
       width: 280px;
-      background: var(--claude-sidebar);
-      border-right: 1px solid var(--claude-border);
+      background: var(--studio-sidebar);
+      border-right: 1px solid var(--studio-border);
       display: flex;
       flex-direction: column;
       flex-shrink: 0;
@@ -111,15 +111,15 @@
       min-height: 0;
       min-width: 0;
       overflow: hidden;
-      background: var(--claude-bg);
+      background: var(--studio-bg);
       position: relative;
     }
 
     #artifacts-panel {
       width: 480px;
       max-width: 45vw;
-      background: var(--claude-card-subtle);
-      border-left: 1px solid var(--claude-border);
+      background: var(--studio-card-subtle);
+      border-left: 1px solid var(--studio-border);
       display: flex;
       flex-direction: column;
       flex-shrink: 0;
@@ -138,7 +138,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      border-bottom: 1px solid var(--claude-border-subtle);
+      border-bottom: 1px solid var(--studio-border-subtle);
     }
     .brand {
       display: flex;
@@ -152,7 +152,7 @@
       width: 26px;
       height: 26px;
       border-radius: 7px;
-      background: var(--claude-coral);
+      background: var(--studio-coral);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -162,10 +162,10 @@
     .btn-new-chat {
       margin: 12px 14px;
       padding: 10px 14px;
-      background: var(--claude-card);
-      border: 1px solid var(--claude-border);
+      background: var(--studio-card);
+      border: 1px solid var(--studio-border);
       border-radius: 9px;
-      color: var(--claude-text);
+      color: var(--studio-text);
       display: flex;
       align-items: center;
       gap: 10px;
@@ -185,7 +185,7 @@
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.6px;
-      color: var(--claude-text-dim);
+      color: var(--studio-text-dim);
     }
 
     /* Sélecteur de projet */
@@ -196,10 +196,10 @@
     .project-select-btn {
       width: 100%;
       padding: 8px 12px;
-      background: var(--claude-card-subtle);
-      border: 1px solid var(--claude-border);
+      background: var(--studio-card-subtle);
+      border: 1px solid var(--studio-border);
       border-radius: 8px;
-      color: var(--claude-text);
+      color: var(--studio-text);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -212,8 +212,8 @@
       left: 0;
       right: 0;
       margin-top: 4px;
-      background: var(--claude-card);
-      border: 1px solid var(--claude-border);
+      background: var(--studio-card);
+      border: 1px solid var(--studio-border);
       border-radius: 8px;
       max-height: 240px;
       overflow-y: auto;
@@ -232,7 +232,7 @@
     }
     .project-item:hover {
       background: #2f2f2b;
-      color: var(--claude-coral);
+      color: var(--studio-coral);
     }
 
     /* Sélecteur de modes (Swarm vs Coder) */
@@ -249,17 +249,17 @@
       display: flex;
       align-items: center;
       gap: 9px;
-      color: var(--claude-text-muted);
+      color: var(--studio-text-muted);
       cursor: pointer;
       transition: all 0.12s ease;
     }
     .mode-pill:hover {
-      background: var(--claude-card);
-      color: var(--claude-text);
+      background: var(--studio-card);
+      color: var(--studio-text);
     }
     .mode-pill.active {
-      background: var(--claude-coral-dim);
-      color: var(--claude-coral);
+      background: var(--studio-coral-dim);
+      color: var(--studio-coral);
       font-weight: 500;
     }
 
@@ -276,7 +276,7 @@
       padding: 8px 10px;
       border-radius: 7px;
       font-size: 12.5px;
-      color: var(--claude-text-muted);
+      color: var(--studio-text-muted);
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -286,12 +286,12 @@
       position: relative;
     }
     .history-item:hover {
-      background: var(--claude-card);
-      color: var(--claude-text);
+      background: var(--studio-card);
+      color: var(--studio-text);
     }
     .history-item.active {
       background: rgba(217, 119, 87, 0.15);
-      color: var(--claude-coral);
+      color: var(--studio-coral);
       font-weight: 500;
     }
     .history-title {
@@ -304,7 +304,7 @@
       opacity: 0;
       background: transparent;
       border: none;
-      color: var(--claude-text-dim);
+      color: var(--studio-text-dim);
       cursor: pointer;
       padding: 2px 4px;
       border-radius: 4px;
@@ -317,7 +317,7 @@
       opacity: 0.8;
     }
     .history-del-btn:hover {
-      color: var(--claude-red);
+      color: var(--studio-red);
       opacity: 1 !important;
       background: rgba(224, 108, 117, 0.15);
     }
@@ -325,9 +325,9 @@
     /* Sidebar footer */
     .sidebar-footer {
       padding: 12px 14px;
-      border-top: 1px solid var(--claude-border-subtle);
+      border-top: 1px solid var(--studio-border-subtle);
       font-size: 11.5px;
-      color: var(--claude-text-dim);
+      color: var(--studio-text-dim);
       display: flex;
       flex-direction: column;
       gap: 6px;
@@ -343,7 +343,7 @@
     /* ------------------------------------------------------------- */
     .chat-header {
       height: 54px;
-      border-bottom: 1px solid var(--claude-border);
+      border-bottom: 1px solid var(--studio-border);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -360,7 +360,7 @@
     .badge-project {
       font-size: 12.5px;
       font-weight: 500;
-      color: var(--claude-gold);
+      color: var(--studio-gold);
       background: rgba(229, 192, 123, 0.1);
       border: 1px solid rgba(229, 192, 123, 0.25);
       padding: 3px 9px;
@@ -371,7 +371,7 @@
     }
     .badge-branch {
       font-size: 11.5px;
-      color: var(--claude-cyan);
+      color: var(--studio-cyan);
       display: flex;
       align-items: center;
       gap: 4px;
@@ -383,23 +383,23 @@
     }
     .btn-header {
       background: transparent;
-      border: 1px solid var(--claude-border);
+      border: 1px solid var(--studio-border);
       border-radius: 7px;
       padding: 6px 11px;
       font-size: 12px;
-      color: var(--claude-text-muted);
+      color: var(--studio-text-muted);
       display: flex;
       align-items: center;
       gap: 6px;
       cursor: pointer;
     }
     .btn-header:hover {
-      background: var(--claude-card);
-      color: var(--claude-text);
+      background: var(--studio-card);
+      color: var(--studio-text);
     }
     .btn-header.active {
-      border-color: var(--claude-coral);
-      color: var(--claude-coral);
+      border-color: var(--studio-coral);
+      color: var(--studio-coral);
     }
 
     /* ------------------------------------------------------------- */
@@ -427,9 +427,9 @@
       position: absolute;
       bottom: 130px;
       right: 28px;
-      background: var(--claude-card);
-      border: 1px solid var(--claude-coral);
-      color: var(--claude-text);
+      background: var(--studio-card);
+      border: 1px solid var(--studio-coral);
+      color: var(--studio-text);
       border-radius: 20px;
       padding: 6px 13px;
       font-size: 12px;
@@ -444,7 +444,7 @@
       transition: all 0.15s ease;
     }
     .btn-scroll-bottom:hover {
-      background: var(--claude-coral);
+      background: var(--studio-coral);
       color: #fff;
     }
 
@@ -472,8 +472,8 @@
       background: #3a3935;
       color: #fff;
     }
-    .avatar-claude {
-      background: var(--claude-coral);
+    .avatar-riot {
+      background: var(--studio-coral);
       color: #fff;
     }
 
@@ -482,13 +482,13 @@
       min-width: 0;
       font-size: 14.5px;
       line-height: 1.6;
-      color: var(--claude-text);
+      color: var(--studio-text);
     }
     .msg-content img {
       max-width: 100%;
       height: auto;
       border-radius: 8px;
-      border: 1px solid var(--claude-border);
+      border: 1px solid var(--studio-border);
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
       margin: 14px 0;
       display: block;
@@ -507,7 +507,7 @@
     }
     .msg-content pre {
       background: #111110;
-      border: 1px solid var(--claude-border);
+      border: 1px solid var(--studio-border);
       border-radius: 8px;
       padding: 12px 14px;
       overflow-x: auto;
@@ -520,7 +520,7 @@
       padding: 2px 5px;
       border-radius: 4px;
       font-size: 13px;
-      color: var(--claude-coral);
+      color: var(--studio-coral);
     }
     .msg-content ul, .msg-content ol {
       margin-left: 20px;
@@ -540,34 +540,34 @@
       align-items: center;
       gap: 6px;
       font-size: 11.5px;
-      color: var(--claude-text-muted);
+      color: var(--studio-text-muted);
       background: rgba(255, 255, 255, 0.03);
-      border: 1px solid var(--claude-border);
+      border: 1px solid var(--studio-border);
       border-radius: 6px;
       padding: 4px 9px;
       cursor: pointer;
       transition: all 0.15s ease;
     }
     .msg-action-btn:hover {
-      color: var(--claude-coral);
-      border-color: var(--claude-coral);
-      background: var(--claude-card);
+      color: var(--studio-coral);
+      border-color: var(--studio-coral);
+      background: var(--studio-card);
     }
 
     /* ------------------------------------------------------------- */
     /* DIAGRAMMES TECHNIQUES MERMAID                                 */
     /* ------------------------------------------------------------- */
     .diagramme-box {
-      background: var(--claude-card);
-      border: 1px solid var(--claude-border);
+      background: var(--studio-card);
+      border: 1px solid var(--studio-border);
       border-radius: 8px;
       margin: 14px 0;
       overflow: hidden;
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
     }
     .diagramme-header {
-      background: var(--claude-card-subtle);
-      border-bottom: 1px solid var(--claude-border-subtle);
+      background: var(--studio-card-subtle);
+      border-bottom: 1px solid var(--studio-border-subtle);
       padding: 7px 12px;
       display: flex;
       justify-content: space-between;
@@ -576,7 +576,7 @@
     .diagramme-title {
       font-size: 11px;
       font-weight: 600;
-      color: var(--claude-text-muted);
+      color: var(--studio-text-muted);
       text-transform: uppercase;
       letter-spacing: 0.5px;
       display: inline-flex;
@@ -589,8 +589,8 @@
     }
     .diag-btn {
       background: transparent;
-      border: 1px solid var(--claude-border);
-      color: var(--claude-text-muted);
+      border: 1px solid var(--studio-border);
+      color: var(--studio-text-muted);
       padding: 3px 8px;
       border-radius: 5px;
       font-size: 11px;
@@ -601,9 +601,9 @@
       transition: all 0.15s ease;
     }
     .diag-btn:hover {
-      background: var(--claude-card);
-      border-color: var(--claude-coral);
-      color: var(--claude-coral);
+      background: var(--studio-card);
+      border-color: var(--studio-coral);
+      color: var(--studio-coral);
     }
     .diagramme-body {
       padding: 16px;
@@ -624,12 +624,12 @@
     }
 
     /* ------------------------------------------------------------- */
-    /* TOOL CALL CARDS (Façon Claude Code)                          */
+    /* TOOL CALL CARDS (Façon RIOT CLI)                          */
     /* ------------------------------------------------------------- */
     .tool-card {
       margin: 8px 0;
-      background: var(--claude-card-subtle);
-      border: 1px solid var(--claude-border);
+      background: var(--studio-card-subtle);
+      border: 1px solid var(--studio-border);
       border-radius: 7px;
       overflow: hidden;
       font-size: 12.5px;
@@ -656,14 +656,14 @@
       width: 7px;
       height: 7px;
       border-radius: 50%;
-      background: var(--claude-coral);
+      background: var(--studio-coral);
     }
-    .tool-badge .dot.success { background: var(--claude-green); }
+    .tool-badge .dot.success { background: var(--studio-green); }
     .tool-badge .dot.running { animation: pulse 1.2s infinite; }
     @keyframes pulse { 0% { opacity: 0.3; } 50% { opacity: 1; } 100% { opacity: 0.3; } }
     .tool-detail {
       padding: 8px 11px;
-      border-top: 1px solid var(--claude-border-subtle);
+      border-top: 1px solid var(--studio-border-subtle);
       background: #121211;
       font-family: 'JetBrains Mono', monospace;
       font-size: 11.5px;
@@ -682,7 +682,7 @@
       gap: 8px;
       padding: 10px 14px;
       background: #1c1c1a;
-      border: 1px solid var(--claude-border);
+      border: 1px solid var(--studio-border);
       border-radius: 9px;
       margin-bottom: 14px;
     }
@@ -692,14 +692,14 @@
       align-items: center;
       gap: 6px;
       font-size: 12px;
-      color: var(--claude-text-dim);
+      color: var(--studio-text-dim);
     }
     .step-item.active {
-      color: var(--claude-coral);
+      color: var(--studio-coral);
       font-weight: 600;
     }
     .step-item.done {
-      color: var(--claude-green);
+      color: var(--studio-green);
     }
     .step-bubble {
       width: 18px;
@@ -713,7 +713,7 @@
     }
     .step-item.done .step-bubble {
       background: rgba(152, 195, 121, 0.15);
-      border-color: var(--claude-green);
+      border-color: var(--studio-green);
     }
 
     /* ------------------------------------------------------------- */
@@ -729,15 +729,15 @@
       border: 1px solid rgba(217, 119, 87, 0.25);
       border-radius: 20px;
       font-size: 12px;
-      color: var(--claude-coral);
+      color: var(--studio-coral);
       font-weight: 500;
       user-select: none;
       transition: all 0.25s ease;
     }
     .thinking-box.done {
       background: rgba(255, 255, 255, 0.03);
-      border-color: var(--claude-border-subtle);
-      color: var(--claude-text-dim);
+      border-color: var(--studio-border-subtle);
+      color: var(--studio-text-dim);
       font-size: 11.5px;
     }
     .thinking-dots {
@@ -768,7 +768,7 @@
       left: 0;
       right: 0;
       padding: 0 20px 20px 20px;
-      background: linear-gradient(to top, var(--claude-bg) 75%, transparent);
+      background: linear-gradient(to top, var(--studio-bg) 75%, transparent);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -778,7 +778,7 @@
     .input-box {
       width: 100%;
       max-width: 780px;
-      background: var(--claude-card);
+      background: var(--studio-card);
       border: 1px solid #383833;
       border-radius: 14px;
       padding: 12px 14px;
@@ -790,10 +790,10 @@
       pointer-events: auto;
     }
     .input-box:focus-within {
-      border-color: var(--claude-coral);
+      border-color: var(--studio-coral);
     }
     .input-box.drag-over {
-      border-color: var(--claude-coral) !important;
+      border-color: var(--studio-coral) !important;
       background: rgba(217, 119, 87, 0.08) !important;
       box-shadow: 0 0 25px rgba(217, 119, 87, 0.3) !important;
     }
@@ -816,11 +816,11 @@
       border-radius: 6px;
       padding: 3px 8px;
       font-size: 11.5px;
-      color: var(--claude-text);
+      color: var(--studio-text);
       max-width: 260px;
     }
     .file-chip i {
-      color: var(--claude-coral);
+      color: var(--studio-coral);
     }
     .file-chip-name {
       white-space: nowrap;
@@ -830,13 +830,13 @@
       font-size: 11px;
     }
     .file-chip-size {
-      color: var(--claude-text-dim);
+      color: var(--studio-text-dim);
       font-size: 10px;
     }
     .file-chip-del {
       background: none;
       border: none;
-      color: var(--claude-text-dim);
+      color: var(--studio-text-dim);
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -845,7 +845,7 @@
       margin-left: 2px;
     }
     .file-chip-del:hover {
-      color: var(--claude-coral);
+      color: var(--studio-coral);
       background: rgba(255, 255, 255, 0.1);
     }
 
@@ -866,7 +866,7 @@
       padding: 3px 8px;
       font-size: 11.5px;
       font-family: 'JetBrains Mono', monospace;
-      color: var(--claude-gold);
+      color: var(--studio-gold);
     }
     .input-textarea {
       width: 100%;
@@ -878,10 +878,10 @@
       font-family: inherit;
       font-size: 14.5px;
       line-height: 1.5;
-      color: var(--claude-text);
+      color: var(--studio-text);
     }
     .input-textarea::placeholder {
-      color: var(--claude-text-dim);
+      color: var(--studio-text-dim);
     }
     .input-actions {
       display: flex;
@@ -897,17 +897,17 @@
     }
     .shortcut-pill {
       background: rgba(255,255,255,0.04);
-      border: 1px solid var(--claude-border);
+      border: 1px solid var(--studio-border);
       border-radius: 6px;
       padding: 3px 8px;
       font-size: 11.5px;
-      color: var(--claude-text-muted);
+      color: var(--studio-text-muted);
       cursor: pointer;
       white-space: nowrap;
     }
     .shortcut-pill:hover {
       background: rgba(255,255,255,0.08);
-      color: var(--claude-coral);
+      color: var(--studio-coral);
     }
     .input-buttons {
       display: flex;
@@ -920,7 +920,7 @@
       border-radius: 8px;
       border: 1px solid transparent;
       background: transparent;
-      color: var(--claude-text-muted);
+      color: var(--studio-text-muted);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -928,14 +928,14 @@
     }
     .btn-icon:hover {
       background: rgba(255,255,255,0.05);
-      color: var(--claude-text);
+      color: var(--studio-text);
     }
     .btn-send {
       width: 32px;
       height: 32px;
       border-radius: 8px;
       border: none;
-      background: var(--claude-coral);
+      background: var(--studio-coral);
       color: #fff;
       display: flex;
       align-items: center;
@@ -944,7 +944,7 @@
       transition: background 0.15s ease;
     }
     .btn-send:hover {
-      background: var(--claude-coral-hover);
+      background: var(--studio-coral-hover);
     }
 
     /* ------------------------------------------------------------- */
@@ -952,7 +952,7 @@
     /* ------------------------------------------------------------- */
     .artifacts-header {
       padding: 12px 16px;
-      border-bottom: 1px solid var(--claude-border);
+      border-bottom: 1px solid var(--studio-border);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -966,12 +966,12 @@
       padding: 5px 10px;
       border-radius: 6px;
       font-size: 12px;
-      color: var(--claude-text-muted);
+      color: var(--studio-text-muted);
       cursor: pointer;
     }
     .art-tab.active {
-      background: var(--claude-card);
-      color: var(--claude-coral);
+      background: var(--studio-card);
+      color: var(--studio-coral);
       font-weight: 500;
     }
     .artifacts-body {
@@ -982,7 +982,7 @@
     }
     .code-viewer {
       background: #111110;
-      border: 1px solid var(--claude-border);
+      border: 1px solid var(--studio-border);
       border-radius: 8px;
       padding: 12px;
       overflow-x: auto;
@@ -997,12 +997,12 @@
       align-items: center;
       gap: 7px;
       font-size: 12px;
-      color: var(--claude-text-muted);
+      color: var(--studio-text-muted);
       cursor: pointer;
     }
     .file-tree-item:hover {
-      background: var(--claude-card);
-      color: var(--claude-text);
+      background: var(--studio-card);
+      color: var(--studio-text);
     }
 
     /* Responsive Mobile */
@@ -1046,7 +1046,7 @@
     </div>
 
     <button class="btn-new-chat" onclick="nouveauChat()">
-      <i data-lucide="plus" style="width: 16px; height: 16px; color: var(--claude-coral);"></i>
+      <i data-lucide="plus" style="width: 16px; height: 16px; color: var(--studio-coral);"></i>
       <span>Nouveau chat</span>
     </button>
 
@@ -1070,7 +1070,7 @@
         <span>🔥 RIOT Raw (0 Censure)</span>
       </div>
       <div class="mode-pill" data-mode="trader" onclick="changerMode('trader', this)">
-        <i data-lucide="trending-up" style="width: 14px; height: 14px; color: var(--claude-gold);"></i>
+        <i data-lucide="trending-up" style="width: 14px; height: 14px; color: var(--studio-gold);"></i>
         <span>📈 RIOT Trader (Quant)</span>
       </div>
       <div class="mode-pill" data-mode="coder" onclick="changerMode('coder', this)">
@@ -1089,21 +1089,21 @@
 
     <div class="section-label">Historique Discussions</div>
     <div class="chat-history" id="chat-history">
-      <div style="padding: 10px; font-size: 11.5px; color: var(--claude-text-dim);">Chargement des discussions...</div>
+      <div style="padding: 10px; font-size: 11.5px; color: var(--studio-text-dim);">Chargement des discussions...</div>
     </div>
 
     <div class="sidebar-footer">
       <div class="sys-pill">
         <span>Modèle LLM :</span>
-        <strong id="footer-modele" style="color: var(--claude-text);">Codestral</strong>
+        <strong id="footer-modele" style="color: var(--studio-text);">Codestral</strong>
       </div>
       <div class="sys-pill">
         <span>RAM système :</span>
-        <span id="footer-ram" style="color: var(--claude-green);">-- / -- Go</span>
+        <span id="footer-ram" style="color: var(--studio-green);">-- / -- Go</span>
       </div>
       <div class="sys-pill">
         <span>Tokens session :</span>
-        <span id="footer-tokens" style="color: var(--claude-gold);">0 tokens</span>
+        <span id="footer-tokens" style="color: var(--studio-gold);">0 tokens</span>
       </div>
     </div>
   </aside>
@@ -1143,7 +1143,7 @@
       <div class="messages-track" id="messages-track">
         <!-- Message d'accueil RIOT -->
         <div class="msg-row">
-          <div class="msg-avatar avatar-claude">
+          <div class="msg-avatar avatar-riot">
             <i data-lucide="zap" style="width: 16px; height: 16px;"></i>
           </div>
           <div class="msg-content">
@@ -1202,7 +1202,7 @@
   </main>
 
   <!-- ============================================================ -->
-  <!-- 3. VOLET LATÉRAL DROIT (ARTIFACTS FAÇON CLAUDE)              -->
+  <!-- 3. VOLET LATÉRAL DROIT (ARTIFACTS RIOT STUDIO)              -->
   <!-- ============================================================ -->
   <aside id="artifacts-panel" class="closed">
     <div class="artifacts-header">
@@ -1224,7 +1224,7 @@
       <!-- Vue Code -->
       <div id="art-view-code">
         <div style="margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
-          <div style="font-size: 11.5px; color: var(--claude-gold); font-family: 'JetBrains Mono', monospace;" id="art-file-title">backend/app/main.py</div>
+          <div style="font-size: 11.5px; color: var(--studio-gold); font-family: 'JetBrains Mono', monospace;" id="art-file-title">backend/app/main.py</div>
           <button class="btn-header" onclick="attacherFichierActifAuChat()" title="Joindre ce fichier au prompt pour poser une question dessus" style="font-size: 11px; padding: 3px 8px;">
             <i data-lucide="paperclip" style="width: 12px; height: 12px;"></i>
             <span>Joindre au prompt</span>
@@ -1244,7 +1244,7 @@
   </aside>
 
   <!-- ============================================================ -->
-  <!-- JAVASCRIPT DU CLIENT CLAUDE RIOT                             -->
+  <!-- JAVASCRIPT DU CLIENT RIOT STUDIO RIOT                             -->
   <!-- ============================================================ -->
   <script>
     const md = window.markdownit({
@@ -1448,7 +1448,7 @@
 
     async function rafraichirSession() {
       try {
-        const res = await fetch("/api/claude/session");
+        const res = await fetch("/api/studio/session");
         const data = await res.json();
         if (data.ok) {
           const estLibre = data.projet.libre || !data.projet.chemin;
@@ -1484,14 +1484,14 @@
 
     async function chargerProjets() {
       try {
-        const res = await fetch("/api/claude/projets");
+        const res = await fetch("/api/studio/projets");
         const data = await res.json();
         if (data.ok) {
           const menu = document.getElementById("project-menu");
           menu.innerHTML = data.projets.map(p => `
             <div class="project-item ${p.actif ? 'active' : ''}" onclick="selectionnerProjet('${p.nom}')">
               <span>${p.libre ? '💬' : '📁'} ${p.nom}</span>
-              <span style="font-size: 10.5px; color: var(--claude-text-dim);">${p.branche}</span>
+              <span style="font-size: 10.5px; color: var(--studio-text-dim);">${p.branche}</span>
             </div>
           `).join("");
         }
@@ -1508,7 +1508,7 @@
     async function selectionnerProjet(nom) {
       document.getElementById("project-menu").style.display = "none";
       try {
-        const res = await fetch("/api/claude/changer_projet", {
+        const res = await fetch("/api/studio/changer_projet", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ projet: nom })
@@ -1525,13 +1525,13 @@
 
     async function chargerArborescence() {
       try {
-        const res = await fetch("/api/claude/arborescence");
+        const res = await fetch("/api/studio/arborescence");
         const data = await res.json();
         if (data.ok) {
           const list = document.getElementById("art-tree-list");
           if (!data.fichiers || !data.fichiers.length) {
             list.innerHTML = `
-              <div style="padding: 16px; text-align: center; color: var(--claude-text-dim); font-size: 12px;">
+              <div style="padding: 16px; text-align: center; color: var(--studio-text-dim); font-size: 12px;">
                 <p>Aucun projet ouvert.</p>
                 <p style="margin-top: 6px;">Sélectionnez un projet dans la barre latérale pour explorer ses fichiers ou joignez des fichiers directement avec le trombone 📎.</p>
               </div>
@@ -1557,7 +1557,7 @@
 
     async function chargerFichierProjet(chemin) {
       try {
-        const res = await fetch(`/api/claude/fichier?chemin=${encodeURIComponent(chemin)}`);
+        const res = await fetch(`/api/studio/fichier?chemin=${encodeURIComponent(chemin)}`);
         const data = await res.json();
         if (data.ok) {
           ouvrirArtifact(data.nom, data.contenu, data.extension);
@@ -1574,14 +1574,14 @@
     // -------------------------------------------------------------
     async function chargerHistoriqueChats() {
       try {
-        const res = await fetch("/api/claude/chats");
+        const res = await fetch("/api/studio/chats");
         const data = await res.json();
         if (data.ok) {
           _LISTE_CHATS = data.chats || [];
           const container = document.getElementById("chat-history");
           if (!_LISTE_CHATS.length) {
             container.innerHTML = `
-              <div style="padding: 10px 8px; font-size: 11.5px; color: var(--claude-text-dim); text-align: center;">
+              <div style="padding: 10px 8px; font-size: 11.5px; color: var(--studio-text-dim); text-align: center;">
                 Aucune discussion précédente.<br>Posez votre première question !
               </div>
             `;
@@ -1609,7 +1609,7 @@
 
     async function chargerChat(chatId) {
       try {
-        const res = await fetch(`/api/claude/chats/${chatId}`);
+        const res = await fetch(`/api/studio/chats/${chatId}`);
         const data = await res.json();
         if (!data.ok || !data.chat) {
           alert("Impossible de charger la discussion : " + (data.erreur || "Introuvable"));
@@ -1626,7 +1626,7 @@
         if (!messages.length) {
           track.innerHTML = `
             <div class="msg-row">
-              <div class="msg-avatar avatar-claude">
+              <div class="msg-avatar avatar-riot">
                 <i data-lucide="sparkles" style="width: 16px; height: 16px;"></i>
               </div>
               <div class="msg-content">
@@ -1664,7 +1664,7 @@
               const htmlRendu = md.render(m.content || "");
               track.insertAdjacentHTML("beforeend", `
                 <div class="msg-row">
-                  <div class="msg-avatar avatar-claude">
+                  <div class="msg-avatar avatar-riot">
                     <i data-lucide="sparkles" style="width: 16px; height: 16px;"></i>
                   </div>
                   <div class="msg-content">
@@ -1700,7 +1700,7 @@
         return;
       }
       try {
-        const res = await fetch(`/api/claude/chats/${chatId}`, { method: "DELETE" });
+        const res = await fetch(`/api/studio/chats/${chatId}`, { method: "DELETE" });
         const data = await res.json();
         if (data.ok) {
           if (_CHAT_ID_ACTIF === chatId) {
@@ -1742,7 +1742,7 @@
     async function nouveauChat() {
       _CHAT_ID_ACTIF = null;
       try {
-        await fetch("/api/claude/nouveau_chat", { method: "POST" });
+        await fetch("/api/studio/nouveau_chat", { method: "POST" });
       } catch (e) {}
       
       chargerHistoriqueChats();
@@ -1751,12 +1751,12 @@
 
       document.getElementById("messages-track").innerHTML = `
         <div class="msg-row">
-          <div class="msg-avatar avatar-claude">
+          <div class="msg-avatar avatar-riot">
             <i data-lucide="sparkles" style="width: 16px; height: 16px;"></i>
           </div>
           <div class="msg-content">
             <p><strong>Bonjour, je suis RIOT.</strong></p>
-            <p style="margin-top: 6px; color: var(--claude-text-muted);">Nouvelle discussion ouverte ${contexteNom}. Posez vos questions, discutez librement ou joignez des fichiers.</p>
+            <p style="margin-top: 6px; color: var(--studio-text-muted);">Nouvelle discussion ouverte ${contexteNom}. Posez vos questions, discutez librement ou joignez des fichiers.</p>
           </div>
         </div>
       `;
@@ -1894,11 +1894,11 @@
         </div>
       `);
 
-      // 2. Bulle Réponse Claude avec conteneur d'étapes et d'outils
+      // 2. Bulle Réponse RIOT avec conteneur d'étapes et d'outils
       const idRep = "rep-" + Date.now();
       track.insertAdjacentHTML("beforeend", `
         <div class="msg-row" id="${idRep}">
-          <div class="msg-avatar avatar-claude">
+          <div class="msg-avatar avatar-riot">
             <i data-lucide="sparkles" style="width: 16px; height: 16px;"></i>
           </div>
           <div class="msg-content">
@@ -1935,7 +1935,7 @@
 
       // 3. Appel de l'API Streaming SSE avec fichiers joints et chat_id persistant
       try {
-        const response = await fetch("/api/claude/chat", {
+        const response = await fetch("/api/studio/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message: texte, mode: _MODE_ACTIF, fichiers: fichiersEnvoi, chat_id: _CHAT_ID_ACTIF })
@@ -2000,7 +2000,7 @@
                         <div class="dot success"></div>
                         <span>${event.agent} — Rapport interne (cliquer pour voir)</span>
                       </div>
-                      <span style="font-size: 11px; color: var(--claude-green);">✓ Validé</span>
+                      <span style="font-size: 11px; color: var(--studio-green);">✓ Validé</span>
                     </div>
                     <div class="tool-detail" id="${idEtape}-detail">${texteEchappe}</div>
                   </div>
@@ -2019,7 +2019,7 @@
                       <div class="dot running"></div>
                       <span>${event.outil}</span>
                     </div>
-                    <span style="font-size: 11px; color: var(--claude-text-dim);">Exécution...</span>
+                    <span style="font-size: 11px; color: var(--studio-text-dim);">Exécution...</span>
                   </div>
                   <div class="tool-detail" id="${idTool}-detail">${JSON.stringify(event.args, null, 2)}</div>
                 </div>
@@ -2045,7 +2045,7 @@
                 const elThinking = document.getElementById(`${idRep}-thinking`);
                 if (elThinking) {
                   elThinking.className = "thinking-box done";
-                  elThinking.innerHTML = `<i data-lucide="check" style="width: 13px; height: 13px; color: var(--claude-green);"></i><span>Réflexion achevée en ${secReflexion}s</span>`;
+                  elThinking.innerHTML = `<i data-lucide="check" style="width: 13px; height: 13px; color: var(--studio-green);"></i><span>Réflexion achevée en ${secReflexion}s</span>`;
                   lucide.createIcons();
                 }
                 document.getElementById(`${idRep}-text`).innerHTML = "";
@@ -2059,7 +2059,7 @@
               clearInterval(timerReflexion);
               const elThinking = document.getElementById(`${idRep}-thinking`);
               if (elThinking) elThinking.style.display = "none";
-              document.getElementById(`${idRep}-text`).innerHTML = `<span style="color: var(--claude-red);">Erreur : ${event.message}</span>`;
+              document.getElementById(`${idRep}-text`).innerHTML = `<span style="color: var(--studio-red);">Erreur : ${event.message}</span>`;
             }
 
             if (event.type === "fin") {
@@ -2091,7 +2091,7 @@
         clearInterval(timerReflexion);
         const elThinking = document.getElementById(`${idRep}-thinking`);
         if (elThinking) elThinking.style.display = "none";
-        document.getElementById(`${idRep}-text`).innerHTML = `<span style="color: var(--claude-red);">Erreur : ${err}</span>`;
+        document.getElementById(`${idRep}-text`).innerHTML = `<span style="color: var(--studio-red);">Erreur : ${err}</span>`;
       }
     }
 
@@ -2108,7 +2108,7 @@
         _RECOGNITION.lang = "fr-FR";
         _RECOGNITION.continuous = false;
         _RECOGNITION.onstart = () => {
-          document.getElementById("btn-mic").style.color = "var(--claude-coral)";
+          document.getElementById("btn-mic").style.color = "var(--studio-coral)";
         };
         _RECOGNITION.onresult = (e) => {
           const trans = e.results[0][0].transcript;
@@ -2117,7 +2117,7 @@
           autoResize(input);
         };
         _RECOGNITION.onend = () => {
-          document.getElementById("btn-mic").style.color = "var(--claude-text-muted)";
+          document.getElementById("btn-mic").style.color = "var(--studio-text-muted)";
         };
       }
       _RECOGNITION.start();
@@ -2135,7 +2135,7 @@
       btn.disabled = true;
 
       try {
-        const res = await fetch("/api/claude/pdf/exporter_texte", {
+        const res = await fetch("/api/studio/pdf/exporter_texte", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

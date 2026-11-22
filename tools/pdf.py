@@ -44,7 +44,7 @@ _DOSSIER_SORTIE_DEFAUT.mkdir(parents=True, exist_ok=True)
 # ---------------------------------------------------------------------------
 THEMES = {
     "moderne": {
-        "primary": colors.HexColor("#d97757"),      # Claude Coral
+        "primary": colors.HexColor("#d97757"),      # RIOT Coral
         "secondary": colors.HexColor("#1e293b"),    # Slate Dark
         "accent": colors.HexColor("#3b82f6"),       # Blue
         "text": colors.HexColor("#0f172a"),         # Charcoal
@@ -91,8 +91,8 @@ class NumberedCanvas(canvas.Canvas):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._saved_page_states = []
-        self.doc_titre = "Document Claude RIOT"
-        self.doc_footer = "Généré par Claude RIOT"
+        self.doc_titre = "Document RIOT Studio"
+        self.doc_footer = "Généré par RIOT Studio"
 
     def showPage(self):
         self._saved_page_states.append(dict(self.__dict__))
@@ -563,13 +563,13 @@ def generer_pdf(
 
         def on_first_page(canvas_obj, document):
             canvas_obj.doc_titre = titre
-            canvas_obj.doc_footer = f"Document généré par Claude RIOT — {nom_fichier}"
+            canvas_obj.doc_footer = f"Document généré par RIOT Studio — {nom_fichier}"
 
         doc.build(story, canvasmaker=NumberedCanvas)
         taille_ko = round(chemin_complet.stat().st_size / 1024, 1)
 
-        # Lien de téléchargement web pour Claude Studio
-        url_web = f"/api/claude/pdf/telecharger?chemin={chemin_complet.name}"
+        # Lien de téléchargement web pour RIOT Studio
+        url_web = f"/api/studio/pdf/telecharger?chemin={chemin_complet.name}"
 
         # Ouverture locale si demandée
         if ouvrir_apres:
@@ -704,7 +704,7 @@ def fusionner_pdfs(fichiers: List[str], nom_fichier_sortie: str = "") -> str:
         writer.close()
 
         taille_ko = round(chemin_sortie.stat().st_size / 1024, 1)
-        url_web = f"/api/claude/pdf/telecharger?chemin={chemin_sortie.name}"
+        url_web = f"/api/studio/pdf/telecharger?chemin={chemin_sortie.name}"
         return (
             f"✅ {ajoutes} fichiers PDF fusionnés avec succès dans `{chemin_sortie}` ({taille_ko} Ko) !\n"
             f"[📥 Télécharger le PDF fusionné]({url_web})"

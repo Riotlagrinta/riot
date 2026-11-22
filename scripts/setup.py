@@ -107,7 +107,7 @@ def ecrire_config(conf):
 
 
 CLES_CLOUD = [
-    ("anthropic", "cle", True, "Claude (obligatoire en cloud)",
+    ("anthropic", "cle", True, "Anthropic (obligatoire en cloud)",
      "https://console.anthropic.com/  ->  API keys"),
     ("elevenlabs", "cle", False, "ElevenLabs (voix ; optionnel, sinon voix Windows)",
      "https://elevenlabs.io  ->  profil  ->  API key"),
@@ -123,7 +123,7 @@ def config_cloud(conf):
         if val:
             conf.setdefault(section, {})[champ] = val
         elif requis:
-            print("  (!) sans cle Claude, l'assistant ne pourra pas repondre — tu pourras "
+            print("  (!) sans cle Anthropic, l'assistant ne pourra pas repondre — tu pourras "
                   "la mettre plus tard dans config.yaml.")
     if oui("\nConfigurer les lumieres Philips Hue maintenant ?", False):
         pont = demander("  IP du pont Hue (ex. 192.168.1.20)")
@@ -226,7 +226,7 @@ def main():
     else:
         conf = charger_exemple()
         dire_titre("Mode d'utilisation")
-        print("  1) cloud  — Claude + ElevenLabs (qualite max, cle API requise)")
+        print("  1) cloud  — Anthropic + ElevenLabs (qualite max, cle API requise)")
         print("  2) local  — Ollama + Piper (100% hors ligne, gratuit, GPU recommande)")
         choix = demander("Ton choix (1/2)", "1")
         (config_local if choix.strip() == "2" else config_cloud)(conf)

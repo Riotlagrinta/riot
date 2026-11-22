@@ -17,6 +17,6 @@ Permet à tous les agents Kéranos RIOT de concevoir, valider et visualiser des 
 `generer_diagramme(titre, type_diagramme, code_mermaid, sous_titre="", theme="sombre", nom_fichier="")`
 
 - **Types supportés** : `flowchart`, `sequence`, `class`, `state`, `erd`, `gitgraph`, `gantt`, `mindmap`.
-- **Rendu Web** : Bloc Mermaid avec coloration sombre instantanée dans le chat Claude.
+- **Rendu Web** : Bloc Mermaid avec coloration sombre instantanée dans le chat RIOT.
 - **Visionneuse Interactive** : Génère une page HTML autonome avec Pan, Zoom et export direct SVG dans `/output_documents/`.
-- **Lien Web direct** : `/api/claude/document/telecharger?chemin=<nom_fichier>.html`
+- **Lien Web direct** : `/api/studio/document/telecharger?chemin=<nom_fichier>.html`

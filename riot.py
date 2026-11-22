@@ -31,10 +31,10 @@ def main():
         return
 
     # Mode Application Bureau RIOT Studio (Windowed Chromium)
-    if "--app" in args or "-a" in args or (args and args[0].lower() in ("/app", "app", "/studio", "studio", "/claude", "claude")):
-        from core import serveur, claude_app, theme
+    if "--app" in args or "-a" in args or (args and args[0].lower() in ("/app", "app", "/studio", "studio")):
+        from core import serveur, studio_app, theme
         serveur.demarrer()
-        claude_app.lancer_app_desktop()
+        studio_app.lancer_app_desktop()
         from core import cli
         acc = theme.palette()["cli_accent"]
         cli.console.print(f"  [bold {acc}]⚡ Application RIOT Studio lancée en mode bureau.[/bold {acc}]")

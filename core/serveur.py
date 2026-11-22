@@ -131,10 +131,10 @@ def app():
         except Exception:
             LOG.exception("montage du module mobile")
         try:
-            from core.claude_app import monter_routes as monter_claude
-            monter_claude(_APP)                   # / + /claude + /api/claude/* (Interface Claude Web & Desktop)
+            from core.studio_app import monter_routes as monter_studio
+            monter_studio(_APP)                   # / + /studio + /api/studio/* (Interface RIOT Studio Web & Desktop)
         except Exception:
-            LOG.exception("montage de l'interface Claude")
+            LOG.exception("montage de l'interface RIOT Studio")
         try:
             from core.ide import monter_routes as monter_ide
             monter_ide(_APP)                      # /ide + /api/ide/* (RIOT IDE style Antigravity, local)

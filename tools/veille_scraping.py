@@ -1,4 +1,4 @@
-"""Outils de Veille Sécurisée & Intelligence de Marché (Web & Crypto) pour Claude RIOT Studio.
+"""Outils de Veille Sécurisée & Intelligence de Marché (Web & Crypto) pour RIOT Studio.
 
 Fournit des capacités d'analyse et de captation de données en temps réel :
 1. Surveillance des marchés crypto en direct (Binance API publique, variations 24h, volumes, volatilité).
@@ -222,7 +222,7 @@ def generer_bulletin_veille(sujet: str, points_cles: str = "") -> str:
     bulletin = f"""# 🛰️ Bulletin d'Intelligence Économique & Veille Concurrentielle
 **Thématique :** {sujet}  
 **Date :** {horo}  
-**Analyste :** Claude RIOT Studio  
+**Analyste :** RIOT Studio  
 
 ---
 
@@ -253,7 +253,7 @@ Le marché ouest-africain connaît une accélération marquée sur les usages tr
     return f"""### 🛰️ Bulletin de Veille Stratégique généré avec succès !
 
 📄 **Document :** `{nom_fichier}`  
-📥 **Télécharger :** [{nom_fichier}](/api/claude/document/telecharger?chemin={nom_fichier})
+📥 **Télécharger :** [{nom_fichier}](/api/studio/document/telecharger?chemin={nom_fichier})
 
 ```markdown
 {bulletin[:450]}...

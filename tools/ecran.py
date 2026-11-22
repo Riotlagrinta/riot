@@ -1,7 +1,7 @@
-"""Capture d'ecran : Jarvis peut VOIR ce qui est affiche (bloc image envoye a Claude)."""
+"""Capture d'ecran : Jarvis peut VOIR ce qui est affiche (bloc image envoye a RIOT)."""
 from core.registre import outil
 
-# Cote le plus large envoye a Claude (recommandation vision d'Anthropic).
+# Cote le plus large envoye a RIOT (recommandation vision d'Anthropic).
 LARGEUR_CAPTURE = 1568
 
 
@@ -24,7 +24,7 @@ LARGEUR_CAPTURE = 1568
     phrase_attente="Je regarde ton ecran.",
 )
 def capture_screen(ecran: int = 0):
-    """Capture l'ecran et renvoie une image JPEG (base64) que Claude peut voir.
+    """Capture l'ecran et renvoie une image JPEG (base64) que le modèle peut voir.
 
     ecran : 0 = ecran principal (defaut), 1 = premier ecran, 2 = deuxieme...
     Renvoie un dict {"image": {...}, "apercu": ...} en cas de succes, sinon une

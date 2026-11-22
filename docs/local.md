@@ -3,12 +3,12 @@
 Jarvis tourne dans deux modes, choisis par une seule ligne dans `config.yaml` :
 
 ```yaml
-mode: cloud    # cloud (Claude + ElevenLabs) | local (Ollama + Piper, 100% offline)
+mode: cloud    # cloud (Anthropic + ElevenLabs) | local (Ollama + Piper, 100% offline)
 ```
 
 | | **cloud** (defaut) | **local** |
 |---|---|---|
-| LLM | Claude (API Anthropic) | Ollama (`qwen3.5:4b`...) |
+| LLM | Anthropic API | Ollama (`qwen3.5:4b`...) |
 | Voix (TTS) | ElevenLabs | Piper (FR) |
 | Transcription (STT) | faster-whisper (local) | faster-whisper (local) |
 | Qualite | maximale | bonne (dépend du modèle) |
@@ -34,7 +34,7 @@ Le **STT est déjà local dans les deux modes** (faster-whisper, GPU si dispo).
 3. Dans `config.yaml` : `mode: local` (et éventuellement `ollama.modele`,
    `piper.modele`).
 
-Sans clé Claude ni ElevenLabs, le mode local fonctionne entièrement seul. (Si Piper
+Sans clé Anthropic ni ElevenLabs, le mode local fonctionne entièrement seul. (Si Piper
 n'est pas configuré, Jarvis retombe sur la voix Windows SAPI.)
 
 ## Fiabilité réelle du mode local (honnête)
@@ -77,7 +77,7 @@ plutôt que de planter.
 **En résumé** : le mode local couvre très bien la **domotique et le PC** en tout
 confidentialité ; pour la **productivité internet** et surtout les **features à
 vision** (navigateur, réservation), le **mode cloud est recommandé**. Ces dernières
-utilisent Claude pour la boucle vision, même quand `mode: local` — il suffit d'une
+utilisent Anthropic pour la boucle vision, même quand `mode: local` — il suffit d'une
 clé `anthropic.cle`.
 
 ## Matériel recommandé (mode local)

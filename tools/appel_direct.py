@@ -1,12 +1,12 @@
 """Appels V2 : CONVERSATION temps reel via Twilio Media Streams.
 
 call_and_book(numero, objectif, contraintes) : Jarvis appelle, se presente
-honnetement, expose la demande, comprend les reponses (Whisper), repond (Claude,
+honnetement, expose la demande, comprend les reponses (Whisper), repond (Anthropic,
 phrases courtes), negocie dans les limites donnees, et conclut (ElevenLabs en
 sortie ulaw 8 kHz, le format de Twilio).
 
 Chaine audio :
-  Twilio (mu-law 8kHz) --ws--> VAD/segmentation --> Whisper --> Claude --> ElevenLabs
+  Twilio (mu-law 8kHz) --ws--> VAD/segmentation --> Whisper --> Anthropic --> ElevenLabs
   (ulaw_8000) --ws--> Twilio.
 
 Twilio se connecte a un serveur websocket PUBLIC : soit twilio.public_url (que tu
@@ -93,7 +93,7 @@ def _tts_ulaw(texte):
         return b""
 
 
-# ------------------------------------------------------------------- Claude
+# ------------------------------------------------------------------- LLM
 
 def _client():
     global _CLIENT
@@ -129,7 +129,7 @@ def _systeme(prenom, objectif, contraintes):
         "Reponds UNIQUEMENT par ce que tu dois dire a voix haute, en francais.")
 
 
-def _repondre_claude(systeme, historique):
+def _repondre_llm(systeme, historique):
     client = _client()
     if client is None:
         return "Desole, je dois raccrocher. [FIN]"
@@ -139,7 +139,7 @@ def _repondre_claude(systeme, historique):
             max_tokens=150, system=systeme, messages=historique)
         return "".join(b.text for b in rep.content if getattr(b, "type", None) == "text").strip()
     except Exception:
-        LOG.exception("claude appel direct")
+        LOG.exception("llm appel direct")
         return "Desole, je rencontre un souci, on vous rappelle. [FIN]"
 
 
@@ -202,7 +202,7 @@ class Conversation:
             return
         self.occupe = True
         try:
-            reponse = await asyncio.to_thread(_repondre_claude, self.systeme, self.historique)
+            reponse = await asyncio.to_thread(_repondre_llm, self.systeme, self.historique)
             fin = "[FIN]" in reponse
             texte = reponse.replace("[FIN]", "").strip()
             if texte:

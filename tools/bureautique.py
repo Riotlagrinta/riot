@@ -41,7 +41,7 @@ THEMES_EXCEL = {
         "header_font": "FFFFFF",
         "zebra_fill": "F8FAFC",       # Gris très clair
         "border": "CBD5E1",
-        "highlight": "D97757",        # Claude Coral
+        "highlight": "D97757",        # RIOT Coral
         "font_name": "Calibri",
     },
     "corporate": {
@@ -68,7 +68,7 @@ THEMES_PPT = {
         "bg_slide": RGBColor(248, 250, 252),    # Blanc cassé #f8fafc
         "title_cover": RGBColor(255, 255, 255),
         "title_slide": RGBColor(15, 23, 42),
-        "accent": RGBColor(217, 119, 87),       # Claude Coral #d97757
+        "accent": RGBColor(217, 119, 87),       # RIOT Coral #d97757
         "accent2": RGBColor(59, 130, 246),      # Blue
         "text": RGBColor(51, 65, 85),
         "muted": RGBColor(148, 163, 184),
@@ -329,7 +329,7 @@ def generer_excel(
     try:
         wb.save(str(chemin_complet))
         taille_ko = round(chemin_complet.stat().st_size / 1024, 1)
-        url_web = f"/api/claude/document/telecharger?chemin={chemin_complet.name}"
+        url_web = f"/api/studio/document/telecharger?chemin={chemin_complet.name}"
 
         if ouvrir_apres:
             try:
@@ -571,10 +571,10 @@ def generer_powerpoint(
     accent_bar.fill.fore_color.rgb = th["accent"]
     accent_bar.line.fill.background()
 
-    # Badge Claude RIOT
+    # Badge RIOT Studio
     badge_box = slide_couv.shapes.add_textbox(Inches(1.4), Inches(1.8), Inches(8.0), Inches(0.5))
     p_badge = badge_box.text_frame.paragraphs[0]
-    p_badge.text = "CLAUDE RIOT — PRÉSENTATION STRATÉGIQUE"
+    p_badge.text = "RIOT STUDIO — PRÉSENTATION STRATÉGIQUE"
     p_badge.font.size = Pt(11)
     p_badge.font.bold = True
     p_badge.font.color.rgb = th["accent"]
@@ -589,7 +589,7 @@ def generer_powerpoint(
     p_title.font.color.rgb = th["title_cover"]
 
     # Sous-titre
-    sub_text = sous_titre or "Document de référence généré par Claude RIOT Studio"
+    sub_text = sous_titre or "Document de référence généré par RIOT Studio"
     sub_box = slide_couv.shapes.add_textbox(Inches(1.4), Inches(4.5), Inches(10.5), Inches(1.2))
     sub_box.text_frame.word_wrap = True
     p_sub = sub_box.text_frame.paragraphs[0]
@@ -692,7 +692,7 @@ def generer_powerpoint(
     try:
         prs.save(str(chemin_complet))
         taille_ko = round(chemin_complet.stat().st_size / 1024, 1)
-        url_web = f"/api/claude/document/telecharger?chemin={chemin_complet.name}"
+        url_web = f"/api/studio/document/telecharger?chemin={chemin_complet.name}"
 
         if ouvrir_apres:
             try:

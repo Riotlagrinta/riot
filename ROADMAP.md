@@ -32,7 +32,7 @@ Ce document est le tableau de bord officiel de **RIOT** (anciennement Kéranos).
 | **Étape 7** | **Moteur WebSocket Temps Réel (`/ws/riot`)** | **100% TERMINÉ** | Validé (Streaming tokens, telemetry push, ping/pong) |
 | **Étape 8** | **Refonte Design Tactile Mobile (Cyberpunk Linear)** | **100% TERMINÉ** | Validé (PWA `web/mobile.html`, 4 onglets, haptique) |
 | **Étape 9** | **Swarm Multi-Agents Autonome (Dev Pipeline)** | **100% TERMINÉ** | Validé (`RIOT-Architect` ➔ `Engineer` ➔ `Tester` ➔ `Reviewer`) |
-| **Étape 10** | **Claude Desktop & Web Studio (`/claude`)** | **100% TERMINÉ** | Validé (3 panneaux, 28 projets auto, Artifacts viewer, PWA) |
+| **Étape 10** | **RIOT Studio Web & Desktop (`/studio`)** | **100% TERMINÉ** | Validé (3 panneaux, 28 projets auto, Artifacts viewer, PWA) |
 | **Étape 11** | **Client & Serveur MCP Universel** | **100% TERMINÉ** | Validé (`core/mcp_client.py`, stdio & sse, 27 outils exportés) |
 | **Étape 12** | **RIOT-Trader (Quant & Risk 1%)** | **100% TERMINÉ** | Validé (Binance Klines live, RSI, Carnet, Sizing 1%) |
 | **Étape 13** | **RIOT-Raw (Agent Dé-Censuré Ultime)** | **100% TERMINÉ** | Validé (Ollama Dolphin local, 100% gratuit & privé, 0 filtre) |
@@ -79,9 +79,9 @@ Sous-agent souverain sans filtre moral, motorisé par un LLM non censuré en loc
 1. **Terminal Cyberpunk Interactif** :
    * Lancement : `python riot.py` ou `riot`
    * Commandes disponibles : `/swarm`, `/architect`, `/engineer`, `/test`, `/review`, `/trade`, `/raw`, `/mcp`, `/app`, `/pc`, `/tokens`.
-2. **Claude Web & Desktop Studio** :
-   * Lancement : `riot-app` ou `http://localhost:8790/claude`
-   * Ergonomie façon Claude Code : Panneau gauche (sélection de projet, historique, modes d'action), Panneau central (chat streaming, tool cards animées), Panneau droit (Artifacts syntaxés et explorateur de fichiers).
+2. **RIOT Studio Web & Desktop** :
+   * Lancement : `riot-app` ou `http://localhost:8790/studio`
+   * Ergonomie RIOT Studio Code : Panneau gauche (sélection de projet, historique, modes d'action), Panneau central (chat streaming, tool cards animées), Panneau droit (Artifacts syntaxés et explorateur de fichiers).
 3. **Application Tactile Mobile (PWA)** :
    * Accès : `http://<IP_LOCAL>:8790/mobile`
    * 4 espaces : Cockpit, Copilote vocal, Terminal shell, Tuteur RAG Étude.
@@ -93,7 +93,7 @@ Sous-agent souverain sans filtre moral, motorisé par un LLM non censuré en loc
 Pour valider l'intégrité complète de la plateforme :
 ```powershell
 .\.venv\Scripts\python scripts/tester_mobile.py
-.\.venv\Scripts\python scripts/tester_claude_web.py
+.\.venv\Scripts\python scripts/tester_studio_web.py
 .\.venv\Scripts\python scripts/tester_raw_agent.py
 .\.venv\Scripts\python scripts/doctor.py
 ```

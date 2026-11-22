@@ -397,7 +397,7 @@ def phrase_attente(noms):
 # ---------------------------------------------------------------- confirmation
 
 def mettre_en_attente(outil_obj, args):
-    """Range une action a confirmer. Renvoie un resultat neutre pour Claude."""
+    """Range une action a confirmer. Renvoie un resultat neutre pour RIOT."""
     global _EN_ATTENTE
     _EN_ATTENTE = (outil_obj, args)
     return "En attente de la confirmation vocale de l'utilisateur."

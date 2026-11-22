@@ -1,4 +1,4 @@
-"""Usine à Produits Digitaux & eBooks Rentables pour Claude RIOT Studio.
+"""Usine à Produits Digitaux & eBooks Rentables pour RIOT Studio.
 
 Moteur complet de création de produits d'information et bundles numériques clés en main :
 1. Guide / eBook stratégique haute fidélité (PDF avec ReportLab Platypus, couverture, sommaire, encadrés).
@@ -637,11 +637,11 @@ def _generer_landing_page_html(
     <!-- Espace Téléchargement Immédiat (Livraison) -->
     <div class="delivery-box">
       <h3 style="font-size: 16px; color: #10b981; margin-bottom: 6px;">📦 Espace Livrables Débloqués (Accès Direct)</h3>
-      <p style="font-size: 12.5px; color: var(--text-muted);">Téléchargez directement les fichiers du pack créés par Claude RIOT Studio :</p>
+      <p style="font-size: 12.5px; color: var(--text-muted);">Téléchargez directement les fichiers du pack créés par RIOT Studio :</p>
       <div class="delivery-links">
-        <a href="/api/claude/document/telecharger?chemin={nom_pdf}" target="_blank" class="link-pill">📄 Guide PDF ({nom_pdf})</a>
-        <a href="/api/claude/document/telecharger?chemin={nom_excel}" target="_blank" class="link-pill">📊 Simulateur Excel ({nom_excel})</a>
-        <a href="/api/claude/document/telecharger?chemin={nom_zip}" target="_blank" class="link-pill">🗂️ Pack Complet ZIP ({nom_zip})</a>
+        <a href="/api/studio/document/telecharger?chemin={nom_pdf}" target="_blank" class="link-pill">📄 Guide PDF ({nom_pdf})</a>
+        <a href="/api/studio/document/telecharger?chemin={nom_excel}" target="_blank" class="link-pill">📊 Simulateur Excel ({nom_excel})</a>
+        <a href="/api/studio/document/telecharger?chemin={nom_zip}" target="_blank" class="link-pill">🗂️ Pack Complet ZIP ({nom_zip})</a>
       </div>
     </div>
 
@@ -664,7 +664,7 @@ def _generer_landing_page_html(
 
     <!-- Footer -->
     <footer style="text-align: center; color: var(--text-muted); font-size: 12px; padding: 40px 0 20px;">
-      <p>© {annee} {html.escape(titre)} • Équipe Claude RIOT Studio • Tous droits réservés.</p>
+      <p>© {annee} {html.escape(titre)} • Équipe RIOT Studio • Tous droits réservés.</p>
     </footer>
   </div>
 
@@ -989,10 +989,10 @@ def creer_produit_digital(
         shutil.copy2(chemin_zip, _DOSSIER_DOCS / nom_zip)
 
         # Liens directs de téléchargement
-        lien_pdf = f"/api/claude/document/telecharger?chemin={nom_pdf}"
-        lien_excel = f"/api/claude/document/telecharger?chemin={nom_excel}"
-        lien_landing = f"/api/claude/document/telecharger?chemin={nom_landing}"
-        lien_zip = f"/api/claude/document/telecharger?chemin={nom_zip}"
+        lien_pdf = f"/api/studio/document/telecharger?chemin={nom_pdf}"
+        lien_excel = f"/api/studio/document/telecharger?chemin={nom_excel}"
+        lien_landing = f"/api/studio/document/telecharger?chemin={nom_landing}"
+        lien_zip = f"/api/studio/document/telecharger?chemin={nom_zip}"
 
         prix_fcfa_fmt = f"{prix_fcfa:,}".replace(",", " ")
         taille_zip_ko = round(chemin_zip.stat().st_size / 1024, 1) if chemin_zip.exists() else 0

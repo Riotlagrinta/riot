@@ -32,9 +32,9 @@
       "ide-agent-input", "ide-agent-send", "ide-attach-active", "ide-active-file-chip",
       "ide-review-mode", "ide-grill-me", "ide-pending-count", "ide-agent-clear",
       "ide-quickopen-modal", "ide-quickopen-input", "ide-quickopen-list",
-      "ide-folder-modal", "ide-folder-close", "ide-folder-cancel", "ide-folder-roots",
-      "ide-folder-up", "ide-folder-path", "ide-folder-go", "ide-folder-os",
-      "ide-folder-list", "ide-folder-open",
+      "ide-folder-modal", "ide-folder-close", "ide-folder-cancel", "ide-folder-recents", "ide-folder-roots",
+      "ide-folder-breadcrumb", "ide-folder-up", "ide-folder-path", "ide-folder-go", "ide-folder-new", "ide-folder-os",
+      "ide-folder-filter", "ide-folder-list", "ide-folder-open",
       "ide-btn-mcp", "ide-mcp-modal", "ide-mcp-close", "ide-mcp-reload", "ide-mcp-summary", "ide-mcp-list",
       "ide-model-modal", "ide-modal-close", "ide-model-form",
       "ide-cfg-profil-wrap", "ide-cfg-profil", "ide-admin-model-fields",
@@ -555,6 +555,7 @@
     });
 
     var folderParent = "";
+    var folderSubdirs = [];
     async function activateProjectFolder(chemin) {
       var r = await fetch("/api/ide/projet", {
         method: "POST",
@@ -573,6 +574,90 @@
       return true;
     }
 
+    function renderFolderBreadcrumb(courant) {
+      var bc = els["ide-folder-breadcrumb"];
+      if (!bc) return;
+      bc.innerHTML = "";
+      if (!courant) return;
+      var norm = courant.replace(/\//g, "\\");
+      var parts = [];
+      if (/^[A-Za-z]:\\/.test(norm)) {
+        var drive = norm.slice(0, 3);
+        parts.push({ label: drive, chemin: drive });
+        var rest = norm.slice(3).split("\\").filter(Boolean);
+        var acc = drive;
+        rest.forEach(function (seg) {
+          acc = acc.endsWith("\\") ? (acc + seg) : (acc + "\\" + seg);
+          parts.push({ label: seg, chemin: acc });
+        });
+      } else {
+        var accUnix = "/";
+        parts.push({ label: "/", chemin: "/" });
+        courant.split("/").filter(Boolean).forEach(function (seg) {
+          accUnix = accUnix === "/" ? ("/" + seg) : (accUnix + "/" + seg);
+          parts.push({ label: seg, chemin: accUnix });
+        });
+      }
+      parts.forEach(function (p, idx) {
+        if (idx > 0) {
+          var sep = document.createElement("span");
+          sep.textContent = "›";
+          sep.style.opacity = "0.5";
+          bc.appendChild(sep);
+        }
+        var chip = document.createElement("span");
+        chip.className = "ide-folder-crumb";
+        chip.textContent = p.label;
+        chip.addEventListener("click", function () { void browseFolder(p.chemin); });
+        bc.appendChild(chip);
+      });
+    }
+
+    function renderFolderSubdirs() {
+      var listEl = els["ide-folder-list"];
+      var filtre = (els["ide-folder-filter"] ? els["ide-folder-filter"].value : "").trim().toLowerCase();
+      listEl.innerHTML = "";
+      var subs = folderSubdirs.filter(function (s) {
+        return !filtre || (s.nom || "").toLowerCase().indexOf(filtre) !== -1;
+      });
+      if (subs.length === 0) {
+        var empty = document.createElement("div");
+        empty.className = "ide-hint";
+        empty.style.padding = "10px";
+        empty.textContent = filtre
+          ? "Aucun sous-dossier ne correspond au filtre."
+          : "Aucun sous-dossier ici. Cliquez sur « Ouvrir le dossier courant » pour sélectionner ce répertoire.";
+        listEl.appendChild(empty);
+        return;
+      }
+      subs.forEach(function (sub) {
+        var row = document.createElement("div");
+        row.className = "ide-folder-row";
+        var left = document.createElement("div");
+        left.className = "ide-folder-name";
+        left.innerHTML = "<span>📁 " + escapeHtml(sub.nom) + "</span>" + (sub.est_git ? '<span class="ide-git-badge">git</span>' : "");
+        var btnOpen = document.createElement("button");
+        btnOpen.type = "button";
+        btnOpen.className = "ide-btn-sm ide-folder-openbtn";
+        btnOpen.textContent = "Ouvrir";
+        btnOpen.addEventListener("click", async function (ev) {
+          ev.stopPropagation();
+          if (await activateProjectFolder(sub.chemin)) {
+            els["ide-folder-modal"].classList.add("hidden");
+          }
+        });
+        row.addEventListener("click", function () { void browseFolder(sub.chemin); });
+        row.addEventListener("dblclick", async function () {
+          if (await activateProjectFolder(sub.chemin)) {
+            els["ide-folder-modal"].classList.add("hidden");
+          }
+        });
+        row.appendChild(left);
+        row.appendChild(btnOpen);
+        listEl.appendChild(row);
+      });
+    }
+
     async function browseFolder(chemin) {
       var qs = chemin ? ("?chemin=" + encodeURIComponent(chemin)) : "";
       var r = await fetch("/api/ide/naviguer-dossiers" + qs);
@@ -582,8 +667,36 @@
         return;
       }
       els["ide-folder-path"].value = d.courant || "";
+      if (els["ide-folder-filter"]) els["ide-folder-filter"].value = "";
       folderParent = d.parent || "";
       els["ide-folder-up"].disabled = !folderParent;
+      renderFolderBreadcrumb(d.courant || "");
+
+      var recEl = els["ide-folder-recents"];
+      if (recEl) {
+        recEl.innerHTML = "";
+        var recs = d.recents || [];
+        recEl.classList.toggle("hidden", recs.length === 0);
+        if (recs.length > 0) {
+          var lbl = document.createElement("span");
+          lbl.className = "ide-hint";
+          lbl.textContent = "Récents :";
+          recEl.appendChild(lbl);
+          recs.forEach(function (rc) {
+            var b = document.createElement("button");
+            b.type = "button";
+            b.className = "ide-pill ide-pill-btn";
+            b.title = rc.chemin;
+            b.textContent = "🕒 " + rc.nom;
+            b.addEventListener("click", async function () {
+              if (await activateProjectFolder(rc.chemin)) {
+                els["ide-folder-modal"].classList.add("hidden");
+              }
+            });
+            recEl.appendChild(b);
+          });
+        }
+      }
 
       var rootsEl = els["ide-folder-roots"];
       rootsEl.innerHTML = "";
@@ -596,24 +709,8 @@
         rootsEl.appendChild(b);
       });
 
-      var listEl = els["ide-folder-list"];
-      listEl.innerHTML = "";
-      var subs = d.dossiers || [];
-      if (subs.length === 0) {
-        var empty = document.createElement("div");
-        empty.className = "ide-hint";
-        empty.style.padding = "10px";
-        empty.textContent = "Aucun sous-dossier ici. Cliquez sur « Ouvrir ce dossier » pour sélectionner le dossier courant.";
-        listEl.appendChild(empty);
-      } else {
-        subs.forEach(function (sub) {
-          var row = document.createElement("div");
-          row.className = "ide-folder-row";
-          row.textContent = "📁 " + sub.nom;
-          row.addEventListener("click", function () { void browseFolder(sub.chemin); });
-          listEl.appendChild(row);
-        });
-      }
+      folderSubdirs = d.dossiers || [];
+      renderFolderSubdirs();
     }
 
     function openFolderModal() {
@@ -633,6 +730,27 @@
     els["ide-folder-go"].addEventListener("click", function () {
       void browseFolder(els["ide-folder-path"].value.trim());
     });
+    if (els["ide-folder-filter"]) {
+      els["ide-folder-filter"].addEventListener("input", renderFolderSubdirs);
+    }
+    if (els["ide-folder-new"]) {
+      els["ide-folder-new"].addEventListener("click", async function () {
+        var parentPath = els["ide-folder-path"].value.trim();
+        var nom = window.prompt("Nom du nouveau dossier dans « " + parentPath + " » :");
+        if (!nom || !nom.trim()) return;
+        var r = await fetch("/api/ide/creer-dossier", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ parent: parentPath, nom: nom.trim() })
+        });
+        var d = await r.json();
+        if (d.ok && d.chemin) {
+          void browseFolder(d.chemin);
+        } else {
+          window.alert(d.erreur || "Impossible de créer ce dossier.");
+        }
+      });
+    }
     els["ide-folder-path"].addEventListener("keydown", function (ev) {
       if (ev.key === "Enter") {
         ev.preventDefault();
@@ -647,14 +765,19 @@
       }
     });
     els["ide-folder-os"].addEventListener("click", async function () {
-      var r = await fetch("/api/ide/choisir-dossier-os", { method: "POST" });
-      var d = await r.json();
-      if (d.ok && d.chemin) {
-        if (await activateProjectFolder(d.chemin)) {
-          els["ide-folder-modal"].classList.add("hidden");
+      els["ide-folder-os"].disabled = true;
+      try {
+        var r = await fetch("/api/ide/choisir-dossier-os", { method: "POST" });
+        var d = await r.json();
+        if (d.ok && d.chemin) {
+          if (await activateProjectFolder(d.chemin)) {
+            els["ide-folder-modal"].classList.add("hidden");
+          }
+        } else if (!d.annule) {
+          window.alert(d.erreur || "Sélecteur système indisponible.");
         }
-      } else if (!d.annule) {
-        window.alert(d.erreur || "Sélecteur système indisponible.");
+      } finally {
+        els["ide-folder-os"].disabled = false;
       }
     });
 

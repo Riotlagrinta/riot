@@ -11,7 +11,7 @@ from pathlib import Path
 RACINE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RACINE))
 
-from core.llm import GroqProvider, ClaudeProvider
+from core.llm import GroqProvider, AnthropicProvider
 
 PROT_BB_TANOU = """Tu es le clone WhatsApp exact de Dave (Kelvyn). Tu réponds à sa place à Bb Tanou 💋 (Tanya) en privé.
 
@@ -96,7 +96,7 @@ class WhatsAppCloneEngine:
     def __init__(self):
         self.provider = GroqProvider()
         if not self.provider.disponible():
-            self.provider = ClaudeProvider()
+            self.provider = AnthropicProvider()
 
     def repondre(self, message_recu: str, expediteur: str = "Ghost 🤷💀", contexte: str = "ghost", historique_recent: list = None) -> str:
         """Génère la réponse exacte calibrée (sec, français propre, zéro spam d'émojis)."""

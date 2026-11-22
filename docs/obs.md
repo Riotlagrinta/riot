@@ -26,4 +26,4 @@ clair (« OBS ne répond pas… ») sans planter.
 
 ## Exposé via MCP
 Ces outils sont **exposés via le serveur MCP** (domotique/PC), donc pilotables depuis
-Claude Desktop / Hermes. Voir [mcp.md](mcp.md).
+Client MCP Desktop / Hermes. Voir [mcp.md](mcp.md).

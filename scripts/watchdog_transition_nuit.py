@@ -10,7 +10,7 @@ print("Watchdog activé : attente de la fin de la 30ème pub...")
 
 while True:
     try:
-        with urllib.request.urlopen("http://127.0.0.1:8790/api/claude/vibetg/pubs/statut", timeout=4) as res:
+        with urllib.request.urlopen("http://127.0.0.1:8790/api/studio/vibetg/pubs/statut", timeout=4) as res:
             data = json.loads(res.read().decode())
             prog = data.get("pubs_regardees", 0)
             actif = data.get("actif", True)
@@ -38,7 +38,7 @@ time.sleep(5)
 
 print("Activation du Mode Nuit (arrêt 09:00)...")
 req = urllib.request.Request(
-    "http://127.0.0.1:8790/api/claude/vibetg/pubs/mode_nuit",
+    "http://127.0.0.1:8790/api/studio/vibetg/pubs/mode_nuit",
     data=json.dumps({"heure_fin": "09:00"}).encode("utf-8"),
     headers={"Content-Type": "application/json"},
     method="POST"

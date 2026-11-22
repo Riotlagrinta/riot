@@ -22,4 +22,4 @@ Permet à tous les agents Kéranos RIOT de transformer des tableaux de données,
 - **Résolution** : 300 DPI avec anti-aliasing et palettes coordonnées.
 
 Téléchargement et intégration directe dans l'interface web :
-`/api/claude/document/telecharger?chemin=<nom_fichier>`
+`/api/studio/document/telecharger?chemin=<nom_fichier>`

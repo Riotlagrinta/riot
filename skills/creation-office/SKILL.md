@@ -20,4 +20,4 @@ Permet à tous les agents Kéranos RIOT de générer et lire des classeurs Excel
 4. `lire_powerpoint(chemin, max_slides=20)`
 
 Téléchargement direct dans l'interface web :
-`/api/claude/document/telecharger?chemin=<nom_fichier>`
+`/api/studio/document/telecharger?chemin=<nom_fichier>`

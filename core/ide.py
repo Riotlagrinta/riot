@@ -149,16 +149,61 @@ def _arborescence(projet: Path, max_noeuds: int = 600, max_profondeur: int = 5) 
     return _parcourir(projet, 0, "")
 
 
+_RECENTS_FICHIER = Path.home() / ".riot" / "ide_recent_projects.json"
+
+
+def _charger_recents() -> List[Path]:
+    try:
+        if not _RECENTS_FICHIER.exists():
+            return []
+        brut = json.loads(_RECENTS_FICHIER.read_text(encoding="utf-8"))
+        if not isinstance(brut, list):
+            return []
+        out: List[Path] = []
+        vus = set()
+        for item in brut:
+            p = Path(str(item)).expanduser()
+            if p.exists() and p.is_dir():
+                r = str(p.resolve())
+                if r not in vus and (est_createur() or not p.resolve().is_relative_to(_RACINE.resolve())):
+                    vus.add(r)
+                    out.append(p.resolve())
+        return out[:12]
+    except Exception:
+        return []
+
+
+def _enregistrer_recent(chemin: Path) -> None:
+    try:
+        cible = str(chemin.resolve())
+        actuels = [str(p) for p in _charger_recents() if str(p) != cible]
+        nouveaux = [cible] + actuels
+        _RECENTS_FICHIER.parent.mkdir(parents=True, exist_ok=True)
+        _RECENTS_FICHIER.write_text(json.dumps(nouveaux[:12], ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
 def _lister_projets_disponibles() -> List[Dict[str, str]]:
     racine = dossier_projets()
     res: List[Dict[str, str]] = []
+    vus = set()
+
+    def _ajouter(p: Path) -> None:
+        r = str(p.resolve()) if p.exists() else str(p)
+        if r not in vus:
+            vus.add(r)
+            res.append({"nom": p.name or r, "chemin": r})
+
+    for rec in _charger_recents():
+        _ajouter(rec)
     if est_createur() and _RACINE.exists():
-        res.append({"nom": _RACINE.name, "chemin": str(_RACINE)})
+        _ajouter(_RACINE)
     if racine.exists() and racine.is_dir():
         try:
             for d in sorted(racine.iterdir(), key=lambda x: x.name.lower()):
-                if d.is_dir() and not d.name.startswith(".") and str(d) != str(_RACINE):
-                    res.append({"nom": d.name, "chemin": str(d)})
+                if d.is_dir() and not d.name.startswith(".") and str(d.resolve()) != str(_RACINE.resolve()):
+                    _ajouter(d)
         except Exception:
             pass
     return res[:60]
@@ -416,6 +461,7 @@ def monter_routes(app) -> None:
             except ValueError:
                 pass
         _SESSION_CTX["projet_actif"] = chemin.resolve()
+        _enregistrer_recent(chemin.resolve())
         return {"ok": True, "nom": chemin.name, "chemin": str(chemin.resolve()), "branche": _recup_branche_git(chemin)}
 
     @app.get("/api/ide/naviguer-dossiers")
@@ -423,7 +469,7 @@ def monter_routes(app) -> None:
         if (r := garde(request)):
             return r
         brut = (chemin or "").strip()
-        cible = Path(brut) if brut else _projet_courant()
+        cible = Path(brut).expanduser() if brut else _projet_courant()
         if not cible.exists() or not cible.is_dir():
             cible = Path.home()
         cible = cible.resolve()
@@ -438,14 +484,21 @@ def monter_routes(app) -> None:
         else:
             racines.append({"nom": "/", "chemin": "/"})
         home_dir = Path.home()
-        if home_dir.exists():
-            racines.append({"nom": f"Accueil ({home_dir.name})", "chemin": str(home_dir)})
+        for label, sous in (
+            (f"Accueil ({home_dir.name})", None),
+            ("Bureau", "Desktop"),
+            ("Documents", "Documents"),
+            ("Téléchargements", "Downloads"),
+        ):
+            cand = home_dir if sous is None else (home_dir / sous)
+            if cand.exists() and cand.is_dir():
+                racines.append({"nom": label, "chemin": str(cand.resolve())})
         dp = dossier_projets()
-        if dp.exists():
-            racines.append({"nom": f"Projets ({dp.name})", "chemin": str(dp)})
+        if dp.exists() and dp.is_dir():
+            racines.append({"nom": f"Projets ({dp.name})", "chemin": str(dp.resolve())})
 
         parent = str(cible.parent) if cible.parent != cible else ""
-        dossiers: List[Dict[str, str]] = []
+        dossiers: List[Dict[str, Any]] = []
         try:
             for item in sorted(cible.iterdir(), key=lambda x: x.name.lower()):
                 if not item.is_dir():
@@ -454,17 +507,46 @@ def monter_routes(app) -> None:
                     continue
                 if not est_createur() and item.resolve() == _RACINE.resolve():
                     continue
-                dossiers.append({"nom": item.name, "chemin": str(item.resolve())})
+                try:
+                    est_git = (item / ".git").exists()
+                except Exception:
+                    est_git = False
+                dossiers.append({
+                    "nom": item.name,
+                    "chemin": str(item.resolve()),
+                    "est_git": est_git,
+                })
         except PermissionError:
             return JSONResponse({"ok": False, "erreur": f"Accès refusé à {cible}"}, status_code=403)
 
+        recents = [{"nom": p.name or str(p), "chemin": str(p)} for p in _charger_recents()[:6]]
         return {
             "ok": True,
             "courant": str(cible),
             "parent": parent,
             "racines": racines,
-            "dossiers": dossiers[:200],
+            "recents": recents,
+            "dossiers": dossiers[:250],
         }
+
+    @app.post("/api/ide/creer-dossier")
+    async def api_ide_creer_dossier(request: Request):
+        if (r := garde(request)):
+            return r
+        body = await request.json() or {}
+        parent_brut = str(body.get("parent", "")).strip()
+        nom = str(body.get("nom", "")).strip()
+        if not nom or any(c in nom for c in ("/", "\\", "..", "\0")):
+            return JSONResponse({"ok": False, "erreur": "Nom de dossier invalide."}, status_code=400)
+        parent = Path(parent_brut).expanduser().resolve() if parent_brut else _projet_courant().resolve()
+        if not parent.exists() or not parent.is_dir():
+            return JSONResponse({"ok": False, "erreur": "Dossier parent introuvable."}, status_code=404)
+        cible = (parent / nom).resolve()
+        try:
+            cible.mkdir(parents=False, exist_ok=True)
+        except Exception as e:
+            return JSONResponse({"ok": False, "erreur": f"Création impossible : {e}"}, status_code=400)
+        return {"ok": True, "nom": cible.name, "chemin": str(cible)}
 
     @app.post("/api/ide/choisir-dossier-os")
     async def api_ide_choisir_dossier_os(request: Request):
@@ -472,7 +554,38 @@ def monter_routes(app) -> None:
             return r
         import asyncio
 
+        init_dir = str(_projet_courant())
+
         def _ouvrir_dialogue() -> str:
+            if os.name == "nt":
+                try:
+                    ps_init = init_dir.replace("'", "''")
+                    ps_script = (
+                        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+                        "Add-Type -AssemblyName System.Windows.Forms; "
+                        "$owner = New-Object System.Windows.Forms.Form -Property @{TopMost=$true;ShowInTaskbar=$false;WindowState='Minimized'}; "
+                        "$dlg = New-Object System.Windows.Forms.FolderBrowserDialog; "
+                        "$dlg.Description = 'Sélectionner un dossier projet — RIOT IDE'; "
+                        "$dlg.UseDescriptionForTitle = $true; "
+                        "$dlg.ShowNewFolderButton = $true; "
+                        f"if (Test-Path -LiteralPath '{ps_init}') {{ $dlg.SelectedPath = '{ps_init}' }}; "
+                        "if ($dlg.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $dlg.SelectedPath }; "
+                        "$owner.Dispose()"
+                    )
+                    res = subprocess.run(
+                        ["powershell", "-NoProfile", "-STA", "-Command", ps_script],
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                        timeout=120,
+                    )
+                    if res.returncode == 0:
+                        choisi_ps = (res.stdout or "").strip()
+                        return choisi_ps
+                except Exception:
+                    pass
+
             import tkinter as tk
             from tkinter import filedialog
             root = tk.Tk()
@@ -483,7 +596,7 @@ def monter_routes(app) -> None:
                 pass
             choisi = filedialog.askdirectory(
                 title="Ouvrir un dossier projet — RIOT IDE",
-                initialdir=str(_projet_courant()),
+                initialdir=init_dir,
             )
             root.destroy()
             return str(choisi or "").strip()

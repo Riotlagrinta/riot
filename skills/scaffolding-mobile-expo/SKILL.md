@@ -12,7 +12,7 @@ metadata:
 
 # Compétence Scaffolding & Composants Mobile (React Native / Expo)
 
-Cette compétence permet à Claude RIOT Studio de concevoir et générer des applications mobiles modernes basées sur **Expo Router v3+**, **React Native** et **TypeScript**.
+Cette compétence permet à RIOT Studio de concevoir et générer des applications mobiles modernes basées sur **Expo Router v3+**, **React Native** et **TypeScript**.
 
 Elle est optimisée pour les applications géolocalisées et transactionnelles au Togo et en Afrique de l'Ouest (ex: **MediGo Mobile**, **TogoDrive**, **Scan 'n Serve TG**).
 

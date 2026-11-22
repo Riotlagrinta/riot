@@ -31,7 +31,7 @@ danger (choix de modèle, modèle d'Hermes) — **jamais une règle de sécurit�
   **Supprimer**, **Activer**.
 - **Modèles Whisper** (tiny → large-v3-turbo) : reco + badge *français fiable* ;
   installer / activer / supprimer. (Whisper tourne en **CPU** chez toi.)
-- **Modèle actif par backend** : local (Ollama), cloud (Claude), Whisper et
+- **Modèle actif par backend** : local (Ollama), cloud (Anthropic), Whisper et
   **Hermes** — affiché et changeable en un clic (écrit dans `config.yaml`, et pour
   Hermes via `hermes config set model.default`). **Redémarre** le composant après.
 
@@ -42,7 +42,7 @@ appliquer). Écriture **whitelistée** : seules ces clés sont modifiables depui
 panneau — jamais une clé/secret (`_CLES_REGLABLES` dans `core/panneau.py`).
 
 - **Mode de routage** : `local` (tout sur ta machine, gratuit/privé) vs `cloud`
-  (Claude, plus fin, payant) → `mode`. Le *modèle précis* reste dans l'onglet Modèles.
+  (Anthropic, plus fin, payant) → `mode`. Le *modèle précis* reste dans l'onglet Modèles.
 - **Audio** : **micro** (`audio.micro`) et **haut-parleur** (`audio.haut_parleur`,
   « défaut » = sortie Windows) — listés en direct via `sounddevice.query_devices()`.
 - **Voix & écoute** : **personnalité** (`assistant.personnalite`) et **durée
@@ -63,7 +63,7 @@ gateway Hermes, Docker, et la **connexion MCP Hermes → Jarvis**. Bouton
 
 ### Budget par fournisseur (N9)
 
-- **Jarvis (mesuré)** : chaque appel Claude est instrumenté (`core/budget.py`) →
+- **Jarvis (mesuré)** : chaque appel Anthropic est instrumenté (`core/budget.py`) →
   tokens (in/out, cache compris) + **coût estimé** via la table de prix
   `budget.prix` (config). Résumé **du jour** et **du mois**, persistant dans
   `budget.json` (non versionné). Redémarre Jarvis pour activer le comptage.

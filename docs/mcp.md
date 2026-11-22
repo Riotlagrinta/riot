@@ -1,7 +1,7 @@
 # Serveur MCP de Jarvis
 
 Expose les outils domotique/PC de Jarvis via le **Model Context Protocol**, pour
-qu'ils soient pilotables par n'importe quel client MCP (Claude Desktop, Hermes
+qu'ils soient pilotables par n'importe quel client MCP (Client MCP Desktop, Hermes
 Agent, MCP Inspector...). Le serveur tourne **independamment** de l'assistant
 vocal : les deux peuvent tourner en meme temps.
 
@@ -51,10 +51,10 @@ prochain demarrage du serveur, sans autre code.
 def mon_outil(...): ...
 ```
 
-## Brancher dans Claude Desktop
+## Brancher dans Client MCP Desktop
 
-Edite `claude_desktop_config.json` (Windows :
-`%APPDATA%\Claude\claude_desktop_config.json`) :
+Edite `mcp_desktop_config.json` (Windows :
+`~/.riot/mcp_servers.json`) :
 
 ```json
 {
@@ -68,7 +68,7 @@ Edite `claude_desktop_config.json` (Windows :
 }
 ```
 
-Redemarre Claude Desktop. Les 14 outils apparaissent ; demande par ex.
+Redemarre Client MCP Desktop. Les 14 outils apparaissent ; demande par ex.
 « allume la chambre » ou « donne-moi les stats systeme ».
 
 ## Brancher dans Hermes Agent

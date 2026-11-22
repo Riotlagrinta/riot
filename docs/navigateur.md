@@ -2,7 +2,7 @@
 
 Jarvis peut t'assister pendant que tu surfes sur **ton** Chrome : ouvrir un
 onglet, resumer/traduire la page active, gerer les onglets, et agir (clic,
-scroll, remplir un champ) pilote par Claude.
+scroll, remplir un champ) pilote par RIOT.
 
 C'est distinct de la **reservation** (docs/reservation.md), qui tourne sur un
 profil Playwright separe. Ici, c'est ton navigateur.

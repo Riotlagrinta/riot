@@ -130,7 +130,7 @@ def test_spiral_icons_and_creator_monitoring(monkeypatch, tmp_path):
 
     # 3. Absence de route /monitor dans le package client + icones PWA Spiral
     client = TestClient(serveur.app(), base_url="http://127.0.0.1:8790", client=("127.0.0.1", 50000))
-    for asset in ("/logo.svg", "/icon-192.png", "/icon-512.png", "/claude/manifest.json", "/mobile/manifest.json"):
+    for asset in ("/logo.svg", "/icon-192.png", "/icon-512.png", "/studio/manifest.json", "/mobile/manifest.json"):
         assert client.get(asset).status_code == 200
     assert client.get("/monitor").status_code == 404
 
@@ -924,11 +924,11 @@ def test_studio_tunnel_guard_and_mobile_terminal_confirmation(monkeypatch):
     client = TestClient(serveur.app(), base_url="http://127.0.0.1:8790", client=("127.0.0.1", 50000))
 
     # 1. Local direct Studio -> autorise
-    assert client.get("/api/claude/chats").status_code == 200
+    assert client.get("/api/studio/chats").status_code == 200
 
     # 2. Tunnel distant sans session -> 401 sur API et page Studio
     r_api = client.get(
-        "/api/claude/chats",
+        "/api/studio/chats",
         headers={"x-forwarded-for": "198.51.100.12", "host": "riot.trycloudflare.com"},
     )
     assert r_api.status_code == 401
@@ -942,7 +942,7 @@ def test_studio_tunnel_guard_and_mobile_terminal_confirmation(monkeypatch):
     # 3. Tunnel distant avec session auth valide -> 200
     monkeypatch.setattr(auth, "session_valide", lambda tok: tok == "tok_studio_valide")
     r_auth = client.get(
-        "/api/claude/chats",
+        "/api/studio/chats",
         headers={
             "x-forwarded-for": "198.51.100.12",
             "host": "riot.trycloudflare.com",
@@ -1043,6 +1043,45 @@ def test_ide_terminal_timeout_et_agent_continuite(monkeypatch, tmp_path):
         assert "JOURNAL DE CONTINUITÉ" in appels_llm[1]["systeme"]
     finally:
         _SESSION_CTX["projet_actif"] = prev
+
+
+def test_ide_folder_navigation_recents_and_create(monkeypatch, tmp_path):
+    from core import ide, serveur
+    from core.cli import _SESSION_CTX
+
+    rec_file = tmp_path / "ide_recents.json"
+    monkeypatch.setattr(ide, "_RECENTS_FICHIER", rec_file)
+
+    workspace = tmp_path / "ws_root"
+    workspace.mkdir()
+    sub_git = workspace / "mon_repo"
+    (sub_git / ".git").mkdir(parents=True)
+
+    prev = _SESSION_CTX.get("projet_actif")
+    try:
+        _SESSION_CTX["projet_actif"] = workspace
+        client = TestClient(serveur.app(), base_url="http://127.0.0.1:8790", client=("127.0.0.1", 50000))
+
+        # 1. Creation de dossier via modale
+        r_new = client.post("/api/ide/creer-dossier", json={"parent": str(workspace), "nom": "nouveau_projet"})
+        assert r_new.status_code == 200 and (workspace / "nouveau_projet").is_dir()
+
+        # 2. Ouverture du dossier -> persiste dans les recents
+        r_open = client.post("/api/ide/projet", json={"chemin": str(sub_git)})
+        assert r_open.status_code == 200
+
+        # 3. Navigation retourne est_git + recents
+        r_nav = client.get("/api/ide/naviguer-dossiers", params={"chemin": str(workspace)})
+        assert r_nav.status_code == 200
+        d = r_nav.json()
+        assert any(item["nom"] == "mon_repo" and item["est_git"] is True for item in d["dossiers"])
+        assert any(rc["chemin"] == str(sub_git.resolve()) for rc in d["recents"])
+
+        r_etat = client.get("/api/ide/etat")
+        assert any(p["chemin"] == str(sub_git.resolve()) for p in r_etat.json()["projets"])
+    finally:
+        _SESSION_CTX["projet_actif"] = prev
+
 
 
 

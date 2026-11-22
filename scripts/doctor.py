@@ -226,7 +226,7 @@ def v_llm():
         pass  # Valide via les cles cloud ci-dessus
     else:
         if reglage("anthropic.cle", ""):
-            ok("cle Anthropic (Claude) presente")
+            ok("cle Anthropic presente")
         else:
             ko("cle Anthropic absente", "mets anthropic.cle (console.anthropic.com) dans config.yaml.")
 

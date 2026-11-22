@@ -13,7 +13,7 @@ metadata:
 
 # Compétence Usine à Produits Digitaux & eBooks Rentables (Digital Product Factory)
 
-Cette compétence transforme Claude RIOT Studio en une usine d'édition et de monétisation numérique complète. Elle ne génère pas de simples fichiers texte génériques, mais un **écosystème de vente complet prêt à être commercialisé en 60 secondes**.
+Cette compétence transforme RIOT Studio en une usine d'édition et de monétisation numérique complète. Elle ne génère pas de simples fichiers texte génériques, mais un **écosystème de vente complet prêt à être commercialisé en 60 secondes**.
 
 ---
 

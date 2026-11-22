@@ -5,7 +5,7 @@ Génère des graphiques professionnels haute résolution (300 DPI) à partir de 
 - Diagrammes en barres simples, groupées ou horizontales avec étiquettes de valeurs.
 - Graphiques circulaires modernes en Anneau (Donut charts) avec pourcentages et légendes.
 - Thèmes graphiques coordonnés : 'sombre' (RIOT Dark), 'moderne' (Clean Light) et 'corporate' (Navy).
-- Export en PNG haute qualité intégrable directement dans le chat Claude, dans les PDF et les slides PowerPoint.
+- Export en PNG haute qualité intégrable directement dans le chat RIOT, dans les PDF et les slides PowerPoint.
 """
 import json
 import logging
@@ -354,7 +354,7 @@ def generer_graphique(
         plt.close(fig)
 
         taille_ko = round(chemin_complet.stat().st_size / 1024, 1)
-        url_web = f"/api/claude/document/telecharger?chemin={chemin_complet.name}"
+        url_web = f"/api/studio/document/telecharger?chemin={chemin_complet.name}"
 
         return (
             f"✅ Graphique généré avec succès ({taille_ko} Ko, 300 DPI) !\n\n"

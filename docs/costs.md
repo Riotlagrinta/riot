@@ -9,8 +9,8 @@
 | Mode | LLM | Voix | Pour quoi |
 |---|---|---|---|
 | **local** | Ollama | Piper/Kokoro | tout local, **rien ne sort**, gratuit |
-| **hybride** *(défaut)* | Claude éco (`anthropic.modele`) | ElevenLabs | réflexes (domotique, timers, scènes, questions courtes) + vision/navigateur/résa en cloud ; **tâches de fond → Hermes** |
-| **qualite** | Claude fort (`anthropic.modele_qualite`) | ElevenLabs | cloud partout, meilleur raisonnement |
+| **hybride** *(défaut)* | Anthropic éco (`anthropic.modele`) | ElevenLabs | réflexes (domotique, timers, scènes, questions courtes) + vision/navigateur/résa en cloud ; **tâches de fond → Hermes** |
+| **qualite** | Anthropic fort (`anthropic.modele_qualite`) | ElevenLabs | cloud partout, meilleur raisonnement |
 
 *(L'ancien `mode: cloud` reste accepté = `hybride`.)* Changement **à la voix** :
 « passe en local », « repasse en hybride », « mode qualité » (`mode_routage`).
@@ -24,7 +24,7 @@ restent sur le chemin court de Jarvis (rapide, économique).
 
 Compteurs par fournisseur, agrégés **jour / mois**, dans `budget.json` (non versionné) :
 
-- **Claude (Jarvis)** : chaque appel instrumenté (tokens in/out + cache), coût via
+- **Anthropic (RIOT)** : chaque appel instrumenté (tokens in/out + cache), coût via
   `budget.prix` (tarifs Anthropic $/Mtok).
 - **Voix ElevenLabs** : facturée au caractère → `budget.prix_elevenlabs` ($/1000 car.).
 - **Twilio** (appels) : compteur mensuel `logs/calls/compteur.json`.

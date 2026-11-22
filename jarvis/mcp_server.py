@@ -119,7 +119,7 @@ def _lancer_http(kind):
 def main():
     import os
     # JARVIS_MCP_TRANSPORT (env) prime sur config.yaml : permet au raccourci Bureau
-    # de lancer un serveur HTTP autonome sans changer le defaut stdio (Claude Desktop).
+    # de lancer un serveur HTTP autonome sans changer le defaut stdio (Client MCP Desktop).
     transport = (os.environ.get("JARVIS_MCP_TRANSPORT")
                  or reglage("mcp.transport", "stdio") or "stdio").lower()
     exposes = [o.nom for o in registre.exposes_mcp()]

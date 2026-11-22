@@ -1,8 +1,8 @@
 @echo off
 title Serveur MCP Jarvis
 rem Lance le serveur MCP de Jarvis en mode HTTP (serveur autonome : les clients
-rem MCP distants s'y connectent). Pour Claude Desktop en local, pas besoin de ce
-rem raccourci : Claude Desktop lance le serveur lui-meme (stdio). Voir docs/mcp.md.
+rem MCP distants s'y connectent). Pour Client MCP Desktop en local, pas besoin de ce
+rem raccourci : Client MCP Desktop lance le serveur lui-meme (stdio). Voir docs/mcp.md.
 cd /d "%~dp0"
 set JARVIS_MCP_TRANSPORT=http
 where uv >nul 2>nul

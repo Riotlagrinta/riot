@@ -288,7 +288,7 @@ def _scenario():
     import math
 
     demo(True)                                   # badge DEMO : rien n'est reel
-    config("Claude · claude-haiku-4-5 (demo)", "whisper medium")
+    config("Anthropic · haiku-4.5 (demo)", "whisper medium")
     routage("hybride")
     budget(0.27, 3.0, 0.09)
     hermes(0, 48213)

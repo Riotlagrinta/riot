@@ -11,7 +11,7 @@ URL Insta/TikTok
    │  (ingest.py — EXISTANT, non modifié : yt-dlp + faster-whisper + 3 images)
    ▼
 Vault\raw\insta_<shortcode>.md   (fiche brute)
-   │  (INDEXEUR = core/hub_contenu.py — le "greffier", via Claude)
+   │  (INDEXEUR = core/hub_contenu.py — le "greffier", via RIOT)
    │   • résumé + thèmes + tags + format
    │   • APPEND à index.md   (append-only, dédup par <shortcode>)
    │   • enrichit le front-matter de la fiche
@@ -76,7 +76,7 @@ integrations:
   scripts: "C:/Users/<toi>/Downloads/Scripts"
   cookies: "firefox"           # cookies yt-dlp pour l'Instagram privé
 hub:
-  modele: ""                   # modèle Claude pour l'indexation (vide = anthropic.modele)
+  modele: ""                   # modèle Anthropic pour l'indexation (vide = anthropic.modele)
   timeout_ingest: 600          # secondes max (téléchargement + Whisper)
   miroir_dossier: ""           # miroir de index.md + vault.html vers un dossier synchro (vide = pas de miroir)
 ```

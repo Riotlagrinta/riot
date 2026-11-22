@@ -220,17 +220,24 @@
         <h3>Ouvrir un dossier projet</h3>
         <button type="button" id="ide-folder-close" class="ide-icon-btn">✕</button>
       </div>
+      <div id="ide-folder-recents" class="ide-folder-recents hidden"></div>
       <div id="ide-folder-roots" class="ide-folder-roots"></div>
+      <div id="ide-folder-breadcrumb" class="ide-folder-breadcrumb"></div>
       <div class="ide-folder-bar">
         <button type="button" id="ide-folder-up" class="ide-btn-sm" title="Dossier parent">↑ Parent</button>
         <input id="ide-folder-path" class="ide-input-sm" type="text" placeholder="Chemin du dossier..." />
         <button type="button" id="ide-folder-go" class="ide-btn-sm">Aller</button>
-        <button type="button" id="ide-folder-os" class="ide-btn-sm" title="Ouvrir le sélecteur Windows/OS">🖥️ Parcourir OS</button>
+        <button type="button" id="ide-folder-new" class="ide-btn-sm" title="Créer un sous-dossier">📁+ Nouveau</button>
+        <button type="button" id="ide-folder-os" class="ide-btn-sm" title="Ouvrir l'explorateur Windows natif">🖥️ Explorateur</button>
       </div>
+      <input id="ide-folder-filter" class="ide-input-sm" type="search" placeholder="Filtrer les sous-dossiers..." />
       <div id="ide-folder-list" class="ide-folder-list"></div>
-      <div class="ide-modal-actions" style="gap:8px;">
-        <button type="button" id="ide-folder-cancel" class="ide-btn-sm">Annuler</button>
-        <button type="button" id="ide-folder-open" class="ide-btn-sm ide-btn-accent">Ouvrir ce dossier</button>
+      <div class="ide-modal-actions" style="justify-content:space-between;align-items:center;gap:8px;">
+        <span class="ide-hint">Clic = explorer · Double-clic ou « Ouvrir » = charger le projet</span>
+        <div style="display:flex;gap:8px;">
+          <button type="button" id="ide-folder-cancel" class="ide-btn-sm">Annuler</button>
+          <button type="button" id="ide-folder-open" class="ide-btn-sm ide-btn-accent">Ouvrir le dossier courant</button>
+        </div>
       </div>
     </div>
   </div>
@@ -274,7 +281,7 @@
               <option value="gemini">Google Gemini</option>
               <option value="openrouter">OpenRouter</option>
               <option value="custom">Custom / FreeLLMAPI (OpenAI-compatible)</option>
-              <option value="anthropic">Anthropic Claude</option>
+              <option value="anthropic">Anthropic (API)</option>
               <option value="local">Ollama Local</option>
             </select>
           </label>

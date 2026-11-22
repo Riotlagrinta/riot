@@ -1,7 +1,7 @@
 """Hub de contenu : pipeline d'ingestion d'une inspiration (Insta/TikTok) au Vault.
 
 Le CHAINON MANQUANT, c'est l'INDEXEUR (le "greffier") : ingest.py depose une fiche
-brute dans Vault/raw/, puis ce module la lit, demande a Claude un RESUME + des
+brute dans Vault/raw/, puis ce module la lit, demande a RIOT un RESUME + des
 THEMES + un enrichissement (tags/format/pourquoi), APPEND l'entree a index.md
 (dedup par shortcode), enrichit le front-matter de la fiche, met a jour
 progression.txt, puis relance graphe.py + build_vault.py, et (option) miroir Drive.
@@ -155,7 +155,7 @@ def _themes_existants(index_texte: str, limite: int = 60) -> list:
 
 
 def _analyser_llm(fiche: dict, commentaire: str, themes_existants: list) -> dict:
-    """Demande a Claude : titre court, themes, resume concret, tags, format.
+    """Demande a RIOT : titre court, themes, resume concret, tags, format.
 
     Renvoie un dict ; leve en cas d'echec dur (l'appelant gere).
     """

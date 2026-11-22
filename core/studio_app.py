@@ -1,4 +1,4 @@
-"""Backend pour l'Application Web et Desktop façon Claude (Claude RIOT).
+"""Backend pour l'Application Web et Desktop RIOT Studio (RIOT Studio).
 
 
 
@@ -94,7 +94,7 @@ from core.llm import llm
 
 
 
-LOG = logging.getLogger("riot.claude")
+LOG = logging.getLogger("riot.studio")
 
 
 
@@ -102,7 +102,7 @@ _RACINE = Path(__file__).resolve().parent.parent
 
 
 
-_HTML_CLAUDE = _RACINE / "web" / "claude.html"
+_HTML_STUDIO = _RACINE / "web" / "studio.html"
 
 
 
@@ -773,7 +773,7 @@ def monter_routes(app):
 
 
 
-    """Enregistre l'ensemble des routes Claude Web & Desktop sur FastAPI."""
+    """Enregistre l'ensemble des routes RIOT Studio Web & Desktop sur FastAPI."""
 
 
 
@@ -789,18 +789,18 @@ def monter_routes(app):
 
 
 
-        LOG.warning("Erreur chargement outils Claude: %s", e)
+        LOG.warning("Erreur chargement outils Studio: %s", e)
 
 
 
     @app.middleware("http")
     async def _garde_studio_http(request: Request, call_next):
         chemin = request.url.path or ""
-        if chemin in ("/claude/manifest.json", "/claude/sw.js"):
+        if chemin in ("/studio/manifest.json", "/studio/sw.js"):
             return await call_next(request)
-        protege = chemin in ("/", "/studio", "/claude") or chemin.startswith(("/api/claude", "/captures"))
+        protege = chemin in ("/", "/studio", "/studio") or chemin.startswith(("/api/studio", "/captures"))
         if protege and not _studio_autorise(request):
-            if chemin.startswith(("/api/claude", "/captures")):
+            if chemin.startswith(("/api/studio", "/captures")):
                 return JSONResponse(
                     {"ok": False, "erreur": "Authentification requise sur RIOT Studio (acces distant)."},
                     status_code=401,
@@ -822,15 +822,15 @@ def monter_routes(app):
 
 
 
-    @app.get("/claude", response_class=HTMLResponse)
+    @app.get("/studio", response_class=HTMLResponse)
 
 
 
-    def page_claude(request: Request):
+    def page_studio(request: Request):
 
 
 
-        if not _HTML_CLAUDE.exists():
+        if not _HTML_STUDIO.exists():
 
 
 
@@ -838,11 +838,11 @@ def monter_routes(app):
 
 
 
-        return HTMLResponse(_HTML_CLAUDE.read_text(encoding="utf-8"))
+        return HTMLResponse(_HTML_STUDIO.read_text(encoding="utf-8"))
 
 
 
-    @app.post("/api/claude/nouveau_chat")
+    @app.post("/api/studio/nouveau_chat")
 
 
 
@@ -858,7 +858,7 @@ def monter_routes(app):
 
 
 
-    @app.get("/api/claude/chats")
+    @app.get("/api/studio/chats")
 
 
 
@@ -878,7 +878,7 @@ def monter_routes(app):
 
 
 
-    @app.get("/api/claude/captures/{nom_fichier}")
+    @app.get("/api/studio/captures/{nom_fichier}")
 
 
 
@@ -916,12 +916,12 @@ def monter_routes(app):
 
         return JSONResponse({"erreur": "Capture introuvable."}, status_code=404)
 
-    @app.get("/api/claude/vibetg/pubs/statut")
+    @app.get("/api/studio/vibetg/pubs/statut")
     async def vibetg_statut_api():
         from tools.vibetg_ads import MOTEUR_PUBS
         return JSONResponse(MOTEUR_PUBS.statut_dict())
 
-    @app.post("/api/claude/vibetg/pubs/activer")
+    @app.post("/api/studio/vibetg/pubs/activer")
     async def vibetg_activer_api(req: Request):
         from tools.vibetg_ads import MOTEUR_PUBS
         try:
@@ -932,13 +932,13 @@ def monter_routes(app):
         rep = MOTEUR_PUBS.demarrer(nombre_pubs=nombre)
         return JSONResponse({"message": rep, "statut": MOTEUR_PUBS.statut_dict()})
 
-    @app.post("/api/claude/vibetg/pubs/arreter")
+    @app.post("/api/studio/vibetg/pubs/arreter")
     async def vibetg_arreter_api():
         from tools.vibetg_ads import MOTEUR_PUBS
         rep = MOTEUR_PUBS.arreter()
         return JSONResponse({"message": rep, "statut": MOTEUR_PUBS.statut_dict()})
 
-    @app.post("/api/claude/vibetg/pubs/mode_nuit")
+    @app.post("/api/studio/vibetg/pubs/mode_nuit")
     async def vibetg_mode_nuit_api(req: Request):
         from tools.vibetg_ads import MOTEUR_PUBS
         try:
@@ -957,7 +957,7 @@ def monter_routes(app):
 
 
 
-    @app.post("/api/claude/chats/nouveau")
+    @app.post("/api/studio/chats/nouveau")
 
 
 
@@ -1013,7 +1013,7 @@ def monter_routes(app):
 
 
 
-    @app.get("/api/claude/chats/{chat_id}")
+    @app.get("/api/studio/chats/{chat_id}")
 
 
 
@@ -1041,7 +1041,7 @@ def monter_routes(app):
 
 
 
-    @app.delete("/api/claude/chats/{chat_id}")
+    @app.delete("/api/studio/chats/{chat_id}")
 
 
 
@@ -1061,7 +1061,7 @@ def monter_routes(app):
 
 
 
-    @app.patch("/api/claude/chats/{chat_id}")
+    @app.patch("/api/studio/chats/{chat_id}")
 
 
 
@@ -1105,7 +1105,7 @@ def monter_routes(app):
 
 
 
-    @app.get("/claude/manifest.json")
+    @app.get("/studio/manifest.json")
 
 
 
@@ -1125,7 +1125,7 @@ def monter_routes(app):
 
 
 
-            "start_url": "/claude",
+            "start_url": "/studio",
 
 
 
@@ -1141,7 +1141,7 @@ def monter_routes(app):
 
 
 
-            "description": "Assistant IA Claude & Swarm Multi-Agents autonome pour développeur",
+            "description": "Assistant IA RIOT & Swarm Multi-Agents autonome pour développeur",
 
 
 
@@ -1177,7 +1177,7 @@ def monter_routes(app):
 
 
 
-    @app.get("/claude/sw.js")
+    @app.get("/studio/sw.js")
 
 
 
@@ -1189,7 +1189,7 @@ def monter_routes(app):
 
 
 
-        const CACHE_NAME = 'claude-riot-v1';
+        const CACHE_NAME = 'riot-studio-v1';
 
 
 
@@ -1205,7 +1205,7 @@ def monter_routes(app):
 
 
 
-            if (e.request.method === 'GET' && e.request.url.includes('/claude')) {
+            if (e.request.method === 'GET' && e.request.url.includes('/studio')) {
 
 
 
@@ -1233,7 +1233,7 @@ def monter_routes(app):
 
 
 
-    @app.get("/api/claude/session")
+    @app.get("/api/studio/session")
 
 
 
@@ -1363,7 +1363,7 @@ def monter_routes(app):
 
 
 
-    @app.get("/api/claude/projets")
+    @app.get("/api/studio/projets")
 
 
 
@@ -1375,7 +1375,7 @@ def monter_routes(app):
 
 
 
-    @app.post("/api/claude/changer_projet")
+    @app.post("/api/studio/changer_projet")
 
 
 
@@ -1515,7 +1515,7 @@ def monter_routes(app):
 
 
 
-    @app.get("/api/claude/mcp")
+    @app.get("/api/studio/mcp")
 
 
 
@@ -1531,7 +1531,7 @@ def monter_routes(app):
 
 
 
-    @app.post("/api/claude/mcp/reload")
+    @app.post("/api/studio/mcp/reload")
 
 
 
@@ -1551,7 +1551,7 @@ def monter_routes(app):
 
 
 
-    @app.get("/api/claude/arborescence")
+    @app.get("/api/studio/arborescence")
 
 
 
@@ -1575,7 +1575,7 @@ def monter_routes(app):
 
 
 
-    @app.get("/api/claude/fichier")
+    @app.get("/api/studio/fichier")
 
 
 
@@ -1687,7 +1687,7 @@ def monter_routes(app):
 
 
 
-    @app.get("/api/claude/pdf/telecharger")
+    @app.get("/api/studio/pdf/telecharger")
 
 
 
@@ -1767,7 +1767,7 @@ def monter_routes(app):
 
 
 
-    @app.get("/api/claude/document/telecharger")
+    @app.get("/api/studio/document/telecharger")
 
 
 
@@ -2007,7 +2007,7 @@ def monter_routes(app):
 
 
 
-    @app.post("/api/claude/pdf/exporter_texte")
+    @app.post("/api/studio/pdf/exporter_texte")
 
 
 
@@ -2027,7 +2027,7 @@ def monter_routes(app):
 
 
 
-            titre = str(body.get("titre", "Réponse Claude RIOT")).strip() or "Réponse Claude RIOT"
+            titre = str(body.get("titre", "Réponse RIOT Studio")).strip() or "Réponse RIOT Studio"
 
 
 
@@ -2095,7 +2095,7 @@ def monter_routes(app):
 
 
 
-                "url": f"/api/claude/pdf/telecharger?chemin={nom_fichier}",
+                "url": f"/api/studio/pdf/telecharger?chemin={nom_fichier}",
 
 
 
@@ -2115,7 +2115,7 @@ def monter_routes(app):
 
 
 
-    @app.post("/api/claude/chat")
+    @app.post("/api/studio/chat")
 
 
 
@@ -3518,7 +3518,7 @@ def monter_routes(app):
 
 
 
-                        "Tu es Claude RIOT, un ingénieur logiciel d'élite et Coordinateur en chef.\n"
+                        "Tu es RIOT Studio, un ingénieur logiciel d'élite et Coordinateur en chef.\n"
 
 
 
@@ -3566,7 +3566,7 @@ def monter_routes(app):
 
 
 
-                        "Tu es Claude RIOT, un assistant IA d'élite, ingénieur de pointe et partenaire de réflexion.\n"
+                        "Tu es RIOT Studio, un assistant IA d'élite, ingénieur de pointe et partenaire de réflexion.\n"
 
 
 

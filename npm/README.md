@@ -22,7 +22,7 @@ riot
 - **Outil `seo-audit` (activé par défaut)** : audite le référencement Google (URL ou HTML/Next.js) : `<title>`, `meta`, `H1`, `canonical`, `robots.txt`, `sitemap.xml`, JSON-LD et snippet correctif.
 - **Accès Internet anti-hallucination (activé par défaut)** : `chercher_web`, `lire_page_web` (citations URLs vérifiables, Firecrawl / Perplexity / DuckDuckGo) + outils natifs Git (`git_status`, `git_diff`, `git_log`), GitHub & HTTP REST.
 - `riot /theme [obsidian|paper|tactical]` : Bascule entre les 3 thèmes visuels (`Obsidian & Ambre`, `Encre & Émeraude`, `Tactical Ops`) sur CLI, IDE, Studio et Mobile.
-- `/model [auto|fast|code|deep|freellmapi|custom]` : Routage adaptatif automatique selon la tâche (**Codestral**, **Claude Sonnet 4.5 / Haiku 4.5**, **GPT-OSS 120B / 20B**, **Llama 3.3 70B**, **Gemini Flash**, **DeepSeek**, **Nemotron 3.5 Lightning 838k** & **Ollama Dolphin**), avec **Journal de Continuité inter-modèles** et accès 24h **illimité**.
+- `/model [auto|fast|code|deep|freellmapi|custom]` : Routage adaptatif automatique selon la tâche (**Codestral**, **Sonnet 4.5 / Haiku 4.5**, **GPT-OSS 120B / 20B**, **Llama 3.3 70B**, **Gemini Flash**, **DeepSeek**, **Nemotron 3.5 Lightning 838k** & **Ollama Dolphin**), avec **Journal de Continuité inter-modèles** et accès 24h **illimité**.
 - **Pilotage Code, Remotion & FFmpeg** : auto-ancrage du dossier projet, `patcher_code` tolérant, boucle agentique à 10 tours avec synthèse garantie et jusqu'à `8 192` tokens en sortie sur les tâches de code.
 
 ## Mises à jour

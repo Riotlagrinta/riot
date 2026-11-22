@@ -1,4 +1,4 @@
-# ⚡ Claude RIOT Studio (ex-Kéranos)
+# ⚡ RIOT Studio (ex-Kéranos)
 
 > **Plateforme d'Ingénierie Logicielle Multi-Agents, Trading Quantitatif, IA 100% Souveraine & Suite Exécutive Autonome.**
 
@@ -16,7 +16,7 @@
 
 ## 🏛️ Genèse & Vision du Projet
 
-Initialement conçu sous le nom de **Kéranos** comme assistant vocal local souverain (Jarvis + Hermes), le projet a évolué pour devenir **Claude RIOT Studio** : un environnement d'ingénierie logicielle autonome, d'analyse quantitative et de production documentaire d'élite.
+Initialement conçu sous le nom de **Kéranos** comme assistant vocal local souverain (Jarvis + Hermes), le projet a évolué pour devenir **RIOT Studio** : un environnement d'ingénierie logicielle autonome, d'analyse quantitative et de production documentaire d'élite.
 
 L'écosystème réunit sous une même interface web réactive (PWA) des capacités avancées :
 1. **Pipeline Swarm Multi-Agents** de développement autonome (Planification, Codage chirurgical, Tests unitaires auto-guérisseurs, Audit sécurité).
@@ -30,14 +30,14 @@ L'écosystème réunit sous une même interface web réactive (PWA) des capacit�
 
 ### 1. 🤖 Pipeline Multi-Agents Autonome (Swarm) & Routage Adaptatif
 Chaque sous-agent est piloté par un profil de modèle adapté à son rôle, tout en partageant un **Journal de Continuité Inter-Modèles** (`JournalContinuite`) pour ne jamais perdre le contexte lors d'une rotation d'IA :
-- **📐 RIOT-Architect** (`deep` — *Claude Sonnet 4.5 / Nemotron 3 Ultra 800k / DeepSeek*) : Explore l'arborescence, détecte la stack (`package.json`, `pyproject.toml`, Remotion) et conçoit le plan d'action chirurgical.
-- **💻 RIOT-Engineer** (`code` — *Codestral Latest / Claude Sonnet 4.5 / DeepSeek*, sortie jusqu'à **8 192 tokens**) : Applique les modifications via `patcher_code` tolérant et `ecrire_code` dans une boucle étendue à **10 tours** avec synthèse finale garantie.
+- **📐 RIOT-Architect** (`deep` — *Sonnet 4.5 / Nemotron 3 Ultra 800k / DeepSeek*) : Explore l'arborescence, détecte la stack (`package.json`, `pyproject.toml`, Remotion) et conçoit le plan d'action chirurgical.
+- **💻 RIOT-Engineer** (`code` — *Codestral Latest / Sonnet 4.5 / DeepSeek*, sortie jusqu'à **8 192 tokens**) : Applique les modifications via `patcher_code` tolérant et `ecrire_code` dans une boucle étendue à **10 tours** avec synthèse finale garantie.
 - **🧪 RIOT-Tester** (`agent` — *GPT-OSS 120B / Qwen 3.6 27B / Llama 3.3 70B*) : Exécute les tests unitaires et vérifie le code sans gaspiller les modèles codeurs.
 - **🛡️ RIOT-Reviewer** (`deep`) : Audit de conformité, détection de secrets (`vcp_`, `freellmapi-`, `sk-`, `gsk_`, `ghp_`), vérification du typage et verdict final `[APPROUVÉ]`.
 
 **Moteur Adaptatif & Modèles supportés (`RIOT Engine` + `FreeLLMAPI`) :**
-- **Code & Architecture (`code` / `deep`)** : `codestral-latest`, `claude-sonnet-4-5`, `deepseek-chat` / `deepseek-reasoner`, `nemotron-3-ultra-550b` (`800k` ctx), `nemotron-3.5-lightning` (`838 860` ctx).
-- **Agent & Rapide (`agent` / `fast`)** : `openai/gpt-oss-120b`, `openai/gpt-oss-20b`, `llama-3.3-70b-versatile`, `qwen3.6-27b`, `gemini-flash-lite-latest`, `claude-haiku-4-5`.
+- **Code & Architecture (`code` / `deep`)** : `codestral-latest`, `Sonnet 4.5`, `deepseek-chat` / `deepseek-reasoner`, `nemotron-3-ultra-550b` (`800k` ctx), `nemotron-3.5-lightning` (`838 860` ctx).
+- **Agent & Rapide (`agent` / `fast`)** : `openai/gpt-oss-120b`, `openai/gpt-oss-20b`, `llama-3.3-70b-versatile`, `qwen3.6-27b`, `gemini-flash-lite-latest`, `Haiku 4.5`.
 - **Pool Multi-Clés & Zéro Plafond Journalier** : Rotation Round-Robin sur pools de clés (`GROQ_API_KEY="cle1,cle2"`), failover automatique HTTP `413`/`429`, compaction des schémas d'outils (-45 %) et accès utilisateur 24h **illimité**.
 - **Compatible FreeLLMAPI Desktop** : Détection native sur `http://127.0.0.1:31415/v1` via `/model freellmapi` (avec bascule adaptative automatique selon la tâche).
 
@@ -63,7 +63,7 @@ Chaque sous-agent est piloté par un profil de modèle adapté à son rôle, tou
 
 ## 🖥️ Interfaces Utilisateur & Accès
 
-### 1. Studio Web Claude RIOT (`http://localhost:8790/`)
+### 1. Studio Web RIOT (`http://localhost:8790/`)
 - **Tri-panneau moderne** :
   - *Gauche* : Sélecteur de projets réels (28+ projets indexés automatiquement), historique persistant des discussions SQLite, modes rapides (`/swarm`, `/trade`, `/raw`, `/architect`, `/review`).
   - *Centre* : Chat fluide en Server-Sent Events (SSE), téléversement direct de fichiers (bouton trombone, drag & drop, collage presse-papier), cartes d'outils animées.

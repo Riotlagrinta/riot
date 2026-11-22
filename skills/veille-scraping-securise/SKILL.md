@@ -13,7 +13,7 @@ metadata:
 
 # Compétence Veille & Scraping Sécurisé (Web & Crypto)
 
-Cette compétence connecte Claude RIOT Studio aux flux de données externes en temps réel :
+Cette compétence connecte RIOT Studio aux flux de données externes en temps réel :
 1. **Surveillance Crypto en Direct (`surveiller_marche_crypto`) :**
    - Interroge les flux institutionnels Binance sans clé API pour obtenir les cotations en direct, variations 24h, volumes et tendances.
 2. **Scraping Web Sécurisé & Assaini (`recueillir_veille_web`) :**

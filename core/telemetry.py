@@ -226,7 +226,7 @@ class TelemetryStore:
                             VALUES (
                                 '0.3.8',
                                 'RIOT v0.3.8 — Accès Illimité 24h, Sous-Agents Spécialisés, Continuité & FreeLLMAPI',
-                                E'• Accès 24h illimité sans plafond journalier (protection anti-rafale RPM conservée)\\n• Chaque sous-agent piloté par son modèle optimal (Codestral/Claude Sonnet 4.5 en code jusqu\\'à 8 192 tokens, GPT-OSS/Llama 3.3 en agent, Nemotron 838k en contexte XXL)\\n• Journal de Continuité inter-modèles + support natif FreeLLMAPI (127.0.0.1:31415/v1)',
+                                E'• Accès 24h illimité sans plafond journalier (protection anti-rafale RPM conservée)\\n• Chaque sous-agent piloté par son modèle optimal (Codestral/Sonnet 4.5 en code jusqu\\'à 8 192 tokens, GPT-OSS/Llama 3.3 en agent, Nemotron 838k en contexte XXL)\\n• Journal de Continuité inter-modèles + support natif FreeLLMAPI (127.0.0.1:31415/v1)',
                                 'npm install -g @riotlagrinta/riot@latest'
                             )
                             ON CONFLICT (version) DO NOTHING
@@ -285,7 +285,7 @@ class TelemetryStore:
                             "0.3.8",
                             "RIOT v0.3.8 — Accès Illimité 24h, Sous-Agents Spécialisés, Continuité & FreeLLMAPI",
                             "• Accès 24h illimité sans plafond journalier (protection anti-rafale RPM conservée)\n"
-                            "• Chaque sous-agent piloté par son modèle optimal (Codestral/Claude Sonnet 4.5 en code jusqu'à 8 192 tokens, GPT-OSS/Llama 3.3 en agent, Nemotron 838k en contexte XXL)\n"
+                            "• Chaque sous-agent piloté par son modèle optimal (Codestral/Sonnet 4.5 en code jusqu'à 8 192 tokens, GPT-OSS/Llama 3.3 en agent, Nemotron 838k en contexte XXL)\n"
                             "• Journal de Continuité inter-modèles + support natif FreeLLMAPI (127.0.0.1:31415/v1)",
                             "npm install -g @riotlagrinta/riot@latest",
                         ),

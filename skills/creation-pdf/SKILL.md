@@ -18,5 +18,5 @@ Permet à l'assistant Kéranos RIOT de générer des PDF soignés (mise en page 
 2. `extraire_texte_pdf(chemin, max_pages=15)`
 3. `fusionner_pdfs(fichiers, nom_fichier_sortie="")`
 
-Les fichiers générés sont placés par défaut dans le dossier `output_pdf/` ou dans le dossier du projet actif, avec un lien de téléchargement direct pour l'interface Web Claude Studio :
-`/api/claude/pdf/telecharger?chemin=<nom_fichier.pdf>`.
+Les fichiers générés sont placés par défaut dans le dossier `output_pdf/` ou dans le dossier du projet actif, avec un lien de téléchargement direct pour l'interface Web RIOT Studio :
+`/api/studio/pdf/telecharger?chemin=<nom_fichier.pdf>`.

@@ -99,13 +99,13 @@
   <section id="reglages" class="tab">
     <div class="card"><h2>Mode de routage</h2>
       <div class="fld"><div class="lab"><b>Où réfléchit RIOT</b>
-        <small>Local = tout sur ta machine (gratuit, privé). Cloud = Claude (plus fin, payant).</small></div>
+        <small>Local = tout sur ta machine (gratuit, privé). Cloud = API Cloud (plus fin, payant).</small></div>
         <div class="seg" id="seg-mode">
           <button data-v="local">🖥️ Local</button>
           <button data-v="cloud">☁️ Cloud</button>
         </div>
       </div>
-      <small class="note">Le modèle précis (Ollama / Claude / Whisper) se choisit dans l'onglet <b>Modèles</b>.</small>
+      <small class="note">Le modèle précis (Ollama / Cloud / Whisper) se choisit dans l'onglet <b>Modèles</b>.</small>
     </div>
 
     <div class="card"><h2>Audio</h2>
@@ -212,7 +212,7 @@ async function chargerModeles(){
   };
   $('#actifs').innerHTML=`<table><tbody>
     ${ligneActif('local','LLM local (Ollama)',A.local,false)}
-    ${ligneActif('cloud','LLM cloud (Claude)',A.cloud,true)}
+    ${ligneActif('cloud','LLM cloud (Anthropic)',A.cloud,true)}
     ${ligneActif('whisper','Whisper (voix→texte)',A.whisper,false)}
     ${ligneActif('hermes','Hermes (orchestrateur)',A.hermes,true)}
   </tbody></table><small class="note">Changer le backend LLM (local/cloud) se fait en activant un modèle ci-dessous. Redémarre Jarvis après.</small>`;

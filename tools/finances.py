@@ -39,7 +39,7 @@ _SERVICES = {
     "adobe.com": ("Adobe", "Logiciels"), "disney": ("Disney+", "Streaming"),
     "youtube.com": ("YouTube Premium", "Streaming"), "deezer.com": ("Deezer", "Musique"),
     "canal": ("Canal+", "Streaming"), "microsoft.com": ("Microsoft 365", "Logiciels"),
-    "openai.com": ("ChatGPT", "Logiciels"), "anthropic.com": ("Claude", "Logiciels"),
+    "openai.com": ("ChatGPT", "Logiciels"), "anthropic.com": ("Anthropic", "Logiciels"),
     "notion.so": ("Notion", "Logiciels"), "dropbox.com": ("Dropbox", "Cloud"),
     "amazon": ("Amazon Prime", "Abonnements"), "paramount": ("Paramount+", "Streaming"),
     "twitch.tv": ("Twitch", "Streaming"), "patreon.com": ("Patreon", "Abonnements"),

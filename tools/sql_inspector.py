@@ -271,14 +271,14 @@ def auditer_schema_sql(schema_sql: str, type_projet: str = "standard") -> str:
     if scripts_remediation:
         nom_migration = f"migration_remediation_sql_{type_projet}.sql"
         fichier_mig = _DOSSIER_MIGRATIONS / nom_migration
-        contenu_mig = "-- Migration de Sécurisation & Optimisation générée par Claude RIOT Studio\n-- Exécution idempotente et sécurisée\n\n" + "\n\n".join(scripts_remediation) + "\n"
+        contenu_mig = "-- Migration de Sécurisation & Optimisation générée par RIOT Studio\n-- Exécution idempotente et sécurisée\n\n" + "\n\n".join(scripts_remediation) + "\n"
         fichier_mig.write_text(contenu_mig, encoding="utf-8")
         
         rapport.append("### 🛠️ Script de Remédiation & Migration Généré :")
         rapport.append("```sql")
         rapport.append(contenu_mig.strip())
         rapport.append("```")
-        rapport.append(f"📄 **Fichier sauvegardé :** [{nom_migration}](/api/claude/document/telecharger?chemin={nom_migration})")
+        rapport.append(f"📄 **Fichier sauvegardé :** [{nom_migration}](/api/studio/document/telecharger?chemin={nom_migration})")
 
     return "\n".join(rapport)
 
@@ -513,7 +513,7 @@ USING (
 {sql_rls.strip()}
 ```
 
-📄 **Fichier de migration prêt :** [{nom_fichier}](/api/claude/document/telecharger?chemin={nom_fichier})
+📄 **Fichier de migration prêt :** [{nom_fichier}](/api/studio/document/telecharger?chemin={nom_fichier})
 
 > [!IMPORTANT]
 > **Vérification requise :** Assurez-vous que la fonction `auth.uid()` et les claims JWT correspondent à votre structure d'authentification Supabase."""

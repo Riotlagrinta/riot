@@ -13,7 +13,7 @@ metadata:
 
 # Compétence Inspecteur & Optimiseur SQL / PostGIS / Supabase RLS
 
-Cette compétence confère à Claude RIOT Studio une expertise chirurgicale dans la gestion des bases de données relationnelles PostgreSQL, l'extension cartographique PostGIS et les politiques de sécurité Supabase Row Level Security (RLS).
+Cette compétence confère à RIOT Studio une expertise chirurgicale dans la gestion des bases de données relationnelles PostgreSQL, l'extension cartographique PostGIS et les politiques de sécurité Supabase Row Level Security (RLS).
 
 Elle s'applique particulièrement aux projets à forte composante géo-spatiale ou de santé (ex: **MediGo**, **Eco-Atlas**, **TogoDrive**).
 

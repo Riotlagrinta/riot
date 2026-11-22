@@ -1,6 +1,6 @@
 """Outils de Gestion et Chargement Dynamique des Compétences (Skills).
 
-Implémente le principe de « divulgation progressive » pour les agents Claude RIOT :
+Implémente le principe de « divulgation progressive » pour les agents RIOT Studio :
 1. Les compétences ne polluent pas le contexte initial.
 2. L'agent appelle `lister_competences()` ou consulte l'index pour identifier la compétence requise.
 3. L'agent appelle `charger_competence(nom)` pour charger le SKILL.md complet dans son contexte.
@@ -43,7 +43,7 @@ def _lire_entete(skill_md: Path) -> dict:
 
 @outil(
     nom="lister_competences",
-    description="Retourne la liste des compétences (skills) disponibles dans Claude RIOT Studio avec leur nom et description.",
+    description="Retourne la liste des compétences (skills) disponibles dans RIOT Studio avec leur nom et description.",
     parametres={"type": "object", "properties": {}},
     mcp_expose=True,
     affichage="auto"

@@ -3,7 +3,7 @@
 Permet de concevoir, valider et visualiser des diagrammes d'architecture logicielle, flux de données,
 diagrammes de séquence, machines à états, modèles entité-relation (ERD) et roadmaps techniques.
 Génère à la fois :
-1. Le code Mermaid standard rendu en direct dans l'interface Web Claude RIOT.
+1. Le code Mermaid standard rendu en direct dans l'interface Web RIOT Studio.
 2. Une visionneuse HTML interactive dédiée avec Zoom, Pan et Export SVG autonome dans `output_documents/`.
 """
 import logging
@@ -248,7 +248,7 @@ def generer_page_html_interactive(
   <header>
     <div class="title-area">
       <h1>📐 {titre}</h1>
-      <p>{sous_titre or "Diagramme technique interactif Claude RIOT"}</p>
+      <p>{sous_titre or "Diagramme technique interactif RIOT Studio"}</p>
     </div>
     <div class="btn-group">
       <button onclick="copierCode()">📋 Copier Mermaid</button>
@@ -410,7 +410,7 @@ def generer_diagramme(
         nom_fichier=nom_fichier,
     )
 
-    url_viewer = f"/api/claude/document/telecharger?chemin={chemin_html.name}"
+    url_viewer = f"/api/studio/document/telecharger?chemin={chemin_html.name}"
 
     return (
         f"✅ **Diagramme technique généré avec succès !**\n\n"

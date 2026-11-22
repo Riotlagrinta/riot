@@ -148,8 +148,8 @@ def profil_vers_tache(
 
 
 SOUS_AGENTS_TACHES: Dict[str, str] = {
-    "engineer": "code",       # Meilleur modele de code (claude-sonnet-4-5 / codestral-latest)
-    "architect": "deep",      # Raisonnement & grand contexte (claude-sonnet / nemotron-3-ultra / deepseek)
+    "engineer": "code",       # Meilleur modele de code (Sonnet 4.5 / codestral-latest)
+    "architect": "deep",      # Raisonnement & grand contexte (Sonnet 4.5 / nemotron-3-ultra / deepseek)
     "reviewer": "deep",       # Audit securite & qualite
     "tester": "agent",        # Tests rapides & fiable en outils (gpt-oss-120b / qwen3.6-27b)
     "trader": "agent",        # Donnees financieres & calculs

@@ -750,7 +750,7 @@ def browser_close_tabs(filtre: str = "") -> str:
 
                 "les cookies', 'descends aux commentaires', 'mets la video en pause', "
 
-                "'clique sur le premier resultat'. Claude regarde la page et fait UNE "
+                "'clique sur le premier resultat'. L'agent regarde la page et fait UNE "
 
                 "action. Refuse sur les sites proteges et pour les achats/paiements.",
 
@@ -1148,7 +1148,7 @@ def browser_interact(instruction: str) -> str:
 
                     return browser_scroll("bas")
 
-                return "Pas de clé Claude configurée, et instruction trop complexe pour une action directe."
+                return "Pas de clé Anthropic configurée, et instruction trop complexe pour une action directe."
 
 
             elements = page.evaluate(_JS_ELEMENTS)

@@ -1,7 +1,7 @@
-"""Reservation sur le WEB, pilotee par Claude (boucle agentique Playwright).
+"""Reservation sur le WEB, pilotee par RIOT (boucle agentique Playwright).
 
 Un navigateur Chromium **visible** et **persistant** (profil garde entre les
-sessions -> tu restes connecte a Doctolib/TheFork) est piloté par Claude : a
+sessions -> tu restes connecte a Doctolib/TheFork) est piloté par RIOT : a
 chaque etape il recoit une capture de la page + la liste des elements
 cliquables, et decide de l'action (cliquer, taper, derouler...) jusqu'a avoir
 rempli le formulaire.
@@ -42,7 +42,7 @@ MOTS_PAIEMENT = [
     "iban", "titulaire de la carte", "date d'expiration", "card number",
 ]
 
-# Schema de l'action que Claude renvoie a chaque etape (sortie forcee par outil).
+# Schema de l'action que Le modèle renvoie a chaque etape (sortie forcee par outil).
 _ACTION = {
     "type": "object",
     "properties": {
@@ -105,7 +105,7 @@ def _client():
     global _CLIENT
     if _CLIENT is None:
         # Magasin de certificats Windows (Malwarebytes intercepte le TLS : sans ca,
-        # l'appel a Claude echoue en "Connection error").
+        # l'appel a RIOT echoue en "Connection error").
         try:
             import truststore
             truststore.inject_into_ssl()
@@ -190,10 +190,10 @@ def _paiement_present(page):
 
 
 def _demander_action(page, objectif, dernier):
-    """Un tour de la boucle vision : renvoie le dict d'action decide par Claude."""
+    """Un tour de la boucle vision : renvoie le dict d'action decide par RIOT."""
     client = _client()
     if client is None:
-        return {"action": "bloque", "raison": "pas de cle Claude"}
+        return {"action": "bloque", "raison": "pas de cle Anthropic"}
     elements = page.evaluate(_JS_ELEMENTS)
     liste = "\n".join(
         f"[{e['index']}] {e['tag']}{('/' + e['type']) if e['type'] else ''} "

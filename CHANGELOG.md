@@ -17,7 +17,7 @@ modulaire, deux modes (cloud / local hors ligne).
 - Confirmation vocale des actions irréversibles ; interruption « attends/stop »
   (barge-in anti-écho) ; accusé de réception immédiat pour les outils lents.
 - Abstraction des providers (mode `cloud` | `local`) :
-  - LLM : **Claude** (Anthropic) ou **Ollama** (`qwen3.5:4b`…), même interface.
+  - LLM : **Anthropic** (Anthropic) ou **Ollama** (`qwen3.5:4b`…), même interface.
   - TTS : **ElevenLabs** ou, en local, **Piper** / **Kokoro** (repli voix Windows).
   - STT : faster-whisper (local dans les deux modes, GPU si dispo).
 
@@ -33,7 +33,7 @@ modulaire, deux modes (cloud / local hors ligne).
 - Communication : Discord (mentions + messages du jour), Instagram (abonnés &
   vues vs la veille, multi-comptes, refresh auto des tokens), appels Twilio
   (message simple V1, conversation temps réel V2).
-- Serveur MCP : expose les outils domotique/PC à tout client MCP (Claude Desktop,
+- Serveur MCP : expose les outils domotique/PC à tout client MCP (Client MCP Desktop,
   Hermes), liste blanche par outil.
 
 ### Confidentialité & sécurité

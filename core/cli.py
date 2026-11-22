@@ -64,14 +64,14 @@ def _style_prompt_courant() -> PromptStyle:
 
 
 _P_INIT = _pal()
-CLAUDE_CORAL = _P_INIT["cli_accent"]
-CLAUDE_DIM = _P_INIT["cli_dim"]
-CLAUDE_GREEN = _P_INIT["cli_ok"]
-CLAUDE_CYAN = _P_INIT["cli_secondary"]
-CLAUDE_GOLD = _P_INIT["cli_warn"]
-CLAUDE_WHITE = _P_INIT["cli_text"]
-CLAUDE_RED = _P_INIT["cli_err"]
-CLAUDE_BG = _P_INIT["cli_bg"]
+RIOT_CORAL = _P_INIT["cli_accent"]
+RIOT_DIM = _P_INIT["cli_dim"]
+RIOT_GREEN = _P_INIT["cli_ok"]
+RIOT_CYAN = _P_INIT["cli_secondary"]
+RIOT_GOLD = _P_INIT["cli_warn"]
+RIOT_WHITE = _P_INIT["cli_text"]
+RIOT_RED = _P_INIT["cli_err"]
+RIOT_BG = _P_INIT["cli_bg"]
 _STYLE_PROMPT = _style_prompt_courant()
 
 _COMMANDES_INTERNES = [
@@ -80,7 +80,7 @@ _COMMANDES_INTERNES = [
     "/theme",
     "/update",
     "/ide",
-    "/app", "/studio", "/claude",
+    "/app", "/studio",
     "/file", "/fichier",
     "/trade", "/trader",
     "/swarm", "/pipeline",
@@ -131,7 +131,7 @@ def _recup_branche_git(dossier: Optional[Path]) -> str:
     return ""
 
 
-def afficher_banniere_claude():
+def afficher_banniere_riot():
     """Affiche l'en-tête compact et multi-thèmes de RIOT CLI."""
     import psutil
 
@@ -621,7 +621,7 @@ def _charger_conventions_projet(dossier: Optional[Path]) -> str:
     """Charge automatiquement les instructions et conventions du projet (Pilier 5)."""
     if not dossier:
         return ""
-    fichiers_cibles = ["AGENTS.md", "INSTRUCTIONS.md", "CONVENTIONS.md", ".claude/conventions.md", "README.md"]
+    fichiers_cibles = ["AGENTS.md", "INSTRUCTIONS.md", "CONVENTIONS.md", ".riot/conventions.md", "README.md"]
     for nom in fichiers_cibles:
         try:
             f = dossier / nom
@@ -674,7 +674,7 @@ def _compacter_historique(historique: List[dict], max_messages: int = 12) -> Lis
 
 
 def executer_ordre(phrase: str, historique_conversation: List[dict]):
-    """Exécute un ordre en boucle agentique avec design élégant Claude Code."""
+    """Exécute un ordre en boucle agentique avec design élégant RIOT CLI."""
     if not phrase.strip():
         return
 
@@ -812,7 +812,7 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
             contenu_hist = f"{reponse_finale}\n{resume_cont}" if resume_cont else reponse_finale
             historique_conversation.append({"role": "assistant", "content": contenu_hist})
 
-            # Affichage Claude Code : minimaliste, aéré, élégant
+            # Affichage RIOT CLI : minimaliste, aéré, élégant
             console.print()
             console.print(Markdown(reponse_finale))
             console.print(f"[dim]  ⚡ {provider.nom} · {dt}s[/dim]\n")
@@ -836,7 +836,7 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
                 empreinte_appel = f"{nom_outil}:{args}"
             compteur_appels[empreinte_appel] = compteur_appels.get(empreinte_appel, 0) + 1
 
-            # Style visuel Claude Code pour l'exécution d'outils
+            # Style visuel RIOT CLI pour l'exécution d'outils
             arg_str = ", ".join(f"{k}='{str(v)[:50]}'" for k, v in args.items())
             console.print(f"[bold {acc}]● Executing[/bold {acc}] [bold white]{nom_outil}[/bold white]([dim]{arg_str}[/dim])...")
 
@@ -940,9 +940,9 @@ def _verifier_configuration_initiale():
 
 
 def lancer_terminal_interactif():
-    """Boucle principale du Terminal RIOT inspirée de Claude Code."""
+    """Boucle principale du Terminal RIOT inspirée de RIOT CLI."""
     _verifier_configuration_initiale()
-    afficher_banniere_claude()
+    afficher_banniere_riot()
 
     # Vérification non-bloquante des mises à jour (cache 24h)
     try:
@@ -999,7 +999,7 @@ def lancer_terminal_interactif():
                 break
             elif cmd in ("/clear", "/cls"):
                 os.system("cls" if os.name == "nt" else "clear")
-                afficher_banniere_claude()
+                afficher_banniere_riot()
                 continue
             elif cmd.startswith("/theme"):
                 parties = texte.split(maxsplit=1)
@@ -1052,7 +1052,7 @@ def lancer_terminal_interactif():
                         _SESSION_CTX["grill_me"] = prev_gm
                 continue
             elif cmd in ("/ide", "/editeur"):
-                from core import serveur, claude_app
+                from core import serveur, studio_app
                 import webbrowser
                 serveur.demarrer()
                 url_ide = "http://localhost:8790/ide"
@@ -1067,10 +1067,10 @@ def lancer_terminal_interactif():
                 arg_mcp = parties[1] if len(parties) > 1 else ""
                 commande_mcp(arg_mcp)
                 continue
-            elif cmd in ("/app", "/studio", "/claude"):
-                from core import serveur, claude_app
+            elif cmd in ("/app", "/studio"):
+                from core import serveur, studio_app
                 serveur.demarrer()
-                claude_app.lancer_app_desktop()
+                studio_app.lancer_app_desktop()
                 console.print(f"  [bold {_pal()['cli_accent']}]⚡ Application RIOT Studio ouverte en fenêtre de bureau.[/bold {_pal()['cli_accent']}]")
                 console.print(f"  [dim]Accès Web : http://localhost:8790/ (Studio) · http://localhost:8790/mobile[/dim]")
                 continue

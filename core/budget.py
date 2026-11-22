@@ -1,6 +1,6 @@
 """Budget : suivi de la consommation LLM de Jarvis, par jour et par fournisseur.
 
-Jarvis instrumente ses PROPRES appels Claude (tokens in/out + cache) et estime le
+Jarvis instrumente ses PROPRES appels Anthropic (tokens in/out + cache) et estime le
 cout via une table de prix configurable (budget.prix), persiste dans budget.json
 (non versionne). La page Etat du panneau lit resume() (jour + mois), et croise avec
 le compteur Twilio (logs/calls/compteur.json) et les insights Hermes (CLI).
@@ -102,7 +102,7 @@ def _agreger(data, prefixe):
 
 
 def resume():
-    """{jour: {fournisseur: {...}}, mois: {...}} de la conso Jarvis (Claude + voix)."""
+    """{jour: {fournisseur: {...}}, mois: {...}} de la conso Jarvis (Anthropic + voix)."""
     data = _charger()
     auj = dt.date.today()
     return {"jour": _agreger(data, auj.isoformat()),
@@ -160,7 +160,7 @@ def _total_llm(prefixe):
 
 
 def total(periode):
-    """Cout total Jarvis (Claude + voix) + Twilio (mois). periode = 'jour' | 'mois'."""
+    """Cout total Jarvis (Anthropic + voix) + Twilio (mois). periode = 'jour' | 'mois'."""
     prefixe = (dt.date.today().isoformat() if periode == "jour"
                else dt.date.today().strftime("%Y-%m"))
     t = _total_llm(prefixe)

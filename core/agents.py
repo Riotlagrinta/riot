@@ -28,17 +28,17 @@ def _pal():
 
 
 _P_DEF = _pal()
-CLAUDE_CORAL = _P_DEF["cli_accent"]
-CLAUDE_GOLD = _P_DEF["cli_warn"]
-CLAUDE_GREEN = _P_DEF["cli_ok"]
-CLAUDE_CYAN = _P_DEF["cli_secondary"]
-CLAUDE_RED = _P_DEF["cli_err"]
-CLAUDE_DIM = _P_DEF["cli_dim"]
+RIOT_CORAL = _P_DEF["cli_accent"]
+RIOT_GOLD = _P_DEF["cli_warn"]
+RIOT_GREEN = _P_DEF["cli_ok"]
+RIOT_CYAN = _P_DEF["cli_secondary"]
+RIOT_RED = _P_DEF["cli_err"]
+RIOT_DIM = _P_DEF["cli_dim"]
 
 
 def _charger_conventions_projet(dossier: Path) -> str:
     """Charge les règles et conventions du projet actif (AGENTS.md, INSTRUCTIONS.md)."""
-    for nom in ["AGENTS.md", "INSTRUCTIONS.md", "CONVENTIONS.md", ".claude/conventions.md", "README.md"]:
+    for nom in ["AGENTS.md", "INSTRUCTIONS.md", "CONVENTIONS.md", ".riot/conventions.md", "README.md"]:
         f = dossier / nom
         if f.exists() and f.is_file():
             try:
@@ -176,7 +176,7 @@ def _executer_boucle_agent(
 def executer_architecte(mission: str, dossier_projet: Path, console: Console) -> str:
     """Sous-agent RIOT-Architect : Analyse et planification technique."""
     conventions = _charger_conventions_projet(dossier_projet)
-    console.print(f"[bold {CLAUDE_GOLD}]▶ 📐 RIOT-Architect (Analyse & Plan d'action)[/bold {CLAUDE_GOLD}]")
+    console.print(f"[bold {RIOT_GOLD}]▶ 📐 RIOT-Architect (Analyse & Plan d'action)[/bold {RIOT_GOLD}]")
     prompt_architect = (
         "Tu es RIOT-Architect, l'architecte logiciel en chef.\n"
         f"Projet actif : {dossier_projet.name} (Chemin : {dossier_projet}).\n"
@@ -204,8 +204,8 @@ def executer_architecte(mission: str, dossier_projet: Path, console: Console) ->
     console.print()
     console.print(Panel(
         Markdown(plan or "Plan d'action établi."),
-        title=f"[bold {CLAUDE_GOLD}]📐 Plan d'Architecture ({dt}s)[/bold {CLAUDE_GOLD}]",
-        border_style=CLAUDE_GOLD,
+        title=f"[bold {RIOT_GOLD}]📐 Plan d'Architecture ({dt}s)[/bold {RIOT_GOLD}]",
+        border_style=RIOT_GOLD,
         box=ROUNDED,
     ))
     return plan
@@ -214,7 +214,7 @@ def executer_architecte(mission: str, dossier_projet: Path, console: Console) ->
 def executer_ingenieur(mission: str, dossier_projet: Path, console: Console, plan: str = "") -> str:
     """Sous-agent RIOT-Engineer : Implémentation chirurgicale du code."""
     conventions = _charger_conventions_projet(dossier_projet)
-    console.print(f"[bold {CLAUDE_CYAN}]▶ 💻 RIOT-Engineer (Implémentation du code)[/bold {CLAUDE_CYAN}]")
+    console.print(f"[bold {RIOT_CYAN}]▶ 💻 RIOT-Engineer (Implémentation du code)[/bold {RIOT_CYAN}]")
     prompt_engineer = (
         "Tu es RIOT-Engineer, développeur senior d'élite.\n"
         f"Projet actif : {dossier_projet.name} (Chemin : {dossier_projet}).\n"
@@ -245,8 +245,8 @@ def executer_ingenieur(mission: str, dossier_projet: Path, console: Console, pla
     console.print()
     console.print(Panel(
         Markdown(retour or "Modifications appliquées."),
-        title=f"[bold {CLAUDE_CYAN}]💻 Rapport d'Implémentation ({dt}s)[/bold {CLAUDE_CYAN}]",
-        border_style=CLAUDE_CYAN,
+        title=f"[bold {RIOT_CYAN}]💻 Rapport d'Implémentation ({dt}s)[/bold {RIOT_CYAN}]",
+        border_style=RIOT_CYAN,
         box=ROUNDED,
     ))
     return retour
@@ -255,7 +255,7 @@ def executer_ingenieur(mission: str, dossier_projet: Path, console: Console, pla
 def executer_testeur(mission: str, dossier_projet: Path, console: Console, rapport_engineer: str = "") -> str:
     """Sous-agent RIOT-Tester : Tests, vérification & boucle d'auto-guérison."""
     conventions = _charger_conventions_projet(dossier_projet)
-    console.print(f"[bold {CLAUDE_GREEN}]▶ 🧪 RIOT-Tester (Vérification & Tests unitaires)[/bold {CLAUDE_GREEN}]")
+    console.print(f"[bold {RIOT_GREEN}]▶ 🧪 RIOT-Tester (Vérification & Tests unitaires)[/bold {RIOT_GREEN}]")
     prompt_tester = (
         "Tu es RIOT-Tester, ingénieur assurance qualité et test automatisation.\n"
         f"Projet actif : {dossier_projet.name} (Chemin : {dossier_projet}).\n"
@@ -283,8 +283,8 @@ def executer_testeur(mission: str, dossier_projet: Path, console: Console, rappo
     console.print()
     console.print(Panel(
         Markdown(rapport or "Tests exécutés."),
-        title=f"[bold {CLAUDE_GREEN}]🧪 Rapport des Tests ({dt}s)[/bold {CLAUDE_GREEN}]",
-        border_style=CLAUDE_GREEN,
+        title=f"[bold {RIOT_GREEN}]🧪 Rapport des Tests ({dt}s)[/bold {RIOT_GREEN}]",
+        border_style=RIOT_GREEN,
         box=ROUNDED,
     ))
     return rapport
@@ -293,7 +293,7 @@ def executer_testeur(mission: str, dossier_projet: Path, console: Console, rappo
 def executer_reviewer(mission: str, dossier_projet: Path, console: Console, plan: str = "", modifs: str = "", tests: str = "") -> str:
     """Sous-agent RIOT-Reviewer : Audit de sécurité, typage et verdict final."""
     conventions = _charger_conventions_projet(dossier_projet)
-    console.print(f"[bold {CLAUDE_CORAL}]▶ 🛡️ RIOT-Reviewer (Audit Sécurité & Validation finale)[/bold {CLAUDE_CORAL}]")
+    console.print(f"[bold {RIOT_CORAL}]▶ 🛡️ RIOT-Reviewer (Audit Sécurité & Validation finale)[/bold {RIOT_CORAL}]")
     prompt_reviewer = (
         "Tu es RIOT-Reviewer, auditeur senior de code et expert en cybersécurité.\n"
         f"Projet actif : {dossier_projet.name} (Chemin : {dossier_projet}).\n"
@@ -327,8 +327,8 @@ def executer_reviewer(mission: str, dossier_projet: Path, console: Console, plan
     console.print()
     console.print(Panel(
         Markdown(verdict or "Revue terminée."),
-        title=f"[bold {CLAUDE_CORAL}]🛡️ Verdict de l'Auditeur ({dt}s)[/bold {CLAUDE_CORAL}]",
-        border_style=CLAUDE_CORAL,
+        title=f"[bold {RIOT_CORAL}]🛡️ Verdict de l'Auditeur ({dt}s)[/bold {RIOT_CORAL}]",
+        border_style=RIOT_CORAL,
         box=ROUNDED,
     ))
     return verdict

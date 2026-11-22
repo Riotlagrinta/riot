@@ -1,4 +1,4 @@
-"""Outils de Rendu Visuel et Feedback par l'Image pour Claude RIOT Studio.
+"""Outils de Rendu Visuel et Feedback par l'Image pour RIOT Studio.
 
 Permet à l'IA d'observer et de critiquer le résultat réel de ses créations web :
 1. `capturer_page` : Captures PNG plein écran à deux échelles (Desktop 1440px et Mobile 390px).
@@ -145,7 +145,7 @@ def capturer_page(chemin_html: str, delai_ms: int = 1500) -> str:
             f"Fichier source : `{p}`\n"
         ]
         for nom_fic, label, w in sorties:
-            lien = f"/api/claude/document/telecharger?chemin={nom_fic}"
+            lien = f"/api/studio/document/telecharger?chemin={nom_fic}"
             lignes.append(f"- **Version {label.capitalize()} ({w}px) :** [{nom_fic}]({lien})")
             lignes.append(f"  ![{label}]({lien})\n")
 
@@ -226,7 +226,7 @@ def capturer_frames(chemin_html: str, instants_ms: str = "0,300,700,1200,2000") 
         x = 0
         for t, v in zip(instants, vignettes):
             planche.paste(v, (x, bandeau))
-            dessin.text((x + 8, 8), f"t = {t} ms", fill=(217, 119, 87))  # Claude Coral
+            dessin.text((x + 8, 8), f"t = {t} ms", fill=(217, 119, 87))  # RIOT Coral
             x += v.width + 8
 
         sortie = _nom(p, "planche_motion")
@@ -236,7 +236,7 @@ def capturer_frames(chemin_html: str, instants_ms: str = "0,300,700,1200,2000") 
         import shutil
         shutil.copy2(sortie, SORTIE_DOCS / sortie.name)
 
-        lien = f"/api/claude/document/telecharger?chemin={sortie.name}"
+        lien = f"/api/studio/document/telecharger?chemin={sortie.name}"
         return (
             f"### 🎞️ Planche de Chorégraphie Motion générée pour `{p.name}` :\n\n"
             f"- **Instants analysés :** {', '.join(f't={t}ms' for t in instants)}\n"

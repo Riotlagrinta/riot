@@ -541,7 +541,7 @@ export default function TabLayout() {{
 
 📄 **Composant :** `{nom_final}`  
 🚀 **Stack :** React Native 0.74+ • Expo Router v3 • TypeScript • Lucide Icons  
-📥 **Téléchargement direct :** [{nom_final}](/api/claude/document/telecharger?chemin={nom_final})
+📥 **Téléchargement direct :** [{nom_final}](/api/studio/document/telecharger?chemin={nom_final})
 
 ```tsx
 {code[:500]}...
@@ -647,7 +647,7 @@ def scaffolder_app_mobile_expo(nom_app: str, nom_bundle: str = "com.riot.mobilea
 
 📱 **Nom :** `{nom_app}` (`{nom_bundle}`)  
 📁 **Dossier local :** `{dossier_projet.resolve()}`  
-📦 **Archive Téléchargeable :** [{nom_zip} ({taille_ko} Ko)](/api/claude/document/telecharger?chemin={nom_zip})
+📦 **Archive Téléchargeable :** [{nom_zip} ({taille_ko} Ko)](/api/studio/document/telecharger?chemin={nom_zip})
 
 ### 📂 Structure Scaffolding :
 - `app/_layout.tsx` (Root Stack Navigation)

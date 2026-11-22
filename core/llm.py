@@ -1,9 +1,9 @@
 """Abstraction du modele de langage : le reste du code ignore quel provider tourne.
 
 Trois implementations, choisies par config.yaml (mode: groq | cloud/hybride | local) :
-  - GroqProvider    : API Groq (ultra-rapide, Llama 3.3 / GPT-OSS, rotation auto).
-  - ClaudeProvider  : API Anthropic (cloud, defaut).
-  - OllamaProvider  : Ollama en local (http://localhost:11434), 100% offline.
+  - GroqProvider      : API Groq (ultra-rapide, Llama 3.3 / GPT-OSS, rotation auto).
+  - AnthropicProvider : API Anthropic (cloud, defaut).
+  - OllamaProvider    : Ollama en local (http://localhost:11434), 100% offline.
 
 Tous exposent la meme methode `repondre(systeme, historique, outils)` et
 renvoient un objet a la forme d'une reponse Anthropic (.stop_reason + .content,
@@ -870,10 +870,10 @@ class CustomOpenAIProvider(ProviderLLM):
             return cascade_failover(systeme, historique, outils, visites, **kwargs)
 
 
-# --------------------------------------------------------------- Claude (cloud)
+# --------------------------------------------------------------- Anthropic (cloud)
 
-class ClaudeProvider(ProviderLLM):
-    nom = "Claude"
+class AnthropicProvider(ProviderLLM):
+    nom = "Anthropic"
 
     def __init__(self, modele=None):
         import anthropic
@@ -900,7 +900,7 @@ class ClaudeProvider(ProviderLLM):
             if u is not None:
                 from core import budget
                 budget.enregistrer(
-                    "Claude (Jarvis)", self.modele,
+                    "Anthropic (RIOT)", self.modele,
                     getattr(u, "input_tokens", 0) or 0,
                     getattr(u, "output_tokens", 0) or 0,
                     cache_read=getattr(u, "cache_read_input_tokens", 0) or 0,
@@ -1065,7 +1065,7 @@ def cascade_failover(systeme, historique, outils, visites: set, **kwargs):
             ("Gemini", GeminiProvider),
             ("OpenRouter", OpenRouterProvider),
             ("Custom", CustomOpenAIProvider),
-            ("Claude", ClaudeProvider),
+            ("Anthropic", AnthropicProvider),
         ]
     else:
         candidats = [
@@ -1074,7 +1074,7 @@ def cascade_failover(systeme, historique, outils, visites: set, **kwargs):
             ("Mistral", MistralProvider),
             ("OpenRouter", OpenRouterProvider),
             ("Custom", CustomOpenAIProvider),
-            ("Claude", ClaudeProvider),
+            ("Anthropic", AnthropicProvider),
         ]
     for nom, cls_prov in candidats:
         if nom in visites:
@@ -1134,10 +1134,10 @@ def llm():
         elif m == "local" or fournisseur == "ollama":
             _LLM = OllamaProvider()
         elif m == "qualite":
-            _LLM = ClaudeProvider(reglage("anthropic.modele_qualite",
+            _LLM = AnthropicProvider(reglage("anthropic.modele_qualite",
                                           "claude-sonnet-4-5"))
         else:                                    # hybride (defaut)
-            # Priorité aux clés configurées (Groq -> Mistral -> Gemini -> OpenRouter -> Custom -> Claude)
+            # Priorité aux clés configurées (Groq -> Mistral -> Gemini -> OpenRouter -> Custom -> Anthropic)
             if reglage("groq.cles", []) or reglage("groq.cle", ""):
                 _LLM = GroqProvider()
             elif reglage("mistral.cles", []) or reglage("mistral.cle", ""):
@@ -1149,7 +1149,7 @@ def llm():
             elif reglage("custom.base_url", "") or reglage("custom.cles", []) or reglage("custom.cle", ""):
                 _LLM = CustomOpenAIProvider()
             else:
-                _LLM = ClaudeProvider(reglage("anthropic.modele", "claude-haiku-4-5"))
+                _LLM = AnthropicProvider(reglage("anthropic.modele", "claude-haiku-4-5"))
 
         LOG.info("provider LLM : %s (mode %s, modele %s)",
                  _LLM.nom, m, getattr(_LLM, "modele", "-"))

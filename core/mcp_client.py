@@ -2,7 +2,7 @@
 
 Permet à RIOT et à ses sous-agents (Swarm, Coder, Trader) de se connecter
 à des serveurs MCP tiers (PostgreSQL, GitHub, Fetch, Filesystem, Brave Search, etc.)
-configurés dans mcp_servers.json (standard Claude Desktop / Cursor) et d'importer
+configurés dans mcp_servers.json (standard Client MCP Desktop / Cursor) et d'importer
 automatiquement leurs outils dans le registre de l'assistant.
 """
 import asyncio

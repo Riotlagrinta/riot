@@ -36,8 +36,8 @@ logs/
 # Profil navigateur persistant des reservations (cookies, sessions connectees)
 .profil_reservation/
 
-# Config locale de l'outil Claude Code (contient des chemins personnels)
-.claude/
+# Config locale de l'outil RIOT CLI (contient des chemins personnels)
+.riot/
 
 # Modeles de voix Piper : trop lourds pour GitHub, a retelecharger.
 # Voir README pour le lien de telechargement.
