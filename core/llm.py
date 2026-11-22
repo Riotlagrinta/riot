@@ -801,13 +801,16 @@ class CustomOpenAIProvider(ProviderLLM):
         derniere_erreur = None
         cles_a_tester = self.cles or ["no-key-required"]
         rotation_eff = self._rotation_adaptative(messages, tools, tache_hint=tache_hint)
+        tache_eff = tache_hint or classifier_tache_requete(messages=messages, tools=tools)
+        base_max_tok = int(reglage("custom.max_tokens", 4096))
+        max_tok_eff = max(8192, base_max_tok) if (tache_eff in ("code", "deep") and not str(self.nom).startswith("RIOT Engine")) else base_max_tok
         for cle_courante in cles_a_tester:
             for modele_courant in rotation_eff:
                 payload = {
                     "model": modele_courant,
                     "messages": messages,
                     "temperature": float(reglage("custom.temperature", 0.3)),
-                    "max_tokens": int(reglage("custom.max_tokens", 4096)),
+                    "max_tokens": max_tok_eff,
                 }
                 if tools:
                     payload["tools"] = tools
