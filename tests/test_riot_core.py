@@ -917,6 +917,135 @@ def test_sous_agents_modeles_et_continuite_inter_modeles(monkeypatch):
     assert "✓ Patch appliqué sur app.py" in compacte[0]["content"]
 
 
+def test_studio_tunnel_guard_and_mobile_terminal_confirmation(monkeypatch):
+    from core import auth, serveur
+    from tools import terminal
+
+    client = TestClient(serveur.app(), base_url="http://127.0.0.1:8790", client=("127.0.0.1", 50000))
+
+    # 1. Local direct Studio -> autorise
+    assert client.get("/api/claude/chats").status_code == 200
+
+    # 2. Tunnel distant sans session -> 401 sur API et page Studio
+    r_api = client.get(
+        "/api/claude/chats",
+        headers={"x-forwarded-for": "198.51.100.12", "host": "riot.trycloudflare.com"},
+    )
+    assert r_api.status_code == 401
+
+    r_page = client.get(
+        "/studio",
+        headers={"cf-connecting-ip": "198.51.100.12", "host": "riot.trycloudflare.com"},
+    )
+    assert r_page.status_code == 401
+
+    # 3. Tunnel distant avec session auth valide -> 200
+    monkeypatch.setattr(auth, "session_valide", lambda tok: tok == "tok_studio_valide")
+    r_auth = client.get(
+        "/api/claude/chats",
+        headers={
+            "x-forwarded-for": "198.51.100.12",
+            "host": "riot.trycloudflare.com",
+            "x-keranos-token": "tok_studio_valide",
+        },
+    )
+    assert r_auth.status_code == 200
+
+    # 4. Mobile terminal ne force plus confirme=True par defaut
+    appels = []
+
+    def _faux_exec(**kwargs):
+        appels.append(kwargs)
+        return "[CONFIRMATION_REQUISE] action dangereuse" if not kwargs.get("confirme") else "ok"
+
+    monkeypatch.setattr(terminal, "executer_terminal", _faux_exec)
+
+    r_term_def = client.post(
+        "/api/mobile/terminal",
+        headers={"x-keranos-token": "tok_studio_valide"},
+        json={"commande": "rm -rf /tmp/x"},
+    )
+    assert r_term_def.status_code == 200
+    assert appels[-1]["confirme"] is False
+
+    r_term_conf = client.post(
+        "/api/mobile/terminal",
+        headers={"x-keranos-token": "tok_studio_valide"},
+        json={"commande": "echo safe", "confirme": True},
+    )
+    assert r_term_conf.status_code == 200
+    assert appels[-1]["confirme"] is True
+
+
+def test_rendu_visuel_resout_projet_actif(tmp_path):
+    from core.cli import _SESSION_CTX
+    from tools import rendu_visuel
+
+    proj = tmp_path / "demo_visuel"
+    proj.mkdir()
+    page = proj / "index.html"
+    page.write_text("<h1>Hello</h1>", encoding="utf-8")
+
+    hors = tmp_path / "hors_projet.html"
+    hors.write_text("<h1>Secret</h1>", encoding="utf-8")
+
+    prev = _SESSION_CTX.get("projet_actif")
+    try:
+        _SESSION_CTX["projet_actif"] = proj
+        assert rendu_visuel._resoudre("index.html") == page.resolve()
+
+        import pytest
+        with pytest.raises(ValueError):
+            rendu_visuel._resoudre(str(hors))
+    finally:
+        _SESSION_CTX["projet_actif"] = prev
+
+
+def test_ide_terminal_timeout_et_agent_continuite(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from core import ide, serveur
+    from core.cli import _SESSION_CTX
+
+    proj = tmp_path / "ide_proj"
+    proj.mkdir()
+    (proj / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+    prev = _SESSION_CTX.get("projet_actif")
+    try:
+        _SESSION_CTX["projet_actif"] = proj
+        client = TestClient(serveur.app(), base_url="http://127.0.0.1:8790", client=("127.0.0.1", 50000))
+
+        # 1. Terminal timeout etendu (120s par defaut, borne 300s)
+        r_def = client.post("/api/ide/terminal", json={"commande": "python --version"})
+        assert r_def.status_code == 200 and r_def.json()["timeout_s"] == 120
+
+        r_max = client.post("/api/ide/terminal", json={"commande": "python --version", "timeout": 999})
+        assert r_max.status_code == 200 and r_max.json()["timeout_s"] == 300
+
+        # 2. Agent IDE : routage par mode + JournalContinuite + synthese apres tool
+        appels_llm = []
+
+        class _FakeLLM:
+            def repondre(self, systeme, hist, outils, **kwargs):
+                appels_llm.append({"systeme": systeme, "outils": len(outils), "tache_hint": kwargs.get("tache_hint")})
+                if len(appels_llm) == 1:
+                    return SimpleNamespace(
+                        content=[SimpleNamespace(type="tool_use", id="tu_1", name="lire_code", input={"fichier": "app.py"})]
+                    )
+                return SimpleNamespace(content=[SimpleNamespace(type="text", text="Analyse terminee.")])
+
+        monkeypatch.setattr(ide, "llm", lambda: _FakeLLM())
+        r_chat = client.post("/api/ide/chat", json={"message": "analyse app.py", "mode": "plan"})
+        assert r_chat.status_code == 200
+        assert "Analyse terminee." in r_chat.text
+        assert len(appels_llm) == 2
+        assert appels_llm[0]["tache_hint"] == "deep"
+        assert "JOURNAL DE CONTINUITÉ" in appels_llm[1]["systeme"]
+    finally:
+        _SESSION_CTX["projet_actif"] = prev
+
+
+
 
 
 

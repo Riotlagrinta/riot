@@ -756,6 +756,19 @@ def formater_fichiers_joints(fichiers: list) -> str:
 
 
 
+def _studio_autorise(request: Request) -> bool:
+    """Autorise RIOT Studio en local direct, ou a distance avec session Mobile/Auth valide."""
+    from core.panneau import _local_seulement
+    if _local_seulement(request) and not request.headers.get("cf-connecting-ip"):
+        return True
+    jeton = str(
+        request.headers.get("x-keranos-token")
+        or request.cookies.get("keranos_token")
+        or ""
+    ).strip()
+    return bool(jeton and auth.session_valide(jeton))
+
+
 def monter_routes(app):
 
 
@@ -777,6 +790,30 @@ def monter_routes(app):
 
 
         LOG.warning("Erreur chargement outils Claude: %s", e)
+
+
+
+    @app.middleware("http")
+    async def _garde_studio_http(request: Request, call_next):
+        chemin = request.url.path or ""
+        if chemin in ("/claude/manifest.json", "/claude/sw.js"):
+            return await call_next(request)
+        protege = chemin in ("/", "/studio", "/claude") or chemin.startswith(("/api/claude", "/captures"))
+        if protege and not _studio_autorise(request):
+            if chemin.startswith(("/api/claude", "/captures")):
+                return JSONResponse(
+                    {"ok": False, "erreur": "Authentification requise sur RIOT Studio (acces distant)."},
+                    status_code=401,
+                )
+            return HTMLResponse(
+                "<!doctype html><html lang='fr'><body style='background:#0B0C0E;color:#F3F4F6;font-family:sans-serif;padding:40px;'>"
+                "<h2>RIOT Studio protégé</h2>"
+                "<p>L'accès à distance via tunnel nécessite une session authentifiée.</p>"
+                "<p><a href='/mobile' style='color:#D97757;'>Se connecter via RIOT Mobile &rarr;</a></p>"
+                "</body></html>",
+                status_code=401,
+            )
+        return await call_next(request)
 
 
 

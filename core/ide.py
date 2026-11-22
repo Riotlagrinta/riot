@@ -604,6 +604,11 @@ def monter_routes(app) -> None:
         if not commande:
             return JSONResponse({"ok": False, "erreur": "Commande vide."}, status_code=400)
         projet = _projet_courant()
+        try:
+            req_timeout = int((body or {}).get("timeout", 120))
+        except Exception:
+            req_timeout = 120
+        timeout_s = max(5, min(300, req_timeout))
         t0 = time.time()
         try:
             proc = subprocess.run(
@@ -614,7 +619,7 @@ def monter_routes(app) -> None:
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                timeout=25,
+                timeout=timeout_s,
             )
             return {
                 "ok": proc.returncode == 0,
@@ -623,9 +628,10 @@ def monter_routes(app) -> None:
                 "stderr": proc.stderr[-6000:],
                 "duree_ms": int((time.time() - t0) * 1000),
                 "cwd": str(projet),
+                "timeout_s": timeout_s,
             }
         except subprocess.TimeoutExpired:
-            return JSONResponse({"ok": False, "erreur": "Timeout (25s depassees)."}, status_code=408)
+            return JSONResponse({"ok": False, "erreur": f"Timeout ({timeout_s}s depassees)."}, status_code=408)
         except Exception as e:
             return JSONResponse({"ok": False, "erreur": str(e)}, status_code=500)
 
@@ -708,10 +714,19 @@ def monter_routes(app) -> None:
                         hist.append({"role": h["role"], "content": str(h["content"])[:4000]})
                 hist.append({"role": "user", "content": message})
 
+                from core.model_router import JournalContinuite
+
+                mode_hints = {"ask": "fast", "plan": "deep", "code": "code", "swarm": "code"}
+                tache_hint = mode_hints.get(mode, "code")
+                journal = JournalContinuite(objectif=message, dossier=str(projet))
+
                 texte_final = ""
+                appels_vus: Dict[str, int] = {}
+                boucle_epuisee = False
                 for tour in range(8):
                     _emit({"type": "step", "label": f"Reflexion agent (etape {tour + 1})..."})
-                    rep = llm().repondre(systeme, hist, outils_schemas)
+                    systeme_tour = systeme + journal.rendre_bloc()
+                    rep = llm().repondre(systeme_tour, hist, outils_schemas, tache_hint=tache_hint)
                     textes = [b.text for b in rep.content if getattr(b, "type", None) == "text" and b.text]
                     appels = [b for b in rep.content if getattr(b, "type", None) == "tool_use"]
                     if textes:
@@ -721,9 +736,19 @@ def monter_routes(app) -> None:
 
                     hist.append({"role": "assistant", "content": rep.content})
                     res_blocs = []
+                    boucle_repetee = False
                     for appel in appels:
                         nom = appel.name
                         args = appel.input or {}
+                        sig = f"{nom}:{json.dumps(args, sort_keys=True, ensure_ascii=False, default=str)}"
+                        appels_vus[sig] = appels_vus.get(sig, 0) + 1
+                        if appels_vus[sig] > 2:
+                            out_str = f"[GARDE-BOUCLE] Outil '{nom}' deja appele {appels_vus[sig] - 1} fois avec les memes arguments. Changez d'approche ou concluez."
+                            boucle_repetee = True
+                            _emit({"type": "tool", "statut": "done", "nom": nom, "args": args, "extrait": out_str})
+                            res_blocs.append({"type": "tool_result", "tool_use_id": appel.id, "content": out_str})
+                            continue
+
                         _emit({"type": "tool", "statut": "running", "nom": nom, "args": args})
 
                         if review_mode and nom in ("ecrire_code", "patcher_code") and isinstance(args, dict):
@@ -753,6 +778,7 @@ def monter_routes(app) -> None:
                                 if ch:
                                     _emit({"type": "file_changed", "chemin": str(ch)})
 
+                        journal.enregistrer_appel(nom, args if isinstance(args, dict) else {}, out_str)
                         _emit({
                             "type": "tool",
                             "statut": "done",
@@ -764,6 +790,21 @@ def monter_routes(app) -> None:
                             _emit({"type": "artifact", "kind": "image", "detail": out_str})
                         res_blocs.append({"type": "tool_result", "tool_use_id": appel.id, "content": out_str[:6000]})
                     hist.append({"role": "user", "content": res_blocs})
+                    if boucle_repetee or tour == 7:
+                        boucle_epuisee = True
+                        if boucle_repetee:
+                            break
+
+                if boucle_epuisee and not texte_final.strip():
+                    _emit({"type": "step", "label": "Synthese finale de l'agent..."})
+                    hist.append({
+                        "role": "user",
+                        "content": "Fais maintenant une synthese claire et concise de ce qui a ete accompli, des fichiers touches et des eventuelles etapes restantes.",
+                    })
+                    rep_fin = llm().repondre(systeme + journal.rendre_bloc(), hist, [], tache_hint=tache_hint)
+                    textes_fin = [b.text for b in rep_fin.content if getattr(b, "type", None) == "text" and b.text]
+                    if textes_fin:
+                        texte_final = "\n".join(textes_fin)
 
                 _emit({"type": "done", "texte": texte_final or "Tache terminee."})
                 if texte_final:

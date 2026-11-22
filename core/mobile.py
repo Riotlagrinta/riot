@@ -478,6 +478,7 @@ def monter_routes(app):
         shell = str(body.get("shell", "powershell")).strip()
         cwd = str(body.get("cwd", "")).strip()
         timeout = int(body.get("timeout", 30))
+        confirme = bool(body.get("confirme", False))
 
         auth.audit("TERMINAL_MANUEL", _ip_client(request), commande)
         from tools import terminal
@@ -487,7 +488,7 @@ def monter_routes(app):
             shell=shell,
             cwd=cwd,
             timeout=timeout,
-            confirme=True,
+            confirme=confirme,
         )
         return {"ok": True, "commande": commande, "sortie": sortie}
 
@@ -690,10 +691,11 @@ def monter_routes(app):
                     shell = str(data.get("shell", "powershell")).strip()
                     cwd = str(data.get("cwd", "")).strip()
                     timeout = int(data.get("timeout", 30))
+                    confirme = bool(data.get("confirme", False))
                     if cmd:
                         auth.audit("WS_TERMINAL", websocket.client.host if websocket.client else "-", cmd)
                         from tools import terminal
-                        res = await asyncio.to_thread(terminal.executer_terminal, cmd, shell=shell, cwd=cwd, timeout=timeout, confirme=True)
+                        res = await asyncio.to_thread(terminal.executer_terminal, cmd, shell=shell, cwd=cwd, timeout=timeout, confirme=confirme)
                         await websocket.send_json({"type": "terminal_result", "commande": cmd, "sortie": res})
 
                 elif t == "etude_sync":

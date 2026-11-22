@@ -26,11 +26,11 @@
       "ide-cm-host", "ide-fallback-host", "ide-gutter", "ide-editor",
       "ide-preview-wrap", "ide-diff-wrap", "ide-diff-title", "ide-diff-body",
       "ide-diff-close", "ide-btn-revert", "ide-btn-preview", "ide-btn-diff", "ide-btn-save", "ide-btn-term-toggle",
-      "ide-patch-bar", "ide-patch-file", "ide-patch-stats", "ide-patch-accept", "ide-patch-reject",
+      "ide-patch-bar", "ide-patch-file", "ide-patch-stats", "ide-patch-next", "ide-patch-accept", "ide-patch-reject",
       "ide-terminal-panel", "ide-term-cwd", "ide-term-output", "ide-term-form",
       "ide-term-input", "ide-term-clear", "ide-agent-feed", "ide-agent-form",
       "ide-agent-input", "ide-agent-send", "ide-attach-active", "ide-active-file-chip",
-      "ide-review-mode", "ide-grill-me", "ide-pending-count",
+      "ide-review-mode", "ide-grill-me", "ide-pending-count", "ide-agent-clear",
       "ide-quickopen-modal", "ide-quickopen-input", "ide-quickopen-list",
       "ide-folder-modal", "ide-folder-close", "ide-folder-cancel", "ide-folder-roots",
       "ide-folder-up", "ide-folder-path", "ide-folder-go", "ide-folder-os",
@@ -133,6 +133,7 @@
     var n = state.pendingPatches.length;
     els["ide-pending-count"].textContent = n + (n > 1 ? " patches" : " patch");
     els["ide-pending-count"].classList.toggle("hidden", n === 0);
+    if (els["ide-patch-next"]) els["ide-patch-next"].classList.toggle("hidden", n <= 1);
 
     var p = state.pendingPatches.find(function (x) { return x.id === state.activePatchId; }) || state.pendingPatches[0];
     if (!p) {
@@ -253,6 +254,7 @@
     tab.dirty = false;
     tab.diff = d.diff || "(aucune différence)";
     renderTabs();
+    els["ide-breadcrumb"].textContent = tab.path + " · " + tab.content.split("\n").length + " lignes · ✓ Enregistré";
     loadTree();
   }
 
@@ -339,6 +341,14 @@
     }
     if (d.custom_base_url) els["ide-cfg-baseurl"].value = d.custom_base_url;
     await loadTree();
+    try {
+      var rp = await fetch("/api/ide/patches");
+      var dp = await rp.json();
+      if (dp && dp.ok && Array.isArray(dp.patches) && dp.patches.length > 0) {
+        state.pendingPatches = dp.patches;
+        renderPendingPatches();
+      }
+    } catch (_) {}
   }
 
   function appendAgentMsg(role, text, extraHtml) {
@@ -733,7 +743,26 @@
       renderPendingPatches();
     });
 
-    els["ide-pending-count"].addEventListener("click", renderPendingPatches);
+    function cycleNextPendingPatch() {
+      if (state.pendingPatches.length <= 1) {
+        renderPendingPatches();
+        return;
+      }
+      var idx = state.pendingPatches.findIndex(function (x) { return x.id === state.activePatchId; });
+      var next = state.pendingPatches[(idx + 1) % state.pendingPatches.length];
+      if (next) state.activePatchId = next.id;
+      renderPendingPatches();
+    }
+
+    if (els["ide-patch-next"]) els["ide-patch-next"].addEventListener("click", cycleNextPendingPatch);
+    els["ide-pending-count"].addEventListener("click", cycleNextPendingPatch);
+    if (els["ide-agent-clear"]) {
+      els["ide-agent-clear"].addEventListener("click", function () {
+        state.history = [];
+        els["ide-agent-feed"].innerHTML = "";
+        appendAgentMsg("system", "Conversation réinitialisée. Prêt sur le projet actif.");
+      });
+    }
     els["ide-btn-term-toggle"].addEventListener("click", function () { els["ide-terminal-panel"].classList.toggle("hidden"); });
     els["ide-term-clear"].addEventListener("click", function () { els["ide-term-output"].textContent = ""; });
     els["ide-term-form"].addEventListener("submit", async function (ev) {
@@ -741,15 +770,27 @@
       var cmd = (els["ide-term-input"].value || "").trim();
       if (!cmd) return;
       els["ide-term-input"].value = "";
+      els["ide-term-input"].disabled = true;
       els["ide-term-output"].textContent += "\n$ " + cmd + "\n";
-      var r = await fetch("/api/ide/terminal", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ commande: cmd })
-      });
-      var d = await r.json();
-      els["ide-term-output"].textContent += (d.stdout || "") + (d.stderr ? "\n[stderr]\n" + d.stderr : "") + "\n(exit " + (d.returncode ?? "?") + " · " + (d.duree_ms || 0) + " ms)\n";
-      els["ide-term-output"].scrollTop = els["ide-term-output"].scrollHeight;
+      try {
+        var r = await fetch("/api/ide/terminal", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ commande: cmd, timeout: 120 })
+        });
+        var d = await r.json();
+        if (!r.ok && d && d.erreur) {
+          els["ide-term-output"].textContent += "[erreur] " + d.erreur + "\n";
+        } else {
+          els["ide-term-output"].textContent += (d.stdout || "") + (d.stderr ? "\n[stderr]\n" + d.stderr : "") + "\n(exit " + (d.returncode ?? "?") + " · " + (d.duree_ms || 0) + " ms)\n";
+        }
+      } catch (e) {
+        els["ide-term-output"].textContent += "[erreur] " + e.message + "\n";
+      } finally {
+        els["ide-term-input"].disabled = false;
+        els["ide-term-input"].focus();
+        els["ide-term-output"].scrollTop = els["ide-term-output"].scrollHeight;
+      }
     });
 
     els["ide-search-form"].addEventListener("submit", async function (ev) {

@@ -22,28 +22,46 @@ SORTIE_CAPTURES.mkdir(parents=True, exist_ok=True)
 SORTIE_DOCS.mkdir(parents=True, exist_ok=True)
 
 
+def _projet_actif_resolu() -> Path | None:
+    try:
+        brut = _SESSION_CTX.get("projet_actif")
+        if brut:
+            p = Path(brut).resolve()
+            if p.exists() and p.is_dir():
+                return p
+    except Exception:
+        pass
+    return None
+
+
 def _resoudre(chemin: str) -> Path:
-    """Résout le chemin d'un fichier HTML en prévenant les fuites d'arborescence."""
+    """Résout le chemin d'un fichier HTML en autorisant _RACINE et le projet actif."""
+    projet_actif = _projet_actif_resolu()
     c = Path(chemin)
     if c.is_absolute():
         p = c.resolve()
     else:
-        # Chercher d'abord dans _RACINE, puis dans output_documents, puis dans motion design
-        candidats = [
+        # Chercher dans le projet actif d'abord, puis dans _RACINE et dossiers internes
+        candidats = []
+        if projet_actif is not None:
+            candidats.append(projet_actif / c)
+        candidats.extend([
             _RACINE / c,
             SORTIE_DOCS / c,
             _RACINE / "output_products" / c,
             _RACINE / "skills" / "creation-motion" / c,
-        ]
+        ])
         p = None
         for cand in candidats:
             if cand.exists() and cand.is_file():
                 p = cand.resolve()
                 break
         if not p:
-            p = (_RACINE / c).resolve()
+            base = projet_actif if projet_actif is not None else _RACINE
+            p = (base / c).resolve()
 
-    if not p.is_relative_to(_RACINE):
+    autorise = p.is_relative_to(_RACINE) or (projet_actif is not None and p.is_relative_to(projet_actif))
+    if not autorise:
         raise ValueError(f"Accès refusé : `{chemin}` est hors du projet.")
     if not p.is_file():
         raise FileNotFoundError(f"Fichier HTML introuvable : `{p}`")

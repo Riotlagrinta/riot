@@ -103,6 +103,7 @@
           <span id="ide-patch-stats" class="ide-patch-stats"></span>
         </div>
         <div class="ide-patch-actions">
+          <button type="button" id="ide-patch-next" class="ide-btn-sm hidden" title="Patch en attente suivant">Suivant ▸</button>
           <button type="button" id="ide-patch-reject" class="ide-btn-sm ide-btn-danger">Rejeter</button>
           <button type="button" id="ide-patch-accept" class="ide-btn-sm ide-btn-ok">Accepter &amp; Écrire</button>
         </div>
@@ -178,7 +179,8 @@
           <input type="checkbox" id="ide-grill-me" />
           <span>Clarifier avant d'agir (grill-me)</span>
         </label>
-        <span id="ide-pending-count" class="ide-pending-pill hidden">0 patch</span>
+        <span id="ide-pending-count" class="ide-pending-pill hidden" title="Cliquer pour passer au patch suivant">0 patch</span>
+        <button type="button" id="ide-agent-clear" class="ide-btn-sm" title="Réinitialiser la conversation agent">Effacer</button>
       </div>
 
       <div id="ide-agent-feed" class="ide-agent-feed">
