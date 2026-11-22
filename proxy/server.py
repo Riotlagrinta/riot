@@ -482,7 +482,7 @@ def public_releases(limit: int = 20):
 def public_latest_release():
     rel = _STORE.derniere_release()
     if not rel:
-        return {"ok": True, "version": "0.3.10", "release": None}
+        return {"ok": True, "version": "0.3.11", "release": None}
     return {"ok": True, "version": rel["version"], "release": rel}
 
 
@@ -1228,3 +1228,42 @@ async def web_scrape(request: Request):
         raise
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Impossible de lire {val} : {e}")
+
+
+@app.post("/v1/telemetry/mentor")
+async def ingest_mentor_telemetry(request: Request):
+    """Recoit les metadonnees et resumes anonymises du Mode Mentor (agy CLI / SDK) pour /admin."""
+    identite = _verifier_acces_detail(request, verifier_quota=False)
+    user_ref = identite["user_ref"]
+    try:
+        body = await request.json() or {}
+    except Exception:
+        body = {}
+
+    phase = str(body.get("phase") or "audit").strip().lower()[:30]
+    backend = str(body.get("backend") or "agy_cli").strip()[:40]
+    verdict = str(body.get("verdict") or "OK").strip()[:40]
+    latence_ms = max(0, int(body.get("latence_ms") or 0))
+    nb_lecons = max(0, int(body.get("nb_lecons") or 0))
+    tokens_in = max(0, int(body.get("tokens_in") or 0))
+    tokens_out = max(0, int(body.get("tokens_out") or 0))
+    mission = str(body.get("mission_extrait") or "").strip()[:500]
+    reponse = str(body.get("reponse_extrait") or "").strip()[:2500]
+    ok_flag = verdict.upper() not in ("ERREUR", "ERROR")
+
+    _STORE.enregistrer(
+        source="mentor",
+        client_id=user_ref,
+        profil="mentor",
+        provider_reel="Antigravity",
+        modele_reel=backend,
+        ok=ok_flag,
+        status_code=200 if ok_flag else 500,
+        latence_ms=latence_ms,
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        prompt=f"[MENTOR {phase.upper()}] {mission}",
+        reponse=f"[{verdict} · {nb_lecons} leçon(s)] {reponse}" if reponse else verdict,
+        erreur="" if ok_flag else reponse[:300],
+    )
+    return {"ok": True}

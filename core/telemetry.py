@@ -232,6 +232,18 @@ class TelemetryStore:
                             ON CONFLICT (version) DO NOTHING
                             """
                         )
+                        pconn.execute(
+                            """
+                            INSERT INTO releases (version, titre, notes, commande)
+                            VALUES (
+                                '0.3.11',
+                                'RIOT v0.3.11 — Télémétrie anonymisée Mentor Antigravity (`agy` CLI / SDK) dans /admin',
+                                E'• Nouveau endpoint proxy `POST /v1/telemetry/mentor` journalisant les verdicts Mentor (`APPROUVE` / `CORRIGE` / `ERREURS`), directives, latences et leçons distillées\\n• Anonymisation automatique des chemins locaux et secrets avant envoi asynchrone (`mentor.telemetrie`)\\n• Visibilité directe dans le cockpit `/admin` du portail',
+                                'npm install -g @riotlagrinta/riot@latest'
+                            )
+                            ON CONFLICT (version) DO NOTHING
+                            """
+                        )
                 self._pg_ready = True
                 return
             except Exception as e:
@@ -282,11 +294,11 @@ class TelemetryStore:
                         "INSERT INTO releases (ts, version, titre, notes, commande) VALUES (?, ?, ?, ?, ?)",
                         (
                             time.time(),
-                            "0.3.10",
-                            "RIOT v0.3.10 — Mentor Antigravity (`agy` CLI Google AI Pro & SDK) + Playbook Public",
-                            "• Tout utilisateur connecté dans Antigravity IDE / CLI (`agy`, abonnement Google AI Pro) ou via `[mentor]` + `GEMINI_API_KEY` peut activer `/mentor on` et `🎓 Mentor AGY`\n"
-                            "• Mode Mentor 2 passes (Pré-directives À faire/À éviter + Post-audit & distillation en mémoire FTS5)\n"
-                            "• Auto-import du Playbook public curé (`data/riot_playbook_public.json`) et panneau `🧠 Playbook`",
+                            "0.3.11",
+                            "RIOT v0.3.11 — Télémétrie anonymisée Mentor Antigravity (`agy` CLI / SDK) dans /admin",
+                            "• Nouveau endpoint proxy `POST /v1/telemetry/mentor` journalisant les verdicts Mentor (`APPROUVE` / `CORRIGE` / `ERREURS`), directives, latences et leçons distillées\n"
+                            "• Anonymisation automatique des chemins locaux et secrets avant envoi asynchrone (`mentor.telemetrie`)\n"
+                            "• Visibilité directe dans le cockpit `/admin` du portail",
                             "npm install -g @riotlagrinta/riot@latest",
                         ),
                     )

@@ -142,7 +142,7 @@ def test_spiral_icons_and_creator_monitoring(monkeypatch, tmp_path):
     assert pc.get("/status/public").status_code == 200
     assert "prompt" not in pc.get("/status/public").text
     assert pc.get("/releases").status_code == 200
-    assert pc.get("/releases/latest").json()["version"] == "0.3.10"
+    assert pc.get("/releases/latest").json()["version"] == "0.3.11"
     assert pc.get("/admin/metrics").status_code == 401
     assert pc.get("/admin/metrics", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
     assert pc.get("/admin/logs", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
@@ -1297,8 +1297,40 @@ def test_mentor_antigravity_gouvernance_memoire_et_playbook(monkeypatch, tmp_pat
         })
         monkeypatch.setattr(subprocess, "run", lambda *a, **kw: SimpleNamespace(returncode=0, stdout=payload_agy, stderr=""))
         monkeypatch.setattr(mentor, "_trouver_binaire_agy", lambda: "agy.exe")
-        dirs_cli = mentor._executer_via_agy_cli("agy.exe", "sys", "msg", tmp_path, mentor.DirectivesMentor, enable_edit=False)
+        dirs_cli, meta_cli = mentor._executer_via_agy_cli("agy.exe", "sys", "msg", tmp_path, mentor.DirectivesMentor, enable_edit=False)
         assert dirs_cli is not None and "Valider schema Pydantic" in dirs_cli.a_faire
+        assert meta_cli["backend"] == "agy_cli"
+
+        # 8. Endpoint telemetrie Mentor sur proxy -> visible dans /admin/logs
+        from core.telemetry import TelemetryStore
+        from proxy import server as proxy_srv
+
+        store_m = TelemetryStore(db_path=tmp_path / "proxy_mentor_tlm.db")
+        monkeypatch.setattr(proxy_srv, "_STORE", store_m)
+        monkeypatch.setenv("RIOT_ADMIN_TOKEN", "adm_mentor_tok")
+        monkeypatch.setattr(
+            proxy_srv,
+            "_verifier_acces_detail",
+            lambda req, verifier_quota=True: {"user_ref": "ami_test", "plan": "free", "daily_quota": 0, "tokens_in": 0},
+        )
+        pc_m = TestClient(proxy_srv.app)
+        r_tlm = pc_m.post(
+            "/v1/telemetry/mentor",
+            json={
+                "phase": "audit",
+                "backend": "agy_cli",
+                "verdict": "CORRIGE",
+                "latence_ms": 1820,
+                "nb_lecons": 2,
+                "tokens_in": 1200,
+                "tokens_out": 240,
+                "mission_extrait": "Corriger auth.py",
+                "reponse_extrait": "JWT valide | Leçons: Refuser cle vide",
+            },
+        )
+        assert r_tlm.status_code == 200 and r_tlm.json()["ok"] is True
+        logs_adm = pc_m.get("/admin/logs", headers={"X-Admin-Token": "adm_mentor_tok"}).json()["logs"]
+        assert any(l["source"] == "mentor" and "CORRIGE" in l["reponse"] and "Refuser cle vide" in l["reponse"] for l in logs_adm)
     finally:
         memoire.reinitialiser_connexion()
 

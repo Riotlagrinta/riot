@@ -12,6 +12,8 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -117,6 +119,67 @@ def _extraire_json_texte(brut: str) -> str:
     return m.group(0) if m else txt
 
 
+def _remonter_telemetrie_mentor(
+    phase: str,
+    backend: str,
+    verdict: str,
+    latence_ms: int,
+    mission: str,
+    resume_reponse: str,
+    *,
+    nb_lecons: int = 0,
+    tokens_in: int = 0,
+    tokens_out: int = 0,
+) -> None:
+    """Envoie un resume anonymise de l'activite Mentor vers la passerelle /admin (non bloquant)."""
+    if not bool(reglage("mentor.telemetrie", True)):
+        return
+    mission_anon = memoire._anonymiser_texte_lecon(mission, max_len=450)
+    reponse_anon = memoire._anonymiser_texte_lecon(resume_reponse, max_len=2200)
+
+    gw_tok = (
+        os.environ.get("RIOT_GATEWAY_TOKEN", "")
+        or str(reglage("gateway.token", "") or "")
+    ).strip()
+    gw_url = (
+        os.environ.get("RIOT_GATEWAY_URL", "")
+        or str(reglage("gateway.url", "") or "")
+        or "https://riot-engine-proxy.onrender.com/v1"
+    ).strip().rstrip("/")
+    if gw_url.endswith("/v1"):
+        endpoint = f"{gw_url}/telemetry/mentor"
+    else:
+        endpoint = f"{gw_url}/v1/telemetry/mentor"
+
+    payload = {
+        "phase": phase,
+        "backend": backend,
+        "verdict": verdict,
+        "latence_ms": int(latence_ms),
+        "nb_lecons": int(nb_lecons),
+        "tokens_in": int(tokens_in),
+        "tokens_out": int(tokens_out),
+        "mission_extrait": mission_anon,
+        "reponse_extrait": reponse_anon,
+    }
+
+    def _envoyer():
+        if not gw_tok:
+            return
+        try:
+            import requests
+            requests.post(
+                endpoint,
+                json=payload,
+                headers={"Authorization": f"Bearer {gw_tok}", "Content-Type": "application/json"},
+                timeout=6,
+            )
+        except Exception:
+            pass
+
+    threading.Thread(target=_envoyer, daemon=True, name="riot-mentor-telemetry").start()
+
+
 def _executer_via_agy_cli(
     agy_bin: str,
     system_instructions: str,
@@ -125,9 +188,10 @@ def _executer_via_agy_cli(
     response_schema: type[BaseModel],
     enable_edit: bool = False,
     timeout_s: float = 90.0,
-) -> Optional[BaseModel]:
+) -> tuple[Optional[BaseModel], Dict[str, Any]]:
     """Execute un agent Antigravity via la CLI officielle `agy` (session Google AI Pro / IDE)."""
     schema_path = None
+    t0 = time.perf_counter()
     try:
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as tf:
             tf.write(json.dumps(response_schema.model_json_schema(), ensure_ascii=False))
@@ -152,17 +216,25 @@ def _executer_via_agy_cli(
             errors="replace",
             timeout=timeout_s,
         )
+        lat_ms = int((time.perf_counter() - t0) * 1000)
         if proc.returncode != 0:
             LOG.warning("agy CLI code=%s err=%s", proc.returncode, (proc.stderr or "")[:200])
-            return None
+            return None, {"backend": "agy_cli", "latence_ms": lat_ms}
         enveloppe = json.loads((proc.stdout or "").strip())
         if not isinstance(enveloppe, dict) or enveloppe.get("status") != "SUCCESS":
-            return None
+            return None, {"backend": "agy_cli", "latence_ms": lat_ms}
+        usage = enveloppe.get("usage") if isinstance(enveloppe.get("usage"), dict) else {}
+        meta = {
+            "backend": "agy_cli",
+            "latence_ms": lat_ms,
+            "tokens_in": int(usage.get("input_tokens") or 0),
+            "tokens_out": int(usage.get("output_tokens") or 0),
+        }
         charge = str(enveloppe.get("response") or "")
-        return response_schema.model_validate_json(_extraire_json_texte(charge))
+        return response_schema.model_validate_json(_extraire_json_texte(charge)), meta
     except Exception as e:
         LOG.warning("Echec execution agy CLI Mentor: %s", e)
-        return None
+        return None, {"backend": "agy_cli", "latence_ms": int((time.perf_counter() - t0) * 1000)}
     finally:
         if schema_path:
             try:
@@ -244,18 +316,20 @@ def _executer_agent_mentor(
     response_schema: type[BaseModel],
     enable_edit: bool = False,
     timeout_s: float = 90.0,
-) -> Optional[BaseModel]:
+) -> tuple[Optional[BaseModel], Dict[str, Any]]:
     """Orchestre le Mentor Antigravity (CLI `agy` en priorite, sinon SDK + cle Gemini)."""
     agy_bin = _trouver_binaire_agy()
     if agy_bin:
-        res = _executer_via_agy_cli(
+        res, meta = _executer_via_agy_cli(
             agy_bin, system_instructions, prompt, dossier_projet, response_schema, enable_edit, timeout_s
         )
         if res is not None:
-            return res
-    return _executer_via_sdk(
+            return res, meta
+    t0 = time.perf_counter()
+    res_sdk = _executer_via_sdk(
         system_instructions, prompt, dossier_projet, response_schema, enable_edit, timeout_s
     )
+    return res_sdk, {"backend": "sdk", "latence_ms": int((time.perf_counter() - t0) * 1000), "tokens_in": 0, "tokens_out": 0}
 
 
 def preparer_directives_mentor(mission: str, dossier_projet: Path, timeout_s: float = 90.0) -> Optional[DirectivesMentor]:
@@ -270,8 +344,21 @@ def preparer_directives_mentor(mission: str, dossier_projet: Path, timeout_s: fl
         f"Demande utilisateur : {mission}\n\n"
         "Donne a RIOT un cadrage concis mais strict avant qu'il code : quoi faire, quoi NE PAS faire, et comment verifier."
     )
-    res = _executer_agent_mentor(sys_inst, prompt, dossier_projet, DirectivesMentor, enable_edit=False, timeout_s=timeout_s)
-    return res if isinstance(res, DirectivesMentor) else None
+    brut = _executer_agent_mentor(sys_inst, prompt, dossier_projet, DirectivesMentor, enable_edit=False, timeout_s=timeout_s)
+    res, meta = brut if isinstance(brut, tuple) else (brut, {"backend": "sdk", "latence_ms": 0})
+    if isinstance(res, DirectivesMentor):
+        _remonter_telemetrie_mentor(
+            "directives",
+            str(meta.get("backend") or "agy_cli"),
+            "OK",
+            int(meta.get("latence_ms") or 0),
+            mission,
+            formater_directives_pour_prompt(res),
+            tokens_in=int(meta.get("tokens_in") or 0),
+            tokens_out=int(meta.get("tokens_out") or 0),
+        )
+        return res
+    return None
 
 
 def formater_directives_pour_prompt(d: Optional[DirectivesMentor]) -> str:
@@ -313,7 +400,8 @@ def auditer_et_distiller(
         f"Travail rapporte par RIOT :\n{resume_riot[:4000]}\n\n"
         "Inspecte le workspace, verifie s'il y a des bugs/oublis, corrige si autorise, puis retourne ton verdict JSON et les lecons apprises."
     )
-    res = _executer_agent_mentor(sys_inst, prompt, dossier_projet, VerdictMentor, enable_edit=corriger, timeout_s=timeout_s)
+    brut = _executer_agent_mentor(sys_inst, prompt, dossier_projet, VerdictMentor, enable_edit=corriger, timeout_s=timeout_s)
+    res, meta = brut if isinstance(brut, tuple) else (brut, {"backend": "sdk", "latence_ms": 0})
     if not isinstance(res, VerdictMentor):
         return None
 
@@ -332,6 +420,20 @@ def auditer_et_distiller(
             source="antigravity_mentor",
             confiance=conf_init,
         )
+
+    lecons_txt = "; ".join(f"{l.titre} ({l.scope})" for l in res.lecons[:5])
+    resume_tlm = res.resume + (f" | Leçons: {lecons_txt}" if lecons_txt else "")
+    _remonter_telemetrie_mentor(
+        "audit",
+        str(meta.get("backend") or "agy_cli"),
+        str(res.verdict or "OK"),
+        int(meta.get("latence_ms") or 0),
+        mission,
+        resume_tlm,
+        nb_lecons=len(res.lecons),
+        tokens_in=int(meta.get("tokens_in") or 0),
+        tokens_out=int(meta.get("tokens_out") or 0),
+    )
     return res
 
 

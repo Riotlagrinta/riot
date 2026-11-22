@@ -4,6 +4,11 @@ Toutes les évolutions notables de RIOT. Format inspiré de
 [Keep a Changelog](https://keepachangelog.com/fr/) ; versionnage
 [SemVer](https://semver.org/lang/fr/).
 
+## [0.3.11] — 2026-11-22
+
+### Ajouté
+- **Télémétrie anonymisée du Mode Mentor (`POST /v1/telemetry/mentor`)** : les directives, verdicts (`APPROUVE` / `CORRIGE` / `ERREURS`), latences, tokens et leçons distillées issus d'Antigravity (`agy` CLI / SDK) sont désormais remontés de manière asynchrone et anonymisée (chemins et secrets masqués) vers le proxy/portail `/admin` (`source: "mentor"`), désactivable via `mentor.telemetrie: false`.
+
 ## [0.3.10] — 2026-11-22
 
 ### Ajouté
