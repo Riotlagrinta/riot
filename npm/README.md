@@ -5,9 +5,25 @@
 ## Installation & Démarrage
 
 ```bash
-npm install -g @riotlagrinta/riot
+npm install -g @riotlagrinta/riot@latest
+riot login
 riot
 ```
+
+### Mode Mentor Antigravity (Google AI Pro / IDE)
+
+Dans le terminal intégré d'**Antigravity IDE** (ou tout terminal où `agy` est connecté) :
+
+```bash
+npm install -g @riotlagrinta/riot@latest
+riot login
+riot
+# Puis dans RIOT :
+/mentor status
+/mentor on
+```
+
+*(Aucune `GEMINI_API_KEY` supplémentaire requise : RIOT détecte `agy` en priorité. En mode IDE `riot --ide`, cochez `🎓 Mentor AGY`.)*
 
 ## Modes & Commandes principales
 

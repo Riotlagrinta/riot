@@ -47,10 +47,26 @@ Le Mode Mentor branche RIOT à Antigravity en 2 passes bornées :
 2. **Après le travail de RIOT** : Antigravity vérifie les modifications, corrige si autorisé, et distille des leçons atomiques dans `~/.riot/riot_memory.db`.
 
 ### Option A — Via Antigravity IDE / CLI (`agy`) *(Recommandé : fonctionne directement avec votre abonnement Google AI Pro)*
-1. Ouvrez un terminal dans **Antigravity IDE** (ou vérifiez que `agy` est connecté à votre compte Google AI Pro).
-2. Lancez `riot` (ou `riot --ide`) dans votre projet.
-3. Activez **`/mentor on`** en CLI ou cochez **`🎓 Mentor AGY`** dans RIOT IDE.
-4. **Aucune `GEMINI_API_KEY` supplémentaire n'est requise** : RIOT détecte automatiquement `agy` en priorité.
+
+**Démarrage Express (3 étapes)** — dans le terminal intégré d'**Antigravity IDE** (ou tout terminal connecté à votre session Google AI Pro) :
+
+```bash
+# 1. Installer ou mettre à jour RIOT (v0.3.11+)
+npm install -g @riotlagrinta/riot@latest
+
+# 2. Connecter votre compte RIOT (indispensable pour la passerelle & le suivi)
+riot login
+
+# 3. Lancer RIOT et activer le Mode Mentor Antigravity
+riot
+# Puis dans RIOT :
+/mentor status
+/mentor on
+```
+
+- **Aucune `GEMINI_API_KEY` supplémentaire n'est requise** : RIOT détecte automatiquement `agy` en priorité.
+- En interface web (`riot --ide`), cochez simplement **`🎓 Mentor AGY`** dans le panneau Agent.
+- **Télémétrie anonymisée (opt-out)** : les résumés des directives, verdicts (`APPROUVE` / `CORRIGE` / `ERREURS`) et leçons distillées sont remontés de façon asynchrone et anonymisée (chemins locaux et secrets masqués) vers la passerelle. Pour désactiver cette remontée, ajoutez `mentor: { telemetrie: false }` dans `~/.riot/config.yaml`.
 
 ### Option B — Via le SDK Python (`[mentor]`) + `GEMINI_API_KEY`
 - Installez l'extra optionnel `pip install "riot[mentor]"` (ou `RIOT_EXTRAS=mentor`) et renseignez `GEMINI_API_KEY` (ou `gemini.cle` dans `config.yaml`).
