@@ -1,8 +1,29 @@
 # Changelog
 
-Toutes les évolutions notables de Jarvis. Format inspiré de
+Toutes les évolutions notables de RIOT. Format inspiré de
 [Keep a Changelog](https://keepachangelog.com/fr/) ; versionnage
 [SemVer](https://semver.org/lang/fr/).
+
+## [0.3.9] — 2026-11-22
+
+### Ajouté
+- **Application Desktop Windows (`desktop/`)** : Coque Electron unifiée (`IDE`, `Studio`, `Mobile`, `Réglages`), System Tray, raccourci global `Ctrl+Alt+R`, sélecteur de dossiers OS natif, mode serveur headless `riot --server`, mise à jour moteur 1-clic et génération d'installeurs NSIS & Portable Windows.
+- **Application Mobile Native (`mobile-app/`)** : Projet Expo Router / React Native TypeScript (`Agent`, `Cockpit`, `Terminal biométrique`, `Réglages`), appairage QR à usage unique généré localement (`segno`, `/api/mobile/pair/*`), stockage chiffré `expo-secure-store` et **Notifications Push Expo** (déclenchées sur fin `/swarm` & patches IDE).
+- **QR Code intégré** : Affichage direct dans RIOT Desktop (`📱 Mobile`) et dans `/panneau`.
+- **Benchmark RIOT (`scripts/benchmark_riot.py`)** : Mesures reproductibles locales & LLM live.
+
+### Sécurité & Qualité
+- Garde tunnel distant sur RIOT Studio (`core/studio_app.py`) bloquant tout accès non authentifié via proxy/Cloudflare.
+- Suppression du contournement `confirme=True` sur le terminal mobile (`core/mobile.py`).
+- Autorisation sécurisée du projet actif dans `tools/rendu_visuel.py`, continuité inter-modèles dans `core/ide.py`, timeout terminal étendu à 120s et refonte du sélecteur de dossiers IDE (récents persistants, fil d'Ariane, filtre, badge `.git`).
+- Suppression complète du branding hérité tiers au profit de **RIOT**.
+
+## [0.3.8] — 2026-11-22
+
+### Ajouté
+- Accès utilisateur 24h illimité (protection anti-rafale RPM conservée).
+- Routage dédié par sous-agent (`RIOT-Architect`, `RIOT-Engineer`, `RIOT-Tester`, `RIOT-Reviewer`, `RIOT-Trader`) et `JournalContinuite` inter-modèles.
+- Compatibilité native FreeLLMAPI Desktop (`127.0.0.1:31415/v1`) et `max_tokens` étendu jusqu'à 8 192 tokens en code.
 
 ## [1.0.0] — 2026-08-07
 

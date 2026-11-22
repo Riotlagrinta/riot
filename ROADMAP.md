@@ -45,6 +45,9 @@ Ce document est le tableau de bord officiel de **RIOT** (anciennement Kéranos).
 | **Étape 20** | **Scaffolding & Composants Mobile (React Native / Expo)** | **100% TERMINÉ** | Validé (React Native 0.74, Expo Router v3, Carte Géo-spatiale, Modal Mobile Money Togo, Starter ZIP, Zéro Erreur) |
 | **Étape 21** | **Veille & Scraping Sécurisé (Web & Crypto)** | **100% TERMINÉ** | Validé (Binance live direct, assainissement HTML anti-injections, Bulletins d'intelligence, Zéro Erreur) |
 | **Étape 22** | **Studio Motion Design & Feedback Visuel (Playwright & Timing)** | **100% TERMINÉ** | Validé (Playwright Chromium, Contact Sheets PNG, Divulgation progressive, 10 recettes, Zéro Erreur) |
+| **Étape 23** | **RIOT Desktop Windows (Electron `desktop/`)** | **100% TERMINÉ** | Validé (IDE + Studio + Mobile + Réglages, Tray, `Ctrl+Alt+R`, Installeur NSIS & Portable) |
+| **Étape 24** | **App Native Mobile (`mobile-app/` Expo) + Appairage QR + Push** | **100% TERMINÉ** | Validé (Expo Router TS strict, QR local `segno`, Biométrie Terminal, Push Expo Swarm/IDE) |
+| **Étape 25** | **Sécurité Studio/Mobile P0 & Benchmark (`benchmark_riot.py`)** | **100% TERMINÉ** | Validé (Garde tunnel Studio, `confirme=False` Mobile, Continuité IDE, 25/25 pytest) |
 
 ---
 
@@ -79,12 +82,11 @@ Sous-agent souverain sans filtre moral, motorisé par un LLM non censuré en loc
 1. **Terminal Cyberpunk Interactif** :
    * Lancement : `python riot.py` ou `riot`
    * Commandes disponibles : `/swarm`, `/architect`, `/engineer`, `/test`, `/review`, `/trade`, `/raw`, `/mcp`, `/app`, `/pc`, `/tokens`.
-2. **RIOT Studio Web & Desktop** :
-   * Lancement : `riot-app` ou `http://localhost:8790/studio`
-   * Ergonomie RIOT Studio Code : Panneau gauche (sélection de projet, historique, modes d'action), Panneau central (chat streaming, tool cards animées), Panneau droit (Artifacts syntaxés et explorateur de fichiers).
-3. **Application Tactile Mobile (PWA)** :
-   * Accès : `http://<IP_LOCAL>:8790/mobile`
-   * 4 espaces : Cockpit, Copilote vocal, Terminal shell, Tuteur RAG Étude.
+2. **RIOT Desktop Windows & Studio Web** :
+   * Lancement : `RIOT-Setup-0.3.9-win-x64.exe` / `riot --app` ou `http://localhost:8790/studio`
+   * Ergonomie unifiée Desktop : Barre multi-vues `IDE | Studio | Mobile | Réglages`, sélecteur de dossier natif, System Tray, QR d'appairage mobile et revue de diff colorée.
+3. **Application Mobile Native (`mobile-app/`) & PWA (`/mobile`)** :
+   * Client natif Android & iOS (Expo / React Native) avec appairage QR 5 min, terminal biométrique et notifications Push, plus repli Web PWA `http://<IP_LOCAL>:8790/mobile`.
 
 ---
 
@@ -92,9 +94,7 @@ Sous-agent souverain sans filtre moral, motorisé par un LLM non censuré en loc
 
 Pour valider l'intégrité complète de la plateforme :
 ```powershell
-.\.venv\Scripts\python scripts/tester_mobile.py
-.\.venv\Scripts\python scripts/tester_studio_web.py
-.\.venv\Scripts\python scripts/tester_raw_agent.py
-.\.venv\Scripts\python scripts/doctor.py
+.\.venv\Scripts\python.exe -m pytest tests/test_riot_core.py -v
+.\.venv\Scripts\python.exe scripts/benchmark_riot.py --live
 ```
-Résultat garanti : **100% des tests validés, 0 erreur.**
+Résultat garanti : **25/25 tests validés, 0 erreur.**

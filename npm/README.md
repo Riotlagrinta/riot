@@ -12,8 +12,10 @@ riot
 ## Modes & Commandes principales
 
 - `riot` : Terminal interactif multi-agents (`/swarm`, `/architect`, `/engineer`, `/test`, `/review`, `/trade`).
-- `riot --ide` *(ou `/ide`)* : **RIOT IDE** multi-panneaux (explorateur Git, CodeMirror, revue de diff Accepter/Rejeter avant écriture, panneau `🔌 MCP`, mode `grill-me`, terminal intégré, palette `Ctrl+P`).
-- `riot --app` *(ou `/studio`)* : **RIOT Studio** (interface web & application bureau + génération de maquettes/images).
+- `riot --ide` *(ou `/ide`)* : **RIOT IDE** multi-panneaux (explorateur Git, CodeMirror, revue de diff Accepter/Rejeter avant écriture, sélecteur de dossiers avec récents & fil d'Ariane, panneau `🔌 MCP`, terminal 120s, mode `grill-me`, palette `Ctrl+P`).
+- `riot --app` *(ou `/studio`)* : **RIOT Studio** (interface web sécurisée + génération de maquettes/images).
+- `riot --server` : Serveur backend headless (piloté par l'app bureau **RIOT Desktop Windows** avec System Tray, raccourci `Ctrl+Alt+R` & appairage QR).
+- **App Native Mobile (`mobile-app/`)** : Client Expo / React Native (Android & iOS) avec appairage QR à usage unique, terminal sécurisé par biométrie et **Notifications Push natives**.
 - `/memory [sync|forget <sujet>]` : **Mémoire persistante hybride** (`~/.riot/riot_memory.db` SQLite FTS5 + synchronisation Cloud Neon multi-postes + auto-extraction silencieuse).
 - `/mcp [catalog|add <slug> [cle]|reload]` : **Catalogue de 15 connecteurs MCP** prêts en 1 ligne (`context7`, `playwright`, `firecrawl`, `github`, `supabase`, `neon`, `postgres`, `notion`, `slack`, `stripe`...).
 - `/grill-me [on|off|<sujet>]` : **Cadrage actif** — pose 1 à 4 questions ciblées avec recommandations avant d'agir.

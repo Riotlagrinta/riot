@@ -70,12 +70,19 @@ Chaque sous-agent est piloté par un profil de modèle adapté à son rôle, tou
   - *Droite* : Explorateur de fichiers interactif et visionneuse d'Artifacts syntaxés.
 - **Persistance intégrale** : Base de données `riot_memory.db` en mode WAL avec recherche plein texte BM25 (FTS5). Les discussions et fichiers joints survivent à tous les redémarrages.
 
-### 2. Cockpit Tactile Mobile PWA (`http://localhost:8790/mobile`)
-- Interface Obsidian & Néon Cyan pour smartphone.
-- Télémétrie push continue (CPU, RAM, Disque, Réseau), reconnaissance vocale Web Speech API, terminal interactif et tuteur RAG de cours (`etude/`).
+### 2. Application Bureau Windows (`desktop/` — `RIOT Desktop`)
+- **Coque Windows Electron dédiée** (`RIOT-Setup` NSIS & `RIOT-Portable` x64) réunissant **IDE**, **Studio**, **Cockpit Mobile** et **Réglages** dans une seule fenêtre sombre.
+- **Intégration Windows native** : System Tray (réduction sans couper les tâches en cours), raccourci global **`Ctrl+Alt+R`**, sélecteur de dossiers natif relié à l'IDE, mise à jour moteur en 1 clic (`↻ Màj`) et modale **`📱 Mobile`** générant un QR Code localement (via `segno`).
 
-### 3. Terminal Cyberpunk CLI & RIOT IDE (`riot --ide`)
-- Lancement CLI : `riot` ou `python riot.py` — Lancement IDE : `riot --ide` ou `/ide`.
+### 3. Application Mobile Native (`mobile-app/` — Android & iOS) & Cockpit PWA (`http://localhost:8790/mobile`)
+- **App Native Expo / React Native** ([mobile-app/](mobile-app)) avec stockage chiffré (`expo-secure-store`), bascule automatique **LAN → Tunnel Cloudflare HTTPS**, streaming WebSocket temps réel, terminal protégé par **confirmation biométrique** (`expo-local-authentication`) et **Notifications Push natives** (`expo-notifications`) à la fin des pipelines Swarm et revues IDE.
+- **Appairage QR à usage unique** : `/api/mobile/pair/generer` (valable 5 min, SVG local) et `/api/mobile/pair/echanger`.
+- **Cockpit PWA** (`http://localhost:8790/mobile`) : télémétrie CPU/RAM/Disque, terminal, tunnel et tuteur RAG (`etude/`).
+
+### 4. Terminal Cyberpunk CLI & RIOT IDE (`riot --ide`)
+- Lancement CLI : `riot` ou `python riot.py` — Lancement IDE : `riot --ide` ou `/ide` — Serveur headless : `riot --server`.
+- **Sélection de dossiers fluide** : projets récents persistants (`~/.riot/ide_recent_projects.json`), fil d'Ariane cliquable, filtre instantané, création de dossier et badge `.git`.
+- **Sécurité renforcée** : garde d'accès tunnel sur RIOT Studio (`/` & `/api/studio/*`) et confirmation obligatoire (`confirme=False` par défaut) sur le terminal mobile.
 - **Mémoire Hybride & Auto-extraction** : SQLite FTS5 (`~/.riot/riot_memory.db`) synchronisé sur Neon PostgreSQL (`/memory`, `/memory sync`, `/memory forget <sujet>`).
 - **Accès Internet Anti-Hallucination** : `chercher_web` + `lire_page_web` avec sources vérifiées (Perplexity, Tavily, Firecrawl, Brave, DuckDuckGo, Wikipedia).
 - **15 Connecteurs MCP & Outils natifs** : `/mcp catalog`, `/mcp add <slug>` (`firecrawl`, `playwright`, `context7`, `github`, `neon`, `supabase`, `notion`, `stripe`...) + bouton `🔌 MCP` dans l'IDE + outils Git (`git_status`, `git_diff`, `git_log`), GitHub & API HTTP sécurisée.
@@ -89,6 +96,7 @@ Chaque sous-agent est piloté par un profil de modèle adapté à son rôle, tou
 ### Prérequis
 - Windows 11
 - Python 3.11+ (recommandé : environnement virtuel `.venv`)
+- Node.js 18+ *(pour le lanceur npm, RIOT Desktop ou `mobile-app`)*
 - *(Optionnel pour mode Raw)* : [Ollama](https://ollama.com/) avec modèle Dolphin installé.
 
 ### Lancement
@@ -97,20 +105,26 @@ Chaque sous-agent est piloté par un profil de modèle adapté à son rôle, tou
 npm install -g @riotlagrinta/riot@latest
 riot login
 
-# 1. Lancer la console interactive CLI / IDE / Studio
-riot          # CLI interactif
-riot --ide    # RIOT IDE Web (diff review, terminal, MCP)
-riot --app    # RIOT Studio Web (Port 8790)
+# 1. Lancer la console interactive CLI / IDE / Studio / Serveur
+riot            # CLI interactif
+riot --ide      # RIOT IDE Web (diff review, terminal 120s, MCP)
+riot --app      # RIOT Studio Web (Port 8790)
+riot --server   # Serveur backend headless (utilise par RIOT Desktop)
+
+# 2. Builder l'app Windows Desktop ou lancer l'app Mobile Expo
+cd desktop && npm install && npm run build:win
+cd mobile-app && npm install && npx expo start
 ```
 
 ---
 
-## 🧪 Diagnostic Zéro Erreur
+## 🧪 Diagnostic Zéro Erreur & Benchmark
 
-La plateforme applique une politique stricte de **Zéro Erreur**. Une suite de tests automatisés (`19+` tests d'intégration et de sécurité) valide la totalité des composants avant chaque déploiement :
+La plateforme applique une politique stricte de **Zéro Erreur**. Une suite de **25 tests automatisés** valide la totalité des composants avant chaque déploiement, complétée par un benchmark reproductible :
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/test_riot_core.py -v
+.\.venv\Scripts\python.exe scripts/benchmark_riot.py --live
 ```
 
 Résultats validés :
