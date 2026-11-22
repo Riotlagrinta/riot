@@ -1801,6 +1801,50 @@
       rafraichirBarreFichiers();
     }
 
+    function lireFichierImageDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const brut = ev.target.result;
+          const img = new Image();
+          img.onload = () => {
+            try {
+              const maxDim = 1280;
+              let w = img.naturalWidth || img.width;
+              let h = img.naturalHeight || img.height;
+              if (w > maxDim || h > maxDim) {
+                const ratio = Math.min(maxDim / w, maxDim / h);
+                w = Math.max(1, Math.round(w * ratio));
+                h = Math.max(1, Math.round(h * ratio));
+              }
+              const canvas = document.createElement("canvas");
+              canvas.width = w;
+              canvas.height = h;
+              const ctx = canvas.getContext("2d");
+              ctx.drawImage(img, 0, 0, w, h);
+              const mimeOut = file.type === "image/png" && file.size < 350_000 ? "image/png" : "image/jpeg";
+              resolve(canvas.toDataURL(mimeOut, 0.84));
+            } catch (_) {
+              resolve(brut);
+            }
+          };
+          img.onerror = () => resolve(brut);
+          img.src = brut;
+        };
+        reader.onerror = (e) => reject(e);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function lireFichierDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = (e) => reject(e);
+        reader.readAsDataURL(file);
+      });
+    }
+
     function lireFichierTexte(file) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -1810,21 +1854,53 @@
       });
     }
 
+    function estFichierImage(file) {
+      const t = (file.type || "").toLowerCase();
+      if (t.startsWith("image/")) return true;
+      return /\.(png|jpe?g|webp|gif)$/i.test(file.name || "");
+    }
+
+    function estFichierBinaireNonTexte(file) {
+      const t = (file.type || "").toLowerCase();
+      if (t === "application/pdf" || t.startsWith("audio/") || t.startsWith("video/") || t === "application/zip") return true;
+      return /\.(pdf|zip|docx?|xlsx?|pptx?|exe|bin|mp3|mp4|wav)$/i.test(file.name || "");
+    }
+
     async function gererSelectionFichiers(files) {
       if (!files || !files.length) return;
       for (const file of Array.from(files)) {
-        if (file.size > 2_000_000) {
-          alert(`Le fichier "${file.name}" dépasse 2 Mo. Veuillez sélectionner un fichier plus compact.`);
+        if (file.size > 4_000_000) {
+          alert(`Le fichier "${file.name}" dépasse 4 Mo. Veuillez sélectionner un fichier plus compact.`);
           continue;
         }
         try {
-          const contenu = await lireFichierTexte(file);
-          _FICHIERS_ATTACHES.push({
-            nom: file.name,
-            taille: file.size,
-            type: file.type || "text/plain",
-            contenu: contenu
-          });
+          if (estFichierImage(file)) {
+            const dataUrl = await lireFichierImageDataUrl(file);
+            _FICHIERS_ATTACHES.push({
+              nom: file.name,
+              taille: file.size,
+              type: file.type || "image/jpeg",
+              contenu: `[Image jointe : ${file.name}]`,
+              data_url: dataUrl
+            });
+          } else if (estFichierBinaireNonTexte(file)) {
+            const dataUrl = await lireFichierDataUrl(file);
+            _FICHIERS_ATTACHES.push({
+              nom: file.name,
+              taille: file.size,
+              type: file.type || "application/octet-stream",
+              contenu: "",
+              data_url: dataUrl
+            });
+          } else {
+            const contenu = await lireFichierTexte(file);
+            _FICHIERS_ATTACHES.push({
+              nom: file.name,
+              taille: file.size,
+              type: file.type || "text/plain",
+              contenu: contenu
+            });
+          }
         } catch (err) {
           alert(`Erreur de lecture de "${file.name}" : ${err}`);
         }

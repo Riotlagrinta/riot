@@ -506,7 +506,7 @@ _HISTORIQUE_CHAT: list = []
 
 
 
-def _construire_historique_tour(chat_id: Optional[str], instruction: str, max_messages: int = 8) -> list:
+def _construire_historique_tour(chat_id: Optional[str], instruction: str, max_messages: int = 8, images: Optional[list] = None) -> list:
 
 
 
@@ -612,15 +612,15 @@ def _construire_historique_tour(chat_id: Optional[str], instruction: str, max_me
 
     recent.reverse()
 
-
-
-    if not recent or recent[-1]["role"] != "user" or recent[-1]["content"] != instruction:
-
-
-
+    if images:
+        blocs_user = list(images)
+        blocs_user.append({"type": "text", "text": instruction})
+        if recent and recent[-1]["role"] == "user" and recent[-1]["content"] == instruction:
+            recent[-1]["content"] = blocs_user
+        else:
+            recent.append({"role": "user", "content": blocs_user})
+    elif not recent or recent[-1]["role"] != "user" or recent[-1]["content"] != instruction:
         recent.append({"role": "user", "content": instruction})
-
-
 
     return recent
 
@@ -676,82 +676,94 @@ def _memoriser_tour(chat_id: Optional[str], question: str, reponse: str):
 
 
 
-def formater_fichiers_joints(fichiers: list) -> str:
+def extraire_images_jointes(fichiers: list) -> list:
+    """Extrait les images valides (data:image/...;base64,...) en blocs multimodaux compatibles LLM."""
+    images = []
+    for f in (fichiers or []):
+        if not isinstance(f, dict):
+            continue
+        nom = str(f.get("nom") or "")
+        ftype = str(f.get("type") or "").lower()
+        data_url = str(f.get("data_url") or "").strip()
+        if not data_url.startswith("data:image/"):
+            continue
+        if ";base64," not in data_url:
+            continue
+        entete, b64 = data_url.split(";base64,", 1)
+        media_type = entete[len("data:"):].strip() or ftype or "image/jpeg"
+        b64 = b64.strip()
+        if not b64:
+            continue
+        images.append({
+            "type": "image",
+            "name": nom,
+            "source": {
+                "type": "base64",
+                "media_type": media_type,
+                "data": b64,
+            },
+        })
+    return images
 
 
-
-    """Met en forme les fichiers transmis par l'utilisateur pour injection dans le contexte du modèle."""
-
-
-
-    if not fichiers:
-
-
-
+def _extraire_texte_pdf_data_url(data_url: str) -> str:
+    """Extrait le texte lisible d'un PDF transmis en DataURL base64."""
+    try:
+        import base64
+        import io
+        from pypdf import PdfReader
+        _, b64 = data_url.split(";base64,", 1)
+        raw = base64.b64decode(b64)
+        reader = PdfReader(io.BytesIO(raw))
+        pages = [(p.extract_text() or "").strip() for p in reader.pages[:25]]
+        return "\n\n".join(t for t in pages if t)
+    except Exception:
         return ""
 
 
-
+def formater_fichiers_joints(fichiers: list) -> str:
+    """Met en forme les fichiers transmis par l'utilisateur pour injection propre (jamais de binaire corrompu)."""
+    if not fichiers:
+        return ""
     blocs = []
-
-
-
     for f in fichiers:
-
-
-
         if not isinstance(f, dict):
-
-
-
             continue
-
-
-
-        nom = f.get("nom", "fichier_sans_nom")
-
-
-
-        contenu = str(f.get("contenu", "")).strip()
-
-
-
+        nom = str(f.get("nom", "fichier_sans_nom"))
+        ftype = str(f.get("type", "")).lower()
+        data_url = str(f.get("data_url") or "").strip()
         ext = Path(nom).suffix.lstrip(".").lower() or "txt"
 
+        if data_url.startswith("data:image/") or ftype.startswith("image/") or ext in ("png", "jpg", "jpeg", "webp", "gif"):
+            blocs.append(f"[🖼️ IMAGE JOINTE PAR L'UTILISATEUR : {nom} — transmise en entrée vision au modèle]")
+            continue
 
+        if (ftype == "application/pdf" or ext == "pdf") and data_url.startswith("data:") and ";base64," in data_url:
+            texte_pdf = _extraire_texte_pdf_data_url(data_url)
+            if texte_pdf:
+                contenu = texte_pdf
+            else:
+                blocs.append(f"[📄 PDF JOINT : {nom} — extraction texte indisponible]")
+                continue
+        else:
+            contenu = str(f.get("contenu", "")).strip()
+
+        if not contenu:
+            continue
+        # Protection critique : bloquer tout contenu binaire lu par erreur en UTF-8 (\ufffd / octets nuls)
+        nb_remp = contenu.count("\ufffd") + contenu.count("\x00")
+        if nb_remp > 20 and (nb_remp / max(1, len(contenu))) > 0.02:
+            blocs.append(f"[⚠️ FICHIER BINAIRE NON TEXTUEL IGNORÉ : {nom} — joignez un fichier texte ou une image valide]")
+            continue
 
         if len(contenu) > 150_000:
-
-
-
             contenu = contenu[:150_000] + "\n\n[... CONTENU TRONQUÉ CAR SUPÉRIEUR À 150 KO ...]"
-
-
-
         nb_lignes = len(contenu.splitlines())
-
-
-
         blocs.append(
-
-
-
             f"=== 📄 FICHIER FOURNI PAR L'UTILISATEUR : {nom} ({nb_lignes} lignes) ===\n"
-
-
-
             f"```{ext}\n{contenu}\n```\n"
-
-
-
             f"=== FIN DU FICHIER {nom} ==="
-
-
-
         )
-
-
-
     return "\n\n".join(blocs)
 
 
@@ -2152,30 +2164,13 @@ def monter_routes(app):
 
 
         fichiers = body.get("fichiers", []) or []
-
-
-
         chat_id = str(body.get("chat_id", "")).strip()
-
-
-
+        images_jointes = extraire_images_jointes(fichiers)
         contexte_fichiers = formater_fichiers_joints(fichiers)
-
-
-
-        if not message and not contexte_fichiers:
-
-
-
+        if not message and not contexte_fichiers and not images_jointes:
             return JSONResponse({"ok": False, "erreur": "Message ou fichier requis."}, status_code=400)
-
-
-
-        if not message and contexte_fichiers:
-
-
-
-            message = "Voici les fichiers joints. Analyse leur structure et leur contenu, et fournis une synthèse complète."
+        if not message and (contexte_fichiers or images_jointes):
+            message = "Voici les fichiers/images joints. Analyse leur contenu et réponds de manière détaillée."
 
 
 
@@ -2760,7 +2755,11 @@ def monter_routes(app):
 
 
 
-                    historique = [{"role": "user", "content": f"Accomplis ton étape pour cette tâche : {instruction}"}]
+                    texte_etape = f"Accomplis ton étape pour cette tâche : {instruction}"
+                    if images_jointes:
+                        historique = [{"role": "user", "content": list(images_jointes) + [{"type": "text", "text": texte_etape}]}]
+                    else:
+                        historique = [{"role": "user", "content": texte_etape}]
 
 
 
@@ -3072,7 +3071,7 @@ def monter_routes(app):
 
 
 
-                historique = _construire_historique_tour(chat_id, instruction)
+                historique = _construire_historique_tour(chat_id, instruction, images=images_jointes)
 
 
 
@@ -3699,7 +3698,7 @@ def monter_routes(app):
 
 
 
-            historique = _construire_historique_tour(chat_id, instruction_mono)
+            historique = _construire_historique_tour(chat_id, instruction_mono, images=images_jointes)
 
 
 

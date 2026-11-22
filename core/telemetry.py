@@ -256,6 +256,18 @@ class TelemetryStore:
                             ON CONFLICT (version) DO NOTHING
                             """
                         )
+                        pconn.execute(
+                            """
+                            INSERT INTO releases (version, titre, notes, commande)
+                            VALUES (
+                                '0.3.13',
+                                'RIOT v0.3.13 — Vision Multimodale Studio, Protection Binaires & Diagnostic Failover',
+                                E'• Support natif des images (`.jpg`, `.png`, `.webp`) et PDF dans RIOT Studio sans corruption UTF-8\\n• Routage Vision dédié sur la passerelle (`Gemini Flash`, `Llama 4 Scout`, `Pixtral`, `OpenRouter`)\\n• Timeout passerelle étendu (65s) et diagnostic précis si failover (`401 riot login`, `429/TPM`, `timeout`, `502`)',
+                                'npm install -g @riotlagrinta/riot@latest && riot --update-cli'
+                            )
+                            ON CONFLICT (version) DO NOTHING
+                            """
+                        )
                 self._pg_ready = True
                 return
             except Exception as e:
@@ -306,10 +318,11 @@ class TelemetryStore:
                         "INSERT INTO releases (ts, version, titre, notes, commande) VALUES (?, ?, ?, ?, ?)",
                         (
                             time.time(),
-                            "0.3.12",
-                            "RIOT v0.3.12 — Curation Mémoire Globale Admin & Correctif agy CLI VerdictMentor",
-                            "• Récupération des leçons utilisateurs (anonymisées) dans `/admin` avec validation 1-clic vers la Mémoire Globale (`/v1/playbook/global`)\n"
-                            "• Aplatissement JSON Schema (`$defs/$ref`) et lecture `structured_output` pour `agy CLI` sans crash `EOF`",
+                            "0.3.13",
+                            "RIOT v0.3.13 — Vision Multimodale Studio, Protection Binaires & Diagnostic Failover",
+                            "• Support natif des images (`.jpg`, `.png`, `.webp`) et PDF dans RIOT Studio sans corruption UTF-8\n"
+                            "• Routage Vision dédié sur la passerelle (`Gemini Flash`, `Llama 4 Scout`, `Pixtral`, `OpenRouter`)\n"
+                            "• Timeout passerelle étendu (65s) et diagnostic précis si failover (`401 riot login`, `429/TPM`, `timeout`, `502`)",
                             "npm install -g @riotlagrinta/riot@latest && riot --update-cli",
                         ),
                     )

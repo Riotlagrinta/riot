@@ -4,6 +4,12 @@ Toutes les évolutions notables de RIOT. Format inspiré de
 [Keep a Changelog](https://keepachangelog.com/fr/) ; versionnage
 [SemVer](https://semver.org/lang/fr/).
 
+## [0.3.13] — 2026-11-22
+
+### Corrigé
+- **Images & fichiers binaires dans RIOT Studio (`web/studio.html` & `core/studio_app.py`)** : les images (`.jpg`, `.png`, `.webp`) sont désormais lues et compressées en `data_url` (vision multimodale) au lieu d'être lues en UTF-8 brut corrompu ; les PDF sont extraits proprement via `pypdf` et tout binaire non textuel corrompu est bloqué avant l'envoi aux LLM.
+- **Routage Vision bout-en-bout (`core/llm.py` & `proxy/server.py`)** : préservation des blocs `image_url` dans `_traduire`, détection `has_images` côté proxy avec routage dédié vers les modèles Vision (`Gemini Flash`, `Llama 4 Scout`, `Pixtral`, `OpenRouter`), bascule sur HTTP `400`/`404`, timeout passerelle porté à 65s et diagnostic clair de la cause (`401 riot login`, `429/TPM`, `timeout`, `502`).
+
 ## [0.3.12] — 2026-11-22
 
 ### Ajouté

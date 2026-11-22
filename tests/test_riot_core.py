@@ -142,7 +142,7 @@ def test_spiral_icons_and_creator_monitoring(monkeypatch, tmp_path):
     assert pc.get("/status/public").status_code == 200
     assert "prompt" not in pc.get("/status/public").text
     assert pc.get("/releases").status_code == 200
-    assert pc.get("/releases/latest").json()["version"] == "0.3.12"
+    assert pc.get("/releases/latest").json()["version"] == "0.3.13"
     assert pc.get("/admin/metrics").status_code == 401
     assert pc.get("/admin/metrics", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
     assert pc.get("/admin/logs", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
@@ -1428,6 +1428,51 @@ def test_mentor_antigravity_gouvernance_memoire_et_playbook(monkeypatch, tmp_pat
         assert any(r["titre"] == "Refuser cle JWT vide au boot" and r["source"] == "global_curated" for r in recettes_apres)
     finally:
         memoire.reinitialiser_connexion()
+
+
+def test_vision_studio_multimodal_et_diagnostic_failover(monkeypatch):
+    from core import llm, studio_app
+    from proxy import server as proxy_srv
+
+    # 1. Fichier image base64 vs binaire corrompu UTF-8 dans Studio
+    fichiers = [
+        {"nom": "capture.jpeg", "type": "image/jpeg", "data_url": "data:image/jpeg;base64,/9j/4AAQSkZJRg=="},
+        {"nom": "binaire.bin", "type": "application/octet-stream", "contenu": "\ufffd" * 200},
+    ]
+    imgs = studio_app.extraire_images_jointes(fichiers)
+    assert len(imgs) == 1
+    assert imgs[0]["type"] == "image"
+    assert imgs[0]["source"]["media_type"] == "image/jpeg"
+
+    txt_joints = studio_app.formater_fichiers_joints(fichiers)
+    assert "IMAGE JOINTE" in txt_joints
+    assert "FICHIER BINAIRE NON TEXTUEL IGNORÉ" in txt_joints
+    assert "\ufffd" * 10 not in txt_joints
+
+    # 2. Traduction multimodale OpenAI preserve image_url
+    prov = llm.CustomOpenAIProvider(modele="riot-auto")
+    msgs = prov._traduire("sys", [{"role": "user", "content": imgs + [{"type": "text", "text": "Analyse"}]}])
+    assert isinstance(msgs[1]["content"], list)
+    assert any(b.get("type") == "image_url" and "data:image/jpeg;base64," in b["image_url"]["url"] for b in msgs[1]["content"])
+
+    # 3. Routage Vision sur proxy priorise Gemini/Groq-Llama4/Mistral-Pixtral avant modeles texte
+    monkeypatch.setenv("GEMINI_API_KEY", "fake_gem")
+    monkeypatch.setenv("GROQ_API_KEY", "fake_groq")
+    monkeypatch.setenv("MISTRAL_API_KEY", "fake_mis")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "fake_ds")
+    assert proxy_srv._contient_images(msgs) is True
+    routes_vis = proxy_srv._routes_pour_profil("riot-auto", has_images=True)
+    modeles_vis = [r["model"] for r in routes_vis]
+    assert "gemini-flash-lite-latest" in modeles_vis
+    assert "meta-llama/llama-4-scout-17b-16e-instruct" in modeles_vis
+    assert "deepseek-chat" not in modeles_vis
+
+    # 4. Diagnostic explicite quand failover echoue apres erreur HTTP 401/429
+    diag_401 = llm._diagnostiquer_echec_cascade("HTTP 401 (auth): unauthorized")
+    assert "riot login" in diag_401 and "tous les fournisseurs ia ont" in diag_401.lower()
+    diag_429 = llm._diagnostiquer_echec_cascade("HTTP 429 rate limit TPM")
+    assert "429" in diag_429 and "Swarm" in diag_429
+
 
 
 

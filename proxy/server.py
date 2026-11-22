@@ -299,12 +299,27 @@ def _compacter_payload_entree(body: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def _contient_images(messages: Any) -> bool:
+    if not isinstance(messages, list):
+        return False
+    for m in messages:
+        if not isinstance(m, dict):
+            continue
+        c = m.get("content")
+        if isinstance(c, list):
+            for bloc in c:
+                if isinstance(bloc, dict) and bloc.get("type") in ("image_url", "image"):
+                    return True
+    return False
+
+
 def _routes_pour_profil(
     model_req: str,
     tache: Optional[str] = None,
     has_tools: bool = False,
     long_context: bool = False,
     rotate_keys: bool = False,
+    has_images: bool = False,
 ) -> List[Dict[str, str]]:
     """Definit la cascade de fournisseurs/modeles/cles cote serveur selon le profil opaque et la tache.
 
@@ -411,6 +426,28 @@ def _routes_pour_profil(
         else []
     )
 
+    if has_images:
+        gemini_vis = _expand(
+            "Gemini",
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+            "GEMINI_API_KEY",
+            [os.environ.get("RIOT_UPSTREAM_VISION_GEMINI_MODEL", "gemini-flash-lite-latest"), "gemini-2.0-flash"],
+        )
+        groq_vis = _expand(
+            "Groq",
+            "https://api.groq.com/openai/v1/chat/completions",
+            "GROQ_API_KEY",
+            [os.environ.get("RIOT_UPSTREAM_VISION_GROQ_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")],
+        )
+        mistral_vis = _expand(
+            "Mistral",
+            "https://api.mistral.ai/v1/chat/completions",
+            "MISTRAL_API_KEY",
+            [os.environ.get("RIOT_UPSTREAM_VISION_MISTRAL_MODEL", "pixtral-12b-2409")],
+        )
+        groupes_vis = [gemini_vis, groq_vis, mistral_vis, openrouter, custom]
+        return [c for grp in groupes_vis for c in grp]
+
     if long_context and m != "fast":
         # Contexte volumineux (> ~6.5k tokens) : privilegier Gemini (1M ctx) / DeepSeek / Cerebras / Mistral (40k TPM)
         # avant Groq (8k-12k TPM par modele) et garder OpenRouter en dernier secours
@@ -482,7 +519,7 @@ def public_releases(limit: int = 20):
 def public_latest_release():
     rel = _STORE.derniere_release()
     if not rel:
-        return {"ok": True, "version": "0.3.12", "release": None}
+        return {"ok": True, "version": "0.3.13", "release": None}
     return {"ok": True, "version": rel["version"], "release": rel}
 
 
@@ -507,13 +544,15 @@ async def chat_completions(request: Request):
     except Exception:
         payload_chars = len(prompt_user)
     long_context = payload_chars > 22000
-    profil_log = f"{profil}:{tache_effective}" if profil.lower() == "riot-auto" else profil
+    has_images = _contient_images(body.get("messages"))
+    profil_log = f"{profil}:{tache_effective}" + (":vision" if has_images else "") if profil.lower() == "riot-auto" else profil
     candidats = _routes_pour_profil(
         profil,
         tache=tache_effective,
         has_tools=bool(body.get("tools")),
         long_context=long_context,
         rotate_keys=True,
+        has_images=has_images,
     )
     if not candidats:
         _STORE.enregistrer(
@@ -540,7 +579,7 @@ async def chat_completions(request: Request):
                 capturer_reponse(c["provider"], c["key"], c["model"], r.status_code, dict(r.headers))
             except Exception:
                 pass
-            if r.status_code in (413, 429, 503) or r.status_code >= 500:
+            if r.status_code in (400, 404, 413, 429, 503) or r.status_code >= 500:
                 derniere_err = f"{c['provider']} HTTP {r.status_code}"
                 dernier_statut = r.status_code
                 envoyer_alerte_webhook(

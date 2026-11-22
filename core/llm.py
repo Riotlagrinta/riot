@@ -250,22 +250,44 @@ class GroqProvider(ProviderLLM):
                 if isinstance(contenu, str):
                     messages.append({"role": "user", "content": contenu})
                 else:
+                    blocs_multimodaux = []
                     for item in (contenu or []):
                         if not isinstance(item, dict):
                             continue
-                        if item.get("type") == "tool_result":
+                        itype = item.get("type")
+                        if itype == "tool_result":
+                            if blocs_multimodaux:
+                                messages.append({"role": "user", "content": blocs_multimodaux})
+                                blocs_multimodaux = []
                             c = item.get("content")
                             if isinstance(c, list):
-                                c = "[image capturee — format non supporte]"
+                                textes_tr = [str(x.get("text", "")) for x in c if isinstance(x, dict) and x.get("type") == "text"]
+                                c = " ".join(textes_tr).strip() or "[image capturee]"
                             messages.append({
                                 "role": "tool",
                                 "tool_call_id": item.get("tool_use_id", "call_0"),
                                 "content": str(c),
                             })
-                        elif item.get("type") == "image":
-                            messages.append({"role": "user", "content": "[image]"})
-                        elif item.get("type") == "text":
-                            messages.append({"role": "user", "content": item.get("text", "")})
+                        elif itype == "image":
+                            src = item.get("source") or {}
+                            b64 = str(src.get("data") or "").strip()
+                            mtype = str(src.get("media_type") or "image/jpeg").strip()
+                            if b64:
+                                blocs_multimodaux.append({
+                                    "type": "image_url",
+                                    "image_url": {"url": f"data:{mtype};base64,{b64}"},
+                                })
+                        elif itype == "image_url":
+                            blocs_multimodaux.append(item)
+                        elif itype == "text":
+                            txt_val = str(item.get("text", ""))
+                            if txt_val:
+                                blocs_multimodaux.append({"type": "text", "text": txt_val})
+                    if blocs_multimodaux:
+                        if len(blocs_multimodaux) == 1 and blocs_multimodaux[0].get("type") == "text":
+                            messages.append({"role": "user", "content": blocs_multimodaux[0]["text"]})
+                        else:
+                            messages.append({"role": "user", "content": blocs_multimodaux})
             else:  # assistant
                 if isinstance(contenu, str):
                     messages.append({"role": "assistant", "content": contenu})
@@ -822,15 +844,18 @@ class CustomOpenAIProvider(ProviderLLM):
                 }
                 if tache_hint:
                     headers["X-Riot-Task"] = tache_hint
+                timeout_req = 65 if str(self.nom).startswith("RIOT Engine") else 35
                 try:
-                    r = requests.post(self.api_url, headers=headers, json=payload, timeout=35)
+                    r = requests.post(self.api_url, headers=headers, json=payload, timeout=timeout_req)
                     if r.status_code == 400 and tools and "tool" in r.text.lower():
                         payload.pop("tools", None)
                         payload.pop("tool_choice", None)
-                        r = requests.post(self.api_url, headers=headers, json=payload, timeout=35)
+                        r = requests.post(self.api_url, headers=headers, json=payload, timeout=timeout_req)
+                    if r.status_code in (401, 403):
+                        raise RuntimeError(f"HTTP {r.status_code} (auth): {r.text[:240]}")
                     if r.status_code == 429 or r.status_code == 503 or r.status_code >= 500:
                         LOG.warning("custom (%s): modele %s statut %s, bascule...", self.api_url, modele_courant, r.status_code)
-                        derniere_erreur = f"HTTP {r.status_code}: {r.text}"
+                        derniere_erreur = f"HTTP {r.status_code}: {r.text[:240]}"
                         continue
                     r.raise_for_status()
                     data = r.json()
@@ -850,6 +875,8 @@ class CustomOpenAIProvider(ProviderLLM):
                 except Exception as e:
                     LOG.warning("custom: echec sur %s / modele %s (%s)", self.api_url, modele_courant, e)
                     derniere_erreur = e
+                    if "HTTP 401" in str(e) or "HTTP 403" in str(e):
+                        break
                     continue
 
         raise RuntimeError(f"Echec du fournisseur compatible OpenAI ({self.api_url}). Derniere erreur : {derniere_erreur}")
@@ -867,7 +894,7 @@ class CustomOpenAIProvider(ProviderLLM):
             return self._parser(self._chat(messages, tools, tache_hint=tache_hint))
         except Exception as e:
             LOG.warning("custom: echec (%s), declenchement cascade failover...", e)
-            return cascade_failover(systeme, historique, outils, visites, **kwargs)
+            return cascade_failover(systeme, historique, outils, visites, erreur_precedente=str(e), **kwargs)
 
 
 # --------------------------------------------------------------- Anthropic (cloud)
@@ -1049,10 +1076,27 @@ class OllamaProvider(ProviderLLM):
 
 # --------------------------------------------------------------- cascade de secours automatique
 
+def _diagnostiquer_echec_cascade(erreur_precedente: str) -> str:
+    msg = (erreur_precedente or "").strip()
+    if not msg:
+        return "Tous les fournisseurs IA ont échoué ou sont temporairement indisponibles."
+    low = msg.lower()
+    if "401" in low or "403" in low or "jeton" in low or "connexion riot requise" in low:
+        return "Tous les fournisseurs IA ont échoué ou sont temporairement indisponibles.\nCause probable : session RIOT non connectée ou expirée — lance `riot login` dans le terminal."
+    if "429" in low or "quota" in low or "rate limit" in low or "tpm" in low:
+        return "Tous les fournisseurs IA ont échoué ou sont temporairement indisponibles.\nCause probable : limite de requêtes/tokens momentanément atteinte (429/TPM). Réessaie dans 30s ou évite le mode Swarm sur de très gros prompts."
+    if "timeout" in low or "timed out" in low or "readtimeout" in low:
+        return "Tous les fournisseurs IA ont échoué ou sont temporairement indisponibles.\nCause probable : délai dépassé sur la passerelle cloud (réveil serveur ou requête trop lourde). Réessaie dans un instant."
+    if "502" in low or "503" in low:
+        return "Tous les fournisseurs IA ont échoué ou sont temporairement indisponibles.\nCause probable : surcharge passagère des fournisseurs cloud sur la passerelle (HTTP 502/503). Réessaie ou passe en mode Coder (Mono)."
+    return "Tous les fournisseurs IA ont échoué ou sont temporairement indisponibles."
+
+
 def cascade_failover(systeme, historique, outils, visites: set, **kwargs):
     """Bascule vers le prochain fournisseur IA disponible sans jamais entrer en boucle récursive."""
     if visites is None:
         visites = set()
+    erreur_prec = str(kwargs.pop("erreur_precedente", "") or "")
 
     # Ordre de secours adaptatif selon le type de requete
     tache = str(kwargs.get("tache_hint", "") or "").strip().lower() or classifier_tache_requete(
@@ -1086,10 +1130,12 @@ def cascade_failover(systeme, historique, outils, visites: set, **kwargs):
                 return prov.repondre(systeme, historique, outils, visites=visites, **kwargs)
         except Exception as e:
             LOG.warning("Cascade Failover: echec sur %s (%s)", nom, e)
+            if not erreur_prec:
+                erreur_prec = str(e)
             continue
 
     LOG.error("Cascade Failover: tous les fournisseurs disponibles ont echoue.")
-    return Reponse("end", [Bloc("text", text="Tous les fournisseurs IA ont échoué ou sont temporairement indisponibles.")])
+    return Reponse("end", [Bloc("text", text=_diagnostiquer_echec_cascade(erreur_prec))])
 
 
 # --------------------------------------------------------------- fabrique
