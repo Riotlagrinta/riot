@@ -341,11 +341,16 @@ def commande_login(arg: str = ""):
     config.definir("gateway.token", tok)
     llm_mod.reinitialiser()
     memoire.lancer_synchro_arriere_plan()
+    quota_txt = (
+        f"{u.get('used_24h', 0)} req/24h · Illimité"
+        if (u.get("unlimited") or not u.get("daily_quota"))
+        else f"{u.get('used_24h', 0)}/{u.get('daily_quota')} req/24h"
+    )
     console.print(
         f"[bold green]✓ Connecté ![/bold green] "
         f"[white]{u.get('display_name') or u.get('email')}[/white] · "
         f"Plan [bold {acc}]{str(u.get('plan', 'free')).upper()}[/bold {acc}] "
-        f"({u.get('used_24h', 0)}/{u.get('daily_quota', 40)} req/24h)\n"
+        f"({quota_txt})\n"
     )
 
 

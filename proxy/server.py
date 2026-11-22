@@ -162,7 +162,13 @@ def _verifier_acces_detail(request: Request, verifier_quota: bool = True) -> Dic
     q.append(now)
 
     used_24h = _STORE.compter_requetes_utilisateur_24h(cle_hash)
-    if verifier_quota and used_24h >= identite["daily_quota"]:
+    enforce_daily = os.environ.get("RIOT_ENFORCE_DAILY_QUOTA", "0").strip() == "1"
+    if not enforce_daily:
+        identite["daily_quota"] = 0
+        identite["unlimited"] = True
+    else:
+        identite["unlimited"] = identite["daily_quota"] <= 0
+    if verifier_quota and enforce_daily and identite["daily_quota"] > 0 and used_24h >= identite["daily_quota"]:
         envoyer_alerte_ntfy(
             "RIOT Quota journalier atteint",
             f"Utilisateur : {cle_hash} ({identite['plan']}) · {used_24h}/{identite['daily_quota']} requêtes sur 24h.",
@@ -454,6 +460,7 @@ def auth_verify(request: Request):
             "display_name": identite["display_name"],
             "plan": identite["plan"],
             "daily_quota": identite["daily_quota"],
+            "unlimited": identite.get("unlimited", True),
             "used_24h": identite["used_24h"],
         },
     }
@@ -475,7 +482,7 @@ def public_releases(limit: int = 20):
 def public_latest_release():
     rel = _STORE.derniere_release()
     if not rel:
-        return {"ok": True, "version": "0.3.7", "release": None}
+        return {"ok": True, "version": "0.3.8", "release": None}
     return {"ok": True, "version": rel["version"], "release": rel}
 
 

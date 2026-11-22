@@ -142,16 +142,16 @@ def test_spiral_icons_and_creator_monitoring(monkeypatch, tmp_path):
     assert pc.get("/status/public").status_code == 200
     assert "prompt" not in pc.get("/status/public").text
     assert pc.get("/releases").status_code == 200
-    assert pc.get("/releases/latest").json()["version"] == "0.3.7"
+    assert pc.get("/releases/latest").json()["version"] == "0.3.8"
     assert pc.get("/admin/metrics").status_code == 401
     assert pc.get("/admin/metrics", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
     assert pc.get("/admin/logs", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
     r_rel = pc.post(
         "/admin/releases",
         headers={"X-Admin-Token": "secret_creator_tok"},
-        json={"version": "0.3.8", "titre": "Test Release", "notes": "- Note 1"},
+        json={"version": "0.3.9", "titre": "Test Release", "notes": "- Note 1"},
     )
-    assert r_rel.status_code == 200 and pc.get("/releases/latest").json()["version"] == "0.3.8"
+    assert r_rel.status_code == 200 and pc.get("/releases/latest").json()["version"] == "0.3.9"
 
 
 def test_proxy_chat_completions_usage_and_opaque_model(monkeypatch, tmp_path):
@@ -191,6 +191,12 @@ def test_proxy_chat_completions_usage_and_opaque_model(monkeypatch, tmp_path):
     assert body["model"] == "riot-engine"
     logs = store.lister_logs(limit=1)
     assert len(logs) == 1 and logs[0]["tokens_in"] == 11 and logs[0]["tokens_out"] == 4
+
+    # Verification absence de blocage quota journalier 24h par defaut (unlimited)
+    r_auth = pc.get("/auth/verify", headers={"Authorization": "Bearer proxy_tok_test"})
+    assert r_auth.status_code == 200
+    assert r_auth.json()["user"]["unlimited"] is True
+    assert r_auth.json()["user"]["daily_quota"] == 0
 
 
 def test_persistent_memory_user_dir_ide_injection_cloud_sync_and_auto_extract(monkeypatch, tmp_path):

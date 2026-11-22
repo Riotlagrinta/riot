@@ -28,12 +28,18 @@ L'écosystème réunit sous une même interface web réactive (PWA) des capacit�
 
 ## 🚀 Les 4 Piliers Fondamentaux
 
-### 1. 🤖 Pipeline Multi-Agents Autonome (Swarm)
-Inspiré des standards d'ingénierie d'Anthropic et DeepMind, le coordinateur orchestre 4 sous-agents spécialisés avec **synthèse unique consolidée** :
-- **📐 RIOT-Architect** : Explore l'arborescence du projet, cartographie les dépendances et conçoit un plan d'action chirurgical structuré.
-- **💻 RIOT-Engineer** : Applique les modifications de code avec une précision millimétrique via `patcher_code` et `ecrire_code`.
-- **🧪 RIOT-Tester** : Exécute les suites de tests unitaires avec boucle de rétroaction et d'auto-guérison en cas d'erreur.
-- **🛡️ RIOT-Reviewer** : Audit de conformité, détection de secrets en clair, vérification du typage et validation finale `[APPROUVÉ]`.
+### 1. 🤖 Pipeline Multi-Agents Autonome (Swarm) & Routage Adaptatif
+Chaque sous-agent est piloté par un profil de modèle adapté à son rôle, tout en partageant un **Journal de Continuité Inter-Modèles** (`JournalContinuite`) pour ne jamais perdre le contexte lors d'une rotation d'IA :
+- **📐 RIOT-Architect** (`deep` — *Claude Sonnet 4.5 / Nemotron 3 Ultra 800k / DeepSeek*) : Explore l'arborescence, détecte la stack (`package.json`, `pyproject.toml`, Remotion) et conçoit le plan d'action chirurgical.
+- **💻 RIOT-Engineer** (`code` — *Codestral Latest / Claude Sonnet 4.5 / DeepSeek*, sortie jusqu'à **8 192 tokens**) : Applique les modifications via `patcher_code` tolérant et `ecrire_code` dans une boucle étendue à **10 tours** avec synthèse finale garantie.
+- **🧪 RIOT-Tester** (`agent` — *GPT-OSS 120B / Qwen 3.6 27B / Llama 3.3 70B*) : Exécute les tests unitaires et vérifie le code sans gaspiller les modèles codeurs.
+- **🛡️ RIOT-Reviewer** (`deep`) : Audit de conformité, détection de secrets (`vcp_`, `freellmapi-`, `sk-`, `gsk_`, `ghp_`), vérification du typage et verdict final `[APPROUVÉ]`.
+
+**Moteur Adaptatif & Modèles supportés (`RIOT Engine` + `FreeLLMAPI`) :**
+- **Code & Architecture (`code` / `deep`)** : `codestral-latest`, `claude-sonnet-4-5`, `deepseek-chat` / `deepseek-reasoner`, `nemotron-3-ultra-550b` (`800k` ctx), `nemotron-3.5-lightning` (`838 860` ctx).
+- **Agent & Rapide (`agent` / `fast`)** : `openai/gpt-oss-120b`, `openai/gpt-oss-20b`, `llama-3.3-70b-versatile`, `qwen3.6-27b`, `gemini-flash-lite-latest`, `claude-haiku-4-5`.
+- **Pool Multi-Clés & Zéro Plafond Journalier** : Rotation Round-Robin sur pools de clés (`GROQ_API_KEY="cle1,cle2"`), failover automatique HTTP `413`/`429`, compaction des schémas d'outils (-45 %) et accès utilisateur 24h **illimité**.
+- **Compatible FreeLLMAPI Desktop** : Détection native sur `http://127.0.0.1:31415/v1` via `/model freellmapi` (avec bascule adaptative automatique selon la tâche).
 
 ### 2. 📈 RIOT-Trader (Quant & Risk Management)
 - **Doctrine des 1%** : Le risque par position ne dépasse jamais 1.0% du capital total.
@@ -87,23 +93,24 @@ Inspiré des standards d'ingénierie d'Anthropic et DeepMind, le coordinateur or
 
 ### Lancement
 ```powershell
-# 1. Lancer l'environnement Web Studio (Port 8790)
-.\riot-app.bat
-# ou en ligne de commande :
-.\.venv\Scripts\python -c "import uvicorn; from core import serveur; uvicorn.run(serveur.app(), host='0.0.0.0', port=8790)"
+# 0. Installation globale recommandée (npm + uv)
+npm install -g @riotlagrinta/riot@latest
+riot login
 
-# 2. Lancer la console interactive CLI
-.\riot.bat
+# 1. Lancer la console interactive CLI / IDE / Studio
+riot          # CLI interactif
+riot --ide    # RIOT IDE Web (diff review, terminal, MCP)
+riot --app    # RIOT Studio Web (Port 8790)
 ```
 
 ---
 
 ## 🧪 Diagnostic Zéro Erreur
 
-La plateforme applique une politique stricte de **Zéro Erreur**. Une suite de tests automatisés valide la totalité des composants avant chaque déploiement :
+La plateforme applique une politique stricte de **Zéro Erreur**. Une suite de tests automatisés (`19+` tests d'intégration et de sécurité) valide la totalité des composants avant chaque déploiement :
 
 ```powershell
-.\.venv\Scripts\python scripts/tester_claude_web.py
+.\.venv\Scripts\python.exe -m pytest tests/test_riot_core.py -v
 ```
 
 Résultats validés :

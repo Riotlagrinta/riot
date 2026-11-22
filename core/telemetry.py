@@ -220,6 +220,18 @@ class TelemetryStore:
                             ON CONFLICT (version) DO NOTHING
                             """
                         )
+                        pconn.execute(
+                            """
+                            INSERT INTO releases (version, titre, notes, commande)
+                            VALUES (
+                                '0.3.8',
+                                'RIOT v0.3.8 — Accès Illimité 24h, Sous-Agents Spécialisés, Continuité & FreeLLMAPI',
+                                E'• Accès 24h illimité sans plafond journalier (protection anti-rafale RPM conservée)\\n• Chaque sous-agent piloté par son modèle optimal (Codestral/Claude Sonnet 4.5 en code jusqu\\'à 8 192 tokens, GPT-OSS/Llama 3.3 en agent, Nemotron 838k en contexte XXL)\\n• Journal de Continuité inter-modèles + support natif FreeLLMAPI (127.0.0.1:31415/v1)',
+                                'npm install -g @riotlagrinta/riot@latest'
+                            )
+                            ON CONFLICT (version) DO NOTHING
+                            """
+                        )
                 self._pg_ready = True
                 return
             except Exception as e:
@@ -270,11 +282,11 @@ class TelemetryStore:
                         "INSERT INTO releases (ts, version, titre, notes, commande) VALUES (?, ?, ?, ?, ?)",
                         (
                             time.time(),
-                            "0.3.7",
-                            "RIOT v0.3.7 — Agent Codeur Renforcé (Auto-Ancrage, Patch Souple, 10 Tours & max_tokens 4096)",
-                            "• Auto-ancrage du dossier projet actif dans CLI, Studio, terminal et explorer_projet + détection de stack\n"
-                            "• patcher_code tolérant aux espaces de fin de ligne + indices de lignes proches\n"
-                            "• Boucle agentique étendue à 10 tours avec synthèse finale garantie et max_tokens porté à 4096",
+                            "0.3.8",
+                            "RIOT v0.3.8 — Accès Illimité 24h, Sous-Agents Spécialisés, Continuité & FreeLLMAPI",
+                            "• Accès 24h illimité sans plafond journalier (protection anti-rafale RPM conservée)\n"
+                            "• Chaque sous-agent piloté par son modèle optimal (Codestral/Claude Sonnet 4.5 en code jusqu'à 8 192 tokens, GPT-OSS/Llama 3.3 en agent, Nemotron 838k en contexte XXL)\n"
+                            "• Journal de Continuité inter-modèles + support natif FreeLLMAPI (127.0.0.1:31415/v1)",
                             "npm install -g @riotlagrinta/riot@latest",
                         ),
                     )
