@@ -482,7 +482,7 @@ def public_releases(limit: int = 20):
 def public_latest_release():
     rel = _STORE.derniere_release()
     if not rel:
-        return {"ok": True, "version": "0.3.9", "release": None}
+        return {"ok": True, "version": "0.3.10", "release": None}
     return {"ok": True, "version": rel["version"], "release": rel}
 
 

@@ -40,18 +40,23 @@ Toute l'expérience accumulée par RIOT au fil des sessions est persistée **loc
 
 ---
 
-## 3. Activer le Mode Mentor Antigravity *(Usage créateur / entraînement local)*
+## 3. Activer le Mode Mentor Antigravity *(Pour tout utilisateur ayant Antigravity)*
 
-Le Mode Mentor branche RIOT au SDK officiel `google-antigravity` en 2 passes bornées :
+Le Mode Mentor branche RIOT à Antigravity en 2 passes bornées :
 1. **Avant que RIOT code** : Antigravity inspecte le dossier en lecture seule et produit un cadrage strict (`Plan`, `À faire`, `À éviter`, `Critères de validation`).
 2. **Après le travail de RIOT** : Antigravity vérifie les modifications, corrige si autorisé, et distille des leçons atomiques dans `~/.riot/riot_memory.db`.
 
-### Prérequis
-- Installer l'extra optionnel : `pip install -e ".[mentor]"` (ou `google-antigravity>=0.1.24`).
-- Avoir `GEMINI_API_KEY` (ou `gemini.cle` dans `config.yaml`) configurée.
+### Option A — Via Antigravity IDE / CLI (`agy`) *(Recommandé : fonctionne directement avec votre abonnement Google AI Pro)*
+1. Ouvrez un terminal dans **Antigravity IDE** (ou vérifiez que `agy` est connecté à votre compte Google AI Pro).
+2. Lancez `riot` (ou `riot --ide`) dans votre projet.
+3. Activez **`/mentor on`** en CLI ou cochez **`🎓 Mentor AGY`** dans RIOT IDE.
+4. **Aucune `GEMINI_API_KEY` supplémentaire n'est requise** : RIOT détecte automatiquement `agy` en priorité.
+
+### Option B — Via le SDK Python (`[mentor]`) + `GEMINI_API_KEY`
+- Installez l'extra optionnel `pip install "riot[mentor]"` (ou `RIOT_EXTRAS=mentor`) et renseignez `GEMINI_API_KEY` (ou `gemini.cle` dans `config.yaml`).
 
 ### Activation / Désactivation
-- **Dans RIOT IDE** : cochez la case **`🎓 Mentor AGY`** dans le panneau Agent (visible en mode créateur uniquement), puis lancez une requête en mode `Code` ou `Swarm`.
+- **Dans RIOT IDE** : cochez **`🎓 Mentor AGY`** dans le panneau Agent, puis lancez une requête en mode `Code` ou `Swarm`.
 - **En CLI** :
   - `/mentor on` : activer l'audit Mentor Antigravity ;
   - `/mentor off` : désactiver (recommandé en usage courant pour garder la latence minimale) ;

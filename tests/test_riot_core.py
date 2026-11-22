@@ -142,7 +142,7 @@ def test_spiral_icons_and_creator_monitoring(monkeypatch, tmp_path):
     assert pc.get("/status/public").status_code == 200
     assert "prompt" not in pc.get("/status/public").text
     assert pc.get("/releases").status_code == 200
-    assert pc.get("/releases/latest").json()["version"] == "0.3.9"
+    assert pc.get("/releases/latest").json()["version"] == "0.3.10"
     assert pc.get("/admin/metrics").status_code == 401
     assert pc.get("/admin/metrics", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
     assert pc.get("/admin/logs", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
@@ -1280,6 +1280,25 @@ def test_mentor_antigravity_gouvernance_memoire_et_playbook(monkeypatch, tmp_pat
         assert client.get("/api/ide/mentor/etat").status_code == 200
         r_lecons = client.get("/api/ide/memoire/lecons")
         assert r_lecons.status_code == 200 and r_lecons.json()["stats"]["actives"] >= 2
+
+        # 7. Support CLI officiel `agy` (session Google AI Pro sans GEMINI_API_KEY)
+        import json
+        import subprocess
+        from types import SimpleNamespace
+
+        payload_agy = json.dumps({
+            "status": "SUCCESS",
+            "response": json.dumps({
+                "plan_etapes": ["Inspecter code", "Ajouter test"],
+                "a_faire": ["Valider schema Pydantic"],
+                "a_eviter": ["Pas de secret en dur"],
+                "criteres_validation": ["pytest"],
+            }),
+        })
+        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: SimpleNamespace(returncode=0, stdout=payload_agy, stderr=""))
+        monkeypatch.setattr(mentor, "_trouver_binaire_agy", lambda: "agy.exe")
+        dirs_cli = mentor._executer_via_agy_cli("agy.exe", "sys", "msg", tmp_path, mentor.DirectivesMentor, enable_edit=False)
+        assert dirs_cli is not None and "Valider schema Pydantic" in dirs_cli.a_faire
     finally:
         memoire.reinitialiser_connexion()
 

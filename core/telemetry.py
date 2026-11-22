@@ -224,9 +224,9 @@ class TelemetryStore:
                             """
                             INSERT INTO releases (version, titre, notes, commande)
                             VALUES (
-                                '0.3.9',
-                                'RIOT v0.3.9 — App Windows Desktop, App Mobile Native + QR & Push, Sécurité Studio',
-                                E'• Application Windows Desktop Electron dédiée (IDE + Studio + Réglages + Tray + Ctrl+Alt+R + Màj moteur 1-clic)\\n• Application Mobile Native Expo / React Native (Android & iOS) avec appairage QR à usage unique, terminal biométrique et Notifications Push\\n• Refonte sélecteur de dossiers IDE, garde tunnel Studio, confirmation stricte terminal Mobile et benchmark live',
+                                '0.3.10',
+                                'RIOT v0.3.10 — Mentor Antigravity (`agy` CLI Google AI Pro & SDK) + Playbook Public',
+                                E'• Tout utilisateur connecté dans Antigravity IDE / CLI (`agy`, abonnement Google AI Pro) ou via `[mentor]` + `GEMINI_API_KEY` peut activer `/mentor on` et `🎓 Mentor AGY`\\n• Mode Mentor 2 passes (Pré-directives À faire/À éviter + Post-audit & distillation en mémoire FTS5)\\n• Auto-import du Playbook public curé (`data/riot_playbook_public.json`) et panneau `🧠 Playbook`',
                                 'npm install -g @riotlagrinta/riot@latest'
                             )
                             ON CONFLICT (version) DO NOTHING
@@ -282,11 +282,11 @@ class TelemetryStore:
                         "INSERT INTO releases (ts, version, titre, notes, commande) VALUES (?, ?, ?, ?, ?)",
                         (
                             time.time(),
-                            "0.3.9",
-                            "RIOT v0.3.9 — App Windows Desktop, App Mobile Native + QR & Push, Sécurité Studio",
-                            "• Application Windows Desktop Electron dédiée (IDE + Studio + Réglages + Tray + Ctrl+Alt+R + Màj moteur 1-clic)\n"
-                            "• Application Mobile Native Expo / React Native (Android & iOS) avec appairage QR à usage unique, terminal biométrique et Notifications Push\n"
-                            "• Refonte sélecteur de dossiers IDE, garde tunnel Studio, confirmation stricte terminal Mobile et benchmark live",
+                            "0.3.10",
+                            "RIOT v0.3.10 — Mentor Antigravity (`agy` CLI Google AI Pro & SDK) + Playbook Public",
+                            "• Tout utilisateur connecté dans Antigravity IDE / CLI (`agy`, abonnement Google AI Pro) ou via `[mentor]` + `GEMINI_API_KEY` peut activer `/mentor on` et `🎓 Mentor AGY`\n"
+                            "• Mode Mentor 2 passes (Pré-directives À faire/À éviter + Post-audit & distillation en mémoire FTS5)\n"
+                            "• Auto-import du Playbook public curé (`data/riot_playbook_public.json`) et panneau `🧠 Playbook`",
                             "npm install -g @riotlagrinta/riot@latest",
                         ),
                     )

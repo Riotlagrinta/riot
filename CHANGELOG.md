@@ -4,6 +4,12 @@ Toutes les évolutions notables de RIOT. Format inspiré de
 [Keep a Changelog](https://keepachangelog.com/fr/) ; versionnage
 [SemVer](https://semver.org/lang/fr/).
 
+## [0.3.10] — 2026-11-22
+
+### Ajouté
+- **Mode Mentor Antigravity ouvert à tous les utilisateurs** : support prioritaire du CLI officiel `agy` (utilise directement la session Antigravity IDE / Google AI Pro de l'utilisateur sans `GEMINI_API_KEY` séparée), avec repli automatique sur `google-antigravity` SDK + `GEMINI_API_KEY`.
+- **Gouvernance de Mémoire & Playbook Public** : table `recettes_code` enrichie (`scope`, `interdits`, `verification`, `confiance`, auto-archivage sous 30 %, anonymisation des chemins), onglet IDE `🧠 Playbook` + `🎓 Mentor AGY`, et auto-import au démarrage de `data/riot_playbook_public.json`.
+
 ## [0.3.9] — 2026-11-22
 
 ### Ajouté

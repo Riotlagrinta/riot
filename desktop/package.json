@@ -1,6 +1,6 @@
 {
   "name": "riot-desktop",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "description": "RIOT Desktop — Application Windows native pour RIOT IDE & RIOT Studio",
   "main": "main.js",
   "author": "Riot",

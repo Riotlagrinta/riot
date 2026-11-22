@@ -820,11 +820,12 @@ def monter_routes(app) -> None:
                 systeme = _construire_prompt_ide(mode, projet, fichier_actif, message=message, grill_me=grill_me)
                 directives_mentor = None
                 utiliser_mentor = False
-                if est_createur() and mode in ("code", "swarm"):
+                if mode in ("code", "swarm"):
                     try:
                         from core import mentor
                         st_m = mentor.statut_mentor()
-                        utiliser_mentor = bool(st_m["sdk_disponible"] and (mentor_demande or st_m["actif"]))
+                        dispo_m = bool(st_m["agy_disponible"] or (st_m["sdk_disponible"] and st_m["auth_disponible"]))
+                        utiliser_mentor = bool(dispo_m and (mentor_demande or st_m["actif"]))
                         if utiliser_mentor:
                             _emit({"type": "step", "label": "Mentor Antigravity : préparation du cadrage..."})
                             directives_mentor = mentor.preparer_directives_mentor(message, projet)

@@ -1,11 +1,17 @@
 """Mode Mentor Antigravity : Coaching pre-tache, audit post-tache et distillation en memoire gouvernee.
 
-Concu strictement pour l'usage labo/entrainement local du createur afin de faire
-monter en puissance le Playbook public de RIOT sans exposer de session privee.
+Supporte en priorite :
+1. Le CLI officiel `agy` (utilise directement la session Antigravity / abonnement Google AI Pro locale, sans cle Gemini separee) ;
+2. Le SDK Python `google-antigravity` en repli (si `GEMINI_API_KEY` / `gemini.cle` est configuree).
 """
 import asyncio
+import json
 import logging
 import os
+import re
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -54,16 +60,43 @@ def _cle_gemini_dispo() -> str:
     return str(raw or "").strip()
 
 
-def statut_mentor() -> Dict[str, Any]:
-    sdk_ok = False
+def _trouver_binaire_agy() -> str:
+    """Detecte l'executable officiel `agy` (Antigravity CLI) sur la machine locale."""
+    for nom in ("agy", "agy.exe"):
+        trouve = shutil.which(nom)
+        if trouve:
+            return trouve
+    home = Path.home()
+    candidats = [
+        home / "AppData" / "Local" / "agy" / "bin" / "agy.exe",
+        home / ".local" / "bin" / "agy",
+        Path("/usr/local/bin/agy"),
+    ]
+    for c in candidats:
+        if c.exists() and c.is_file():
+            return str(c)
+    return ""
+
+
+def _sdk_disponible() -> bool:
     try:
         import google.antigravity  # noqa: F401
-        sdk_ok = True
+        return True
     except Exception:
-        sdk_ok = False
+        return False
+
+
+def statut_mentor() -> Dict[str, Any]:
+    agy_bin = _trouver_binaire_agy()
+    sdk_ok = _sdk_disponible()
+    cle_ok = bool(_cle_gemini_dispo())
+    backend = "agy_cli" if agy_bin else ("sdk" if (sdk_ok and cle_ok) else "aucun")
     return {
+        "agy_disponible": bool(agy_bin),
+        "agy_chemin": agy_bin,
         "sdk_disponible": sdk_ok,
-        "auth_disponible": bool(_cle_gemini_dispo()),
+        "auth_disponible": bool(agy_bin) or cle_ok,
+        "backend": backend,
         "actif": bool(reglage("mentor.actif", False)),
         "auto_corriger": bool(reglage("mentor.auto_corriger", True)),
         "modele": str(reglage("mentor.modele", "") or ""),
@@ -73,10 +106,72 @@ def statut_mentor() -> Dict[str, Any]:
 
 def mentor_est_actif() -> bool:
     st = statut_mentor()
-    return bool(st["sdk_disponible"] and st["actif"])
+    return bool(st["actif"] and (st["agy_disponible"] or (st["sdk_disponible"] and st["auth_disponible"])))
 
 
-def _executer_agent_mentor(
+def _extraire_json_texte(brut: str) -> str:
+    txt = (brut or "").strip()
+    if txt.startswith("```"):
+        txt = re.sub(r"^```(?:json)?\s*|\s*```$", "", txt, flags=re.IGNORECASE | re.DOTALL).strip()
+    m = re.search(r"\{[\s\S]*\}", txt)
+    return m.group(0) if m else txt
+
+
+def _executer_via_agy_cli(
+    agy_bin: str,
+    system_instructions: str,
+    prompt: str,
+    dossier_projet: Path,
+    response_schema: type[BaseModel],
+    enable_edit: bool = False,
+    timeout_s: float = 90.0,
+) -> Optional[BaseModel]:
+    """Execute un agent Antigravity via la CLI officielle `agy` (session Google AI Pro / IDE)."""
+    schema_path = None
+    try:
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as tf:
+            tf.write(json.dumps(response_schema.model_json_schema(), ensure_ascii=False))
+            schema_path = tf.name
+
+        prompt_final = f"{system_instructions}\n\n{prompt}"
+        mode_agy = "accept-edits" if enable_edit else "plan"
+        cmd = [
+            agy_bin,
+            "--mode", mode_agy,
+            "--output-format", "json",
+            "--json-schema", schema_path,
+            "--add-dir", str(dossier_projet.resolve()),
+            f"-p={prompt_final}",
+        ]
+        proc = subprocess.run(
+            cmd,
+            cwd=str(dossier_projet.resolve()),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout_s,
+        )
+        if proc.returncode != 0:
+            LOG.warning("agy CLI code=%s err=%s", proc.returncode, (proc.stderr or "")[:200])
+            return None
+        enveloppe = json.loads((proc.stdout or "").strip())
+        if not isinstance(enveloppe, dict) or enveloppe.get("status") != "SUCCESS":
+            return None
+        charge = str(enveloppe.get("response") or "")
+        return response_schema.model_validate_json(_extraire_json_texte(charge))
+    except Exception as e:
+        LOG.warning("Echec execution agy CLI Mentor: %s", e)
+        return None
+    finally:
+        if schema_path:
+            try:
+                Path(schema_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+
+
+def _executer_via_sdk(
     system_instructions: str,
     prompt: str,
     dossier_projet: Path,
@@ -84,7 +179,7 @@ def _executer_agent_mentor(
     enable_edit: bool = False,
     timeout_s: float = 45.0,
 ) -> Optional[BaseModel]:
-    """Lance une session Antigravity bornee et retourne le modele Pydantic structure."""
+    """Repli via SDK Python `google-antigravity` + GEMINI_API_KEY."""
     try:
         from google.antigravity import Agent, BuiltinTools, CapabilitiesConfig, LocalAgentConfig
     except Exception as e:
@@ -101,6 +196,8 @@ def _executer_agent_mentor(
         outils.extend([BuiltinTools.EDIT_FILE, BuiltinTools.RUN_COMMAND])
 
     cle = _cle_gemini_dispo()
+    if not cle:
+        return None
     kwargs_cfg: Dict[str, Any] = {
         "system_instructions": system_instructions,
         "capabilities": CapabilitiesConfig(
@@ -109,9 +206,8 @@ def _executer_agent_mentor(
         ),
         "workspaces": [str(dossier_projet.resolve())],
         "response_schema": response_schema,
+        "api_key": cle,
     }
-    if cle:
-        kwargs_cfg["api_key"] = cle
     modele_cfg = str(reglage("mentor.modele", "") or "").strip()
     if modele_cfg:
         kwargs_cfg["model"] = modele_cfg
@@ -126,7 +222,7 @@ def _executer_agent_mentor(
             brut = "".join(chunks).strip()
             if not brut:
                 return None
-            return response_schema.model_validate_json(brut)
+            return response_schema.model_validate_json(_extraire_json_texte(brut))
 
     try:
         return asyncio.run(_run())
@@ -137,16 +233,37 @@ def _executer_agent_mentor(
         finally:
             loop.close()
     except Exception as e:
-        LOG.warning("Echec execution agent Mentor Antigravity: %s", e)
+        LOG.warning("Echec execution SDK Mentor Antigravity: %s", e)
         return None
 
 
-def preparer_directives_mentor(mission: str, dossier_projet: Path, timeout_s: float = 40.0) -> Optional[DirectivesMentor]:
+def _executer_agent_mentor(
+    system_instructions: str,
+    prompt: str,
+    dossier_projet: Path,
+    response_schema: type[BaseModel],
+    enable_edit: bool = False,
+    timeout_s: float = 90.0,
+) -> Optional[BaseModel]:
+    """Orchestre le Mentor Antigravity (CLI `agy` en priorite, sinon SDK + cle Gemini)."""
+    agy_bin = _trouver_binaire_agy()
+    if agy_bin:
+        res = _executer_via_agy_cli(
+            agy_bin, system_instructions, prompt, dossier_projet, response_schema, enable_edit, timeout_s
+        )
+        if res is not None:
+            return res
+    return _executer_via_sdk(
+        system_instructions, prompt, dossier_projet, response_schema, enable_edit, timeout_s
+    )
+
+
+def preparer_directives_mentor(mission: str, dossier_projet: Path, timeout_s: float = 90.0) -> Optional[DirectivesMentor]:
     """Phase 1 (Avant RIOT) : Produit un plan strict + ce qu'il faut faire et ne PAS faire."""
     sys_inst = (
         "Tu es le Mentor Antigravity qui forme l'agent RIOT. "
-        "Inspecte brievement les fichiers pertinents du projet puis renvoie UNIQUEMENT des directives "
-        "structurees (plan, obligations, interdits explicites, verification attendue)."
+        "Inspecte brievement les fichiers pertinents du projet puis renvoie UNIQUEMENT du JSON valide "
+        "conforme au schema (plan_etapes, a_faire, a_eviter, criteres_validation)."
     )
     prompt = (
         f"Projet : {dossier_projet.name}\n"
@@ -179,15 +296,15 @@ def auditer_et_distiller(
     directives: Optional[DirectivesMentor] = None,
     *,
     auto_corriger: Optional[bool] = None,
-    timeout_s: float = 65.0,
+    timeout_s: float = 110.0,
 ) -> Optional[VerdictMentor]:
     """Phase 2 (Apres RIOT) : Verifie le travail reel, corrige si besoin et extrait les lecons vers memoire."""
     corriger = bool(reglage("mentor.auto_corriger", True)) if auto_corriger is None else bool(auto_corriger)
     sys_inst = (
         "Tu es l'Auditeur Mentor Antigravity charge d'evaluer le travail de RIOT. "
         "Verifie les fichiers reellement modifies et la coherence avec la demande. "
-        + ("Si tu trouves une erreur reelle, corrige-la proprement avec edit_file et documente-la. " if corriger else "Ne modifie pas les fichiers, signale les erreurs. ")
-        + "Extrais ensuite 1 a 3 lecons atomiques et generiques (sans secrets ni chemins absolus locaux) pour le Playbook de RIOT."
+        + ("Si tu trouves une erreur reelle, corrige-la proprement et documente-la. " if corriger else "Ne modifie pas les fichiers, signale les erreurs. ")
+        + "Extrais ensuite 1 a 3 lecons atomiques et generiques (sans secrets ni chemins absolus locaux) et reponds en JSON strict conforme au schema."
     )
     cadrage = formater_directives_pour_prompt(directives)
     prompt = (

@@ -748,7 +748,23 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
         if proj_anc:
             systeme += f"\n\n[PROJET ACTIF ANCRÉ : {proj_anc}] (utilise ce dossier comme cwd/racine par défaut)."
     except Exception:
-        pass
+        proj_anc = None
+
+    dossier_mentor = projet_actuel or proj_anc or Path.cwd()
+    directives_mentor = None
+    mentor_actif_tour = False
+    try:
+        from core import mentor as mentor_mod
+        if mentor_mod.mentor_est_actif():
+            mentor_actif_tour = True
+            with console.status("[bold cyan]🎓 Cadrage Mentor Antigravity...[/bold cyan]", spinner="dots"):
+                directives_mentor = mentor_mod.preparer_directives_mentor(phrase, dossier_mentor)
+            bloc_m = mentor_mod.formater_directives_pour_prompt(directives_mentor)
+            if bloc_m:
+                systeme += bloc_m
+                console.print("[dim]🎓 Mentor : directives & interdits injectés dans RIOT.[/dim]")
+    except Exception:
+        mentor_actif_tour = False
 
     # Récupération et filtrage des schémas d'outils
     tous_schemas = registre.schemas_api(
@@ -818,6 +834,15 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
             console.print(Markdown(reponse_finale))
             console.print(f"[dim]  ⚡ {provider.nom} · {dt}s[/dim]\n")
             memoire.lancer_auto_memoire_asynchrone(phrase, reponse_finale, surface="cli")
+            if mentor_actif_tour:
+                try:
+                    from core import mentor as mentor_mod
+                    with console.status("[bold cyan]🎓 Audit & apprentissage Mentor Antigravity...[/bold cyan]", spinner="dots"):
+                        verdict = mentor_mod.auditer_et_distiller(phrase, dossier_mentor, reponse_finale, directives=directives_mentor)
+                    if verdict:
+                        console.print(f"[dim]🎓 Mentor [{verdict.verdict}] : {verdict.resume[:160]} (+{len(verdict.lecons)} leçons)[/dim]\n")
+                except Exception:
+                    pass
             return
 
         # Appel d'outils requis
@@ -888,15 +913,15 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
         console.print(Markdown(reponse_finale))
         console.print(f"[dim]  ⚡ {provider.nom} · {round(time.time() - t_fin, 2)}s[/dim]\n")
         memoire.lancer_auto_memoire_asynchrone(phrase, reponse_finale, surface="cli")
-        try:
-            from core import mentor
-            if llm_mod.est_createur() and projet_actuel and mentor.mentor_est_actif():
-                with console.status("[bold cyan]🎓 Audit Mentor Antigravity...[/bold cyan]", spinner="dots"):
-                    verdict = mentor.auditer_et_distiller(phrase, projet_actuel, reponse_finale)
+        if mentor_actif_tour:
+            try:
+                from core import mentor as mentor_mod
+                with console.status("[bold cyan]🎓 Audit & apprentissage Mentor Antigravity...[/bold cyan]", spinner="dots"):
+                    verdict = mentor_mod.auditer_et_distiller(phrase, dossier_mentor, reponse_finale, directives=directives_mentor)
                 if verdict:
                     console.print(f"[dim]🎓 Mentor [{verdict.verdict}] : {verdict.resume[:160]} (+{len(verdict.lecons)} leçons)[/dim]\n")
-        except Exception:
-            pass
+            except Exception:
+                pass
     except Exception:
         pass
 
@@ -1083,7 +1108,10 @@ def lancer_terminal_interactif():
                 sub = parties[1].strip().lower() if len(parties) > 1 else "status"
                 if sub in ("on", "activer", "1"):
                     st_m = mentor_mod.basculer_mentor(True)
-                    console.print(f"[bold green]✓ Mentor Antigravity ACTIVÉ[/bold green] [dim](SDK={st_m['sdk_disponible']}, Auth={st_m['auth_disponible']})[/dim]\n")
+                    if st_m["auth_disponible"]:
+                        console.print(f"[bold green]✓ Mentor Antigravity ACTIVÉ[/bold green] [dim](backend={st_m['backend']}, agy={st_m['agy_disponible']}, sdk={st_m['sdk_disponible']})[/dim]\n")
+                    else:
+                        console.print("[bold yellow]⚠ Mentor activé mais aucun backend Antigravity détecté.[/bold yellow] [dim]Connectez `agy` (Antigravity IDE / Google AI Pro) ou configurez `GEMINI_API_KEY`.[/dim]\n")
                 elif sub in ("off", "desactiver", "0"):
                     mentor_mod.basculer_mentor(False)
                     console.print("[bold yellow]✓ Mentor Antigravity DÉSACTIVÉ.[/bold yellow]\n")
@@ -1098,8 +1126,8 @@ def lancer_terminal_interactif():
                     mem_st = st_m["memoire"]
                     console.print(
                         f"[bold cyan]🎓 Mentor Antigravity[/bold cyan] · actif=[bold]{st_m['actif']}[/bold] · "
-                        f"SDK={st_m['sdk_disponible']} · Actives={mem_st['actives']} · "
-                        f"Archivées={mem_st['archivees']} · Confiance moy={mem_st['confiance_moyenne']}\n"
+                        f"backend={st_m['backend']} (agy={st_m['agy_disponible']}, sdk={st_m['sdk_disponible']}) · "
+                        f"Actives={mem_st['actives']} · Archivées={mem_st['archivees']} · Confiance moy={mem_st['confiance_moyenne']}\n"
                         "[dim]Usage : /mentor on | /mentor off | /mentor prune | /mentor export[/dim]\n"
                     )
                 continue

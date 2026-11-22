@@ -354,7 +354,8 @@
     try {
       var rm = await fetch("/api/ide/mentor/etat");
       var dm = await rm.json();
-      if (dm && dm.ok && dm.createur && dm.sdk_disponible && els["ide-mentor-wrap"]) {
+      var mentorDispo = Boolean(dm && dm.ok && (dm.agy_disponible || (dm.sdk_disponible && dm.auth_disponible)));
+      if (mentorDispo && els["ide-mentor-wrap"]) {
         els["ide-mentor-wrap"].classList.remove("hidden");
         els["ide-mentor-mode"].checked = Boolean(dm.actif);
       }
