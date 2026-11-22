@@ -207,6 +207,18 @@ class TelemetryStore:
                             ON CONFLICT (version) DO NOTHING
                             """
                         )
+                        pconn.execute(
+                            """
+                            INSERT INTO releases (version, titre, notes, commande)
+                            VALUES (
+                                '0.3.7',
+                                'RIOT v0.3.7 — Agent Codeur Renforcé (Auto-Ancrage, Patch Souple, 10 Tours & max_tokens 4096)',
+                                E'• Auto-ancrage du dossier projet actif dans CLI, Studio, terminal et explorer_projet + détection de stack\\n• patcher_code tolérant aux espaces de fin de ligne + indices de lignes proches\\n• Boucle agentique étendue à 10 tours avec synthèse finale garantie et max_tokens porté à 4096',
+                                'npm install -g @riotlagrinta/riot@latest'
+                            )
+                            ON CONFLICT (version) DO NOTHING
+                            """
+                        )
                 self._pg_ready = True
                 return
             except Exception as e:
@@ -257,11 +269,11 @@ class TelemetryStore:
                         "INSERT INTO releases (ts, version, titre, notes, commande) VALUES (?, ?, ?, ?, ?)",
                         (
                             time.time(),
-                            "0.3.6",
-                            "RIOT v0.3.6 — Pool Multi-Clés, Rotation Intra-Groq 28k TPM & Schémas Compacts",
-                            "• Rotation multi-modèles intra-Groq (gpt-oss-120b -> llama-3.3-70b-versatile 12k TPM -> gpt-oss-20b) + failover HTTP 413\n"
-                            "• Support pool multi-clés Round-Robin (GROQ_API_KEY=\"cle1,cle2\", MISTRAL_API_KEY, etc.)\n"
-                            "• Compression automatique (-45%) des schémas d'outils et de l'historique en CLI, IDE, Studio et Proxy",
+                            "0.3.7",
+                            "RIOT v0.3.7 — Agent Codeur Renforcé (Auto-Ancrage, Patch Souple, 10 Tours & max_tokens 4096)",
+                            "• Auto-ancrage du dossier projet actif dans CLI, Studio, terminal et explorer_projet + détection de stack\n"
+                            "• patcher_code tolérant aux espaces de fin de ligne + indices de lignes proches\n"
+                            "• Boucle agentique étendue à 10 tours avec synthèse finale garantie et max_tokens porté à 4096",
                             "npm install -g @riotlagrinta/riot@latest",
                         ),
                     )

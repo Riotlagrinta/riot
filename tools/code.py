@@ -46,6 +46,48 @@ def _projet_actif_courant() -> Optional[Path]:
     return None
 
 
+def definir_projet_actif(chemin_dossier: Path) -> Optional[Path]:
+    """Ancre le dossier de travail courant dans _SESSION_CTX (sans pointer sur RIOT interne)."""
+    try:
+        res = Path(chemin_dossier).resolve()
+        if not res.exists() or not res.is_dir():
+            return None
+        try:
+            res.relative_to(_RACINE_RIOT.resolve())
+            from core.llm import est_createur
+            if not est_createur():
+                return None
+        except ValueError:
+            pass
+        from core.cli import _SESSION_CTX
+        _SESSION_CTX["projet_actif"] = res
+        return res
+    except Exception:
+        return None
+
+
+def extraire_et_ancrer_dossier_texte(texte: str) -> Optional[Path]:
+    """Detecte un chemin de dossier existant mentionne par l'utilisateur et l'ancre."""
+    if not texte:
+        return None
+    motifs = [
+        r"""["']([A-Za-z]:\\[^"'\r\n]+|/(?:home|Users|var|opt|srv|mnt|projects)[^"'\r\n]+)["']""",
+        r"""\b([A-Za-z]:\\[^\s,;'"`<>|*?]+(?:[\\/][^\s,;'"`<>|*?]+)*)""",
+    ]
+    for pat in motifs:
+        for m in re.finditer(pat, texte):
+            brut = m.group(1).strip().rstrip(".,;:!?")
+            try:
+                cand = Path(brut)
+                if cand.exists() and cand.is_dir():
+                    return definir_projet_actif(cand)
+                if cand.exists() and cand.is_file():
+                    return definir_projet_actif(cand.parent)
+            except Exception:
+                continue
+    return None
+
+
 def _verifier_acces_source_interne(cible: Path) -> None:
     """Empeche la lecture ou modification du code source de RIOT sans autorisation createur."""
     try:
@@ -115,6 +157,7 @@ def explorer_projet(dossier: str, profondeur: int = 2) -> str:
         else:
             return f"[ERREUR] Le dossier '{dossier}' est introuvable."
 
+    definir_projet_actif(racine)
     max_prof = min(max(1, profondeur), 4)
     lignes = [f"📁 [PROJET] {racine.name} ({racine})"]
     nb_fichiers = 0
@@ -152,6 +195,27 @@ def explorer_projet(dossier: str, profondeur: int = 2) -> str:
 
     scanner(racine, 1)
     lignes.append(f"\nTotal : {nb_dossiers} dossiers, {nb_fichiers} fichiers visibles.")
+
+    # Detection rapide de stack pour accelerer l'analyse de l'agent
+    stack_infos = []
+    pkg_json = racine / "package.json"
+    if pkg_json.is_file():
+        try:
+            import json as _json
+            pdata = _json.loads(pkg_json.read_text(encoding="utf-8", errors="replace"))
+            scripts = list((pdata.get("scripts") or {}).keys())[:6]
+            deps = list({**(pdata.get("dependencies") or {}), **(pdata.get("devDependencies") or {})}.keys())
+            majeurs = [d for d in deps if d in ("next", "react", "remotion", "@remotion/cli", "vite", "express", "tailwindcss", "typescript", "jest", "vitest", "prisma")]
+            stack_infos.append(f"Node/JS ({', '.join(majeurs) or 'package.json'}) | scripts: {', '.join(scripts) or '-'}")
+        except Exception:
+            stack_infos.append("Node/JS (package.json)")
+    if (racine / "pyproject.toml").is_file() or (racine / "requirements.txt").is_file():
+        stack_infos.append("Python (" + ("pyproject.toml" if (racine / "pyproject.toml").is_file() else "requirements.txt") + ")")
+    if (racine / ".git").exists():
+        stack_infos.append("Dépôt Git actif")
+    if stack_infos:
+        lignes.append("[STACK DÉTECTÉE] " + " · ".join(stack_infos))
+
     return "\n".join(lignes)
 
 
@@ -326,12 +390,46 @@ def patcher_code(fichier: str, ancien_bloc: str, nouveau_bloc: str) -> str:
     # Normalisation des retours à la ligne pour comparaison fiable
     ancien_norm = ancien_bloc.replace("\r\n", "\n")
     contenu_norm = contenu.replace("\r\n", "\n")
+    nouveau_norm = nouveau_bloc.replace("\r\n", "\n")
 
     nb_occurrences = contenu_norm.count(ancien_norm)
     if nb_occurrences == 0:
+        # Fallback tolerant : correspondance ligne par ligne en ignorant les espaces de fin de ligne
+        lignes_fic = contenu_norm.splitlines()
+        lignes_cible = ancien_norm.splitlines()
+        if lignes_cible:
+            cible_rstrip = [l.rstrip() for l in lignes_cible]
+            n_c = len(cible_rstrip)
+            hits = [
+                idx for idx in range(len(lignes_fic) - n_c + 1)
+                if [l.rstrip() for l in lignes_fic[idx:idx + n_c]] == cible_rstrip
+            ]
+            if len(hits) == 1:
+                idx = hits[0]
+                nouvelles_lignes = lignes_fic[:idx] + nouveau_norm.splitlines() + lignes_fic[idx + n_c:]
+                contenu_modifie = "\n".join(nouvelles_lignes) + ("\n" if contenu_norm.endswith("\n") else "")
+                with open(chemin, "w", encoding=enc_choisi, newline="\n") as f:
+                    f.write(contenu_modifie)
+                diff_lignes = len(nouveau_norm.splitlines()) - n_c
+                signe = f"+{diff_lignes}" if diff_lignes >= 0 else str(diff_lignes)
+                verif = _verifier_syntaxe_et_qualite(chemin)
+                return f"✓ Patch appliqué avec succès sur {chemin.name} ({signe} lignes, correspondance souple ligne {idx + 1}).{verif}"
+            if len(hits) > 1:
+                return (
+                    f"[ERREUR] Le bloc cible apparaît {len(hits)} fois dans '{chemin.name}'. "
+                    "Ajoutez 2-3 lignes de contexte autour pour le rendre unique."
+                )
+
+        # Indice utile avec la premiere ligne non vide trouvee dans le fichier
+        indice = ""
+        prem = next((l.strip() for l in ancien_norm.splitlines() if l.strip()), "")
+        if prem:
+            proches = [f"L{i + 1}: {l.strip()[:70]}" for i, l in enumerate(lignes_fic) if prem[:20] in l][:3]
+            if proches:
+                indice = " Lignes proches : " + " | ".join(proches)
         return (
             f"[ERREUR] Le bloc cible est introuvable dans '{chemin.name}'. "
-            "Vérifiez l'indentation et les caractères exacts en utilisant 'lire_code' d'abord."
+            f"Vérifiez avec 'lire_code' avant de réessayer.{indice}"
         )
     if nb_occurrences > 1:
         return (
@@ -339,7 +437,6 @@ def patcher_code(fichier: str, ancien_bloc: str, nouveau_bloc: str) -> str:
             "Fournissez un bloc plus large avec quelques lignes de contexte pour garantir l'unicité du remplacement."
         )
 
-    nouveau_norm = nouveau_bloc.replace("\r\n", "\n")
     contenu_modifie = contenu_norm.replace(ancien_norm, nouveau_norm, 1)
 
     with open(chemin, "w", encoding=enc_choisi, newline="\n") as f:

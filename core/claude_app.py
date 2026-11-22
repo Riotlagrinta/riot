@@ -3851,6 +3851,24 @@ def monter_routes(app):
 
 
 
+            try:
+
+                from tools.code import extraire_et_ancrer_dossier_texte, _projet_actif_courant
+
+                extraire_et_ancrer_dossier_texte(instruction_mono)
+
+                proj_anc = _projet_actif_courant()
+
+                if proj_anc:
+
+                    systeme += f"\n\n[DOSSIER PROJET ACTIF ANCRÉ : {proj_anc}] (utilise ce chemin par défaut pour lire/patcher/lancer des commandes)."
+
+            except Exception:
+
+                pass
+
+
+
             req_routage = instruction_mono + (" navigateur web" if demande_nav else "") + (" code projet" if mode_effectif == "coder" else "")
 
             schemas = [s for s in registre.schemas_api(requete=req_routage) if (s.get("name") in outils_code_cibles or str(s.get("name", "")).startswith("mcp_"))]
@@ -3865,9 +3883,11 @@ def monter_routes(app):
 
             compteur_appels_studio = {}
 
+            reponse_envoyee = False
 
 
-            for tour in range(5):
+
+            for tour in range(10):
 
 
 
@@ -4063,6 +4083,8 @@ def monter_routes(app):
 
 
 
+                    reponse_envoyee = True
+
                     break
 
 
@@ -4194,6 +4216,30 @@ def monter_routes(app):
 
 
                     historique.append({"role": "user", "content": results})
+
+
+
+            if not reponse_envoyee:
+
+                try:
+
+                    rep_fin = await asyncio.to_thread(provider.repondre, systeme, historique, [])
+
+                    texte_fin = " ".join(b.text for b in getattr(rep_fin, "content", []) if getattr(b, "type", None) == "text").strip()
+
+                    if texte_fin:
+
+                        _memoriser_tour(chat_id, instruction_mono, texte_fin)
+
+                        for mot in texte_fin.split(" "):
+
+                            yield f"data: {json.dumps({'type': 'chunk', 'texte': mot + ' '})}\n\n"
+
+                            await asyncio.sleep(0.01)
+
+                except Exception:
+
+                    pass
 
 
 

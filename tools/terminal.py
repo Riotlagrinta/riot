@@ -108,7 +108,23 @@ def executer_terminal(
             f"Demande d'abord confirmation explicite à l'utilisateur avant d'exécuter avec confirme=True."
         )
 
-    repertoire = cwd.strip() if cwd and os.path.isdir(cwd.strip()) else str(_RACINE)
+    if cwd and os.path.isdir(cwd.strip()):
+        repertoire = cwd.strip()
+    else:
+        repertoire = ""
+        try:
+            from tools.code import _projet_actif_courant
+            proj = _projet_actif_courant()
+            if proj:
+                repertoire = str(proj)
+        except Exception:
+            pass
+        if not repertoire:
+            try:
+                from core.llm import est_createur
+                repertoire = str(_RACINE) if est_createur() else str(Path.home())
+            except Exception:
+                repertoire = str(Path.home())
     limite_temps = min(max(1, int(timeout)), 300)
 
     if sys.platform != "win32":

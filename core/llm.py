@@ -321,7 +321,7 @@ class GroqProvider(ProviderLLM):
                     "model": modele_courant,
                     "messages": messages,
                     "temperature": float(reglage("groq.temperature", 0.3)),
-                    "max_tokens": int(reglage("groq.max_tokens", 1024)),
+                    "max_tokens": int(reglage("groq.max_tokens", 4096)),
                 }
                 if tools:
                     payload["tools"] = tools
@@ -546,7 +546,7 @@ class OpenRouterProvider(ProviderLLM):
                     "model": modele_courant,
                     "messages": messages,
                     "temperature": float(reglage("openrouter.temperature", 0.3)),
-                    "max_tokens": int(reglage("openrouter.max_tokens", 2048)),
+                    "max_tokens": int(reglage("openrouter.max_tokens", 4096)),
                 }
                 if tools:
                     payload["tools"] = tools
@@ -648,7 +648,7 @@ class MistralProvider(ProviderLLM):
                     "model": modele_courant,
                     "messages": messages,
                     "temperature": float(reglage("mistral.temperature", 0.2)),
-                    "max_tokens": int(reglage("mistral.max_tokens", 2048)),
+                    "max_tokens": int(reglage("mistral.max_tokens", 4096)),
                 }
                 if tools:
                     payload["tools"] = tools
@@ -767,7 +767,7 @@ class CustomOpenAIProvider(ProviderLLM):
                     "model": modele_courant,
                     "messages": messages,
                     "temperature": float(reglage("custom.temperature", 0.3)),
-                    "max_tokens": int(reglage("custom.max_tokens", 2048)),
+                    "max_tokens": int(reglage("custom.max_tokens", 4096)),
                 }
                 if tools:
                     payload["tools"] = tools

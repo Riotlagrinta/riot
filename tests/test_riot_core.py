@@ -142,16 +142,16 @@ def test_spiral_icons_and_creator_monitoring(monkeypatch, tmp_path):
     assert pc.get("/status/public").status_code == 200
     assert "prompt" not in pc.get("/status/public").text
     assert pc.get("/releases").status_code == 200
-    assert pc.get("/releases/latest").json()["version"] == "0.3.6"
+    assert pc.get("/releases/latest").json()["version"] == "0.3.7"
     assert pc.get("/admin/metrics").status_code == 401
     assert pc.get("/admin/metrics", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
     assert pc.get("/admin/logs", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
     r_rel = pc.post(
         "/admin/releases",
         headers={"X-Admin-Token": "secret_creator_tok"},
-        json={"version": "0.3.7", "titre": "Test Release", "notes": "- Note 1"},
+        json={"version": "0.3.8", "titre": "Test Release", "notes": "- Note 1"},
     )
-    assert r_rel.status_code == 200 and pc.get("/releases/latest").json()["version"] == "0.3.7"
+    assert r_rel.status_code == 200 and pc.get("/releases/latest").json()["version"] == "0.3.8"
 
 
 def test_proxy_chat_completions_usage_and_opaque_model(monkeypatch, tmp_path):
@@ -807,6 +807,44 @@ def test_selection_adaptative_modele_par_requete(monkeypatch, tmp_path):
     })
     assert len(body_comp["messages"][0]["content"]) < 1400
     assert len(body_comp["tools"][0]["function"]["description"]) <= 150
+
+
+def test_ameliorations_code_ancrage_patch_et_stack(tmp_path):
+    from core.cli import _SESSION_CTX
+    from tools import code as code_tools
+
+    prev_proj = _SESSION_CTX.get("projet_actif")
+    try:
+        proj = tmp_path / "mon_app_remotion"
+        proj.mkdir()
+        (proj / "package.json").write_text(
+            '{"name": "demo", "scripts": {"dev": "remotion studio", "test": "jest"}, "dependencies": {"remotion": "4.0.0", "react": "18.0.0"}}',
+            encoding="utf-8",
+        )
+        src_py = proj / "app.py"
+        src_py.write_text("def salut():   \n    return 'bonjour'\n", encoding="utf-8")
+
+        # 1. explorer_projet ancre automatiquement projet_actif et detecte la stack
+        arbo = code_tools.explorer_projet(str(proj))
+        assert _SESSION_CTX.get("projet_actif") == proj.resolve()
+        assert "[STACK DÉTECTÉE]" in arbo and "remotion" in arbo
+
+        # 2. lire_code fonctionne ensuite avec un chemin relatif sans exposer RIOT
+        lu = code_tools.lire_code("app.py")
+        assert "def salut" in lu
+
+        # 3. patcher_code reussit meme avec difference d'espaces de fin de ligne
+        res_patch = code_tools.patcher_code("app.py", "def salut():\n    return 'bonjour'", "def salut():\n    return 'salut'")
+        assert "✓ Patch appliqué" in res_patch
+        assert "return 'salut'" in src_py.read_text(encoding="utf-8")
+
+        # 4. extraire_et_ancrer_dossier_texte detecte un chemin dans une phrase utilisateur
+        _SESSION_CTX["projet_actif"] = None
+        anc = code_tools.extraire_et_ancrer_dossier_texte(f"regarde dans {proj} s'il te plait")
+        assert anc == proj.resolve() and _SESSION_CTX.get("projet_actif") == proj.resolve()
+    finally:
+        _SESSION_CTX["projet_actif"] = prev_proj
+
 
 
 

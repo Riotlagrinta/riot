@@ -725,6 +725,15 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
     historique_conversation.append({"role": "user", "content": phrase})
     auth.audit("CLI_ORDRE", "localhost", phrase)
 
+    try:
+        from tools.code import extraire_et_ancrer_dossier_texte, _projet_actif_courant
+        extraire_et_ancrer_dossier_texte(phrase)
+        proj_anc = _projet_actif_courant()
+        if proj_anc:
+            systeme += f"\n\n[PROJET ACTIF ANCRÉ : {proj_anc}] (utilise ce dossier comme cwd/racine par défaut)."
+    except Exception:
+        pass
+
     # Récupération et filtrage des schémas d'outils
     tous_schemas = registre.schemas_api(
         local_seulement=(provider.nom == "Ollama"),
@@ -734,7 +743,7 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
         outils_code_cibles = {
             "explorer_projet", "lire_code", "ecrire_code", "patcher_code",
             "chercher_dans_code", "executer_test_ou_commande", "executer_terminal",
-            "inspecter_port", "lister_dossier", "supprimer_fichier", "ouvrir_terminal_interactif",
+            "inspecter_port", "lister_dossier", "chercher_fichiers", "ouvrir_fichier", "supprimer_fichier", "ouvrir_terminal_interactif",
             "grill-me", "content-strategy", "anti-ai-slop", "seo-audit",
             "git_status", "git_diff", "git_log", "requete_api_http", "github_repo_info",
             "lister_connecteurs_mcp", "installer_connecteur_mcp", "basculer_connecteur_mcp",
@@ -765,7 +774,7 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
     p = _pal()
     acc = p["cli_accent"]
     compteur_appels = {}
-    for tour in range(6):
+    for tour in range(10):
         t0 = time.time()
         try:
             with console.status(f"[bold {acc}]⠋ Réflexion en cours...[/bold {acc}]", spinner="dots"):
@@ -843,6 +852,21 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
                 "role": "user",
                 "content": resultats_du_tour,
             })
+
+    # Synthese finale garantie si les 10 tours d'outils ont ete consommes
+    try:
+        t_fin = time.time()
+        with console.status(f"[bold {acc}]⠋ Synthèse finale...[/bold {acc}]", spinner="dots"):
+            rep_fin = provider.repondre(systeme, historique_conversation, [])
+        texte_fin = " ".join(b.text for b in rep_fin.content if getattr(b, "type", None) == "text").strip()
+        reponse_finale = texte_fin or "Actions exécutées. Vérifiez les résultats ci-dessus."
+        historique_conversation.append({"role": "assistant", "content": reponse_finale})
+        console.print()
+        console.print(Markdown(reponse_finale))
+        console.print(f"[dim]  ⚡ {provider.nom} · {round(time.time() - t_fin, 2)}s[/dim]\n")
+        memoire.lancer_auto_memoire_asynchrone(phrase, reponse_finale, surface="cli")
+    except Exception:
+        pass
 
 
 def _verifier_configuration_initiale():
