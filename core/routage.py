@@ -21,7 +21,7 @@ import subprocess
 from core.config import definir, reglage
 
 LOG = logging.getLogger("jarvis")
-_MODES = ("local", "hybride", "qualite", "groq", "gemini", "openrouter", "mistral")
+_MODES = ("local", "hybride", "qualite", "groq", "gemini", "openrouter", "mistral", "custom", "freellmapi", "openai", "litellm")
 
 
 # ------------------------------------------------------------------ modes

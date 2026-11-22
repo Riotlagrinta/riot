@@ -902,7 +902,7 @@ def _verifier_configuration_initiale():
             mode = "custom"
         config.definir("mode", mode)
         if mode == "custom":
-            url = input("URL base OpenAI (ex: http://localhost:3001/v1) : ").strip()
+            url = input("URL base OpenAI (ex: http://127.0.0.1:31415/v1 ou :3001/v1) : ").strip()
             if url:
                 config.definir("custom.base_url", url)
             mod = input("Modele cible [auto] : ").strip() or "auto"

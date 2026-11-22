@@ -398,7 +398,7 @@ def monter_routes(app) -> None:
         }
         if pub["admin"]:
             payload["modes_llm"] = ["groq", "mistral", "gemini", "openrouter", "custom", "anthropic", "local"]
-            payload["custom_base_url"] = reglage("custom.base_url", "http://localhost:3001/v1")
+            payload["custom_base_url"] = reglage("custom.base_url", "http://127.0.0.1:31415/v1")
         return payload
 
     @app.post("/api/ide/projet")

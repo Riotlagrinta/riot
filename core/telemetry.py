@@ -29,6 +29,7 @@ _SECRET_PATTERNS = [
     (re.compile(r"\b(npm_[A-Za-z0-9]{16,})\b"), "[NPM_TOKEN]"),
     (re.compile(r"\b(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b"), "[GH_TOKEN]"),
     (re.compile(r"\b(riot_cli_[A-Za-z0-9]{16,})\b"), "[RIOT_TOKEN]"),
+    (re.compile(r"\b(freellmapi-[A-Za-z0-9_-]{16,})\b"), "[FREELLMAPI_KEY]"),
     (re.compile(r"(Bearer\s+)[A-Za-z0-9._-]{16,}", re.IGNORECASE), r"\1[REDACTED_TOKEN]"),
     (re.compile(r"((?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis)://[^:\s]+:)[^@\s]+(@)", re.IGNORECASE), r"\1[REDACTED]\2"),
     (re.compile(r"(?im)^([A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASS|DSN)\s*=\s*)(.+)$"), r"\1[REDACTED]"),

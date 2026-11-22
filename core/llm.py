@@ -711,12 +711,20 @@ class MistralProvider(ProviderLLM):
 def _normaliser_url_chat(url: str) -> str:
     u = (url or "").strip().rstrip("/")
     if not u:
-        return "http://localhost:3001/v1/chat/completions"
+        return "http://127.0.0.1:31415/v1/chat/completions"
     if u.endswith("/chat/completions"):
         return u
     if u.endswith("/v1") or u.endswith("/openai"):
         return f"{u}/chat/completions"
     return f"{u}/v1/chat/completions" if "/v1/" not in u else u
+
+
+_ROTATION_FREELLMAPI_PAR_TACHE = {
+    "code": ["claude-sonnet-4-5", "gpt-oss-120b", "nemotron-3-ultra-550b", "llama-3.3-70b", "qwen3.6-27b", "kilo-auto", "auto"],
+    "deep": ["claude-sonnet-4-5", "nemotron-3-ultra-550b", "nemotron-3.5-lightning", "gpt-oss-120b", "llama-3.3-70b", "kilo-auto", "auto"],
+    "agent": ["gpt-oss-120b", "qwen3.6-27b", "llama-3.3-70b", "claude-sonnet-4-5", "free-router", "auto"],
+    "fast": ["auto", "claude-haiku-4-5", "free-router", "gpt-oss-120b", "qwen3.5-9b", "gpt-oss-20b"],
+}
 
 
 class CustomOpenAIProvider(ProviderLLM):
@@ -727,17 +735,24 @@ class CustomOpenAIProvider(ProviderLLM):
     def __init__(self, modele=None):
         import os
 
-        cles_brutes = reglage("custom.cles", []) or reglage("custom.cle", "")
+        cles_brutes = (
+            reglage("custom.cles", [])
+            or reglage("custom.cle", "")
+            or reglage("freellmapi.cles", [])
+            or reglage("freellmapi.cle", "")
+        )
         self.cles = _recuperer_liste_cles(cles_brutes, "CUSTOM_API_KEY")
         if not self.cles:
             self.cles = _recuperer_liste_cles("", "FREELLMAPI_KEY")
         self.cle = self.cles[0] if self.cles else ""
 
         base_cfg = (
-            reglage("custom.base_url", "")
-            or reglage("custom.url", "")
-            or os.environ.get("CUSTOM_BASE_URL", "")
+            os.environ.get("CUSTOM_BASE_URL", "")
             or os.environ.get("FREELLMAPI_BASE_URL", "")
+            or reglage("custom.base_url", "")
+            or reglage("custom.url", "")
+            or reglage("freellmapi.base_url", "")
+            or reglage("freellmapi.url", "")
         )
         self.base_url_configuree = bool(str(base_cfg).strip())
         self.api_url = _normaliser_url_chat(str(base_cfg))
@@ -756,13 +771,38 @@ class CustomOpenAIProvider(ProviderLLM):
     _outils = GroqProvider._outils
     _parser = GroqProvider._parser
 
+    def _rotation_adaptative(self, messages, tools, tache_hint: str = ""):
+        # Sur RIOT Engine (passerelle Render), le proxy gere deja le routage opaque
+        if str(self.nom).startswith("RIOT Engine"):
+            return list(self.rotation)
+        est_freellmapi = (
+            "31415" in self.api_url
+            or "freellmapi" in self.api_url.lower()
+            or "freellmapi" in str(self.nom).lower()
+            or any(str(c).startswith("freellmapi-") for c in self.cles)
+        )
+        if not est_freellmapi or str(self.modele).lower() != "auto":
+            return list(self.rotation)
+
+        tache = tache_hint or classifier_tache_requete(messages=messages, tools=tools)
+        taille_chars = sum(len(str(m.get("content", ""))) for m in (messages or []) if isinstance(m, dict))
+        if taille_chars > 25000:
+            ordre = ["nemotron-3.5-lightning", "nemotron-3-ultra-550b", "claude-sonnet-4-5", "kilo-auto", "auto"]
+        else:
+            ordre = list(_ROTATION_FREELLMAPI_PAR_TACHE.get(tache, _ROTATION_FREELLMAPI_PAR_TACHE["agent"]))
+        for m in self.rotation:
+            if m not in ordre:
+                ordre.append(m)
+        return ordre
+
     def _chat(self, messages, tools, tache_hint: str = ""):
         import requests
 
         derniere_erreur = None
         cles_a_tester = self.cles or ["no-key-required"]
+        rotation_eff = self._rotation_adaptative(messages, tools, tache_hint=tache_hint)
         for cle_courante in cles_a_tester:
-            for modele_courant in self.rotation:
+            for modele_courant in rotation_eff:
                 payload = {
                     "model": modele_courant,
                     "messages": messages,

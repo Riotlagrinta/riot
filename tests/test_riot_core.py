@@ -846,6 +846,28 @@ def test_ameliorations_code_ancrage_patch_et_stack(tmp_path):
         _SESSION_CTX["projet_actif"] = prev_proj
 
 
+def test_freellmapi_port_31415_et_routage_adaptatif(monkeypatch):
+    from core import routage
+    from core.llm import CustomOpenAIProvider
+
+    monkeypatch.setenv("CUSTOM_BASE_URL", "http://127.0.0.1:31415/v1")
+    monkeypatch.setenv("CUSTOM_API_KEY", "freellmapi-test-local-0000")
+    monkeypatch.setattr(routage, "reglage", lambda k, d=None: "custom" if k == "mode" else d)
+    assert routage.mode_actuel() == "custom"
+
+    prov = CustomOpenAIProvider(modele="auto")
+    assert prov.api_url == "http://127.0.0.1:31415/v1/chat/completions"
+
+    rot_code = prov._rotation_adaptative([{"role": "user", "content": "corrige ce script python"}], [])
+    assert rot_code[0] == "claude-sonnet-4-5"
+
+    rot_fast = prov._rotation_adaptative([{"role": "user", "content": "salut"}], [])
+    assert rot_fast[0] in ("auto", "claude-haiku-4-5", "free-router", "gpt-oss-120b", "qwen3.5-9b", "gpt-oss-20b")
+
+    rot_long = prov._rotation_adaptative([{"role": "user", "content": "x" * 26000}], [])
+    assert rot_long[0] == "nemotron-3.5-lightning"
+
+
 
 
 
