@@ -244,6 +244,18 @@ class TelemetryStore:
                             ON CONFLICT (version) DO NOTHING
                             """
                         )
+                        pconn.execute(
+                            """
+                            INSERT INTO releases (version, titre, notes, commande)
+                            VALUES (
+                                '0.3.12',
+                                'RIOT v0.3.12 — Curation Mémoire Globale Admin & Correctif agy CLI VerdictMentor',
+                                E'• Récupération des leçons utilisateurs (anonymisées) dans `/admin` avec validation 1-clic vers la Mémoire Globale (`/v1/playbook/global`)\\n• Aplatissement JSON Schema (`$defs/$ref`) et lecture `structured_output` pour `agy CLI` sans crash `EOF`',
+                                'npm install -g @riotlagrinta/riot@latest && riot --update-cli'
+                            )
+                            ON CONFLICT (version) DO NOTHING
+                            """
+                        )
                 self._pg_ready = True
                 return
             except Exception as e:
@@ -294,12 +306,11 @@ class TelemetryStore:
                         "INSERT INTO releases (ts, version, titre, notes, commande) VALUES (?, ?, ?, ?, ?)",
                         (
                             time.time(),
-                            "0.3.11",
-                            "RIOT v0.3.11 — Télémétrie anonymisée Mentor Antigravity (`agy` CLI / SDK) dans /admin",
-                            "• Nouveau endpoint proxy `POST /v1/telemetry/mentor` journalisant les verdicts Mentor (`APPROUVE` / `CORRIGE` / `ERREURS`), directives, latences et leçons distillées\n"
-                            "• Anonymisation automatique des chemins locaux et secrets avant envoi asynchrone (`mentor.telemetrie`)\n"
-                            "• Visibilité directe dans le cockpit `/admin` du portail",
-                            "npm install -g @riotlagrinta/riot@latest",
+                            "0.3.12",
+                            "RIOT v0.3.12 — Curation Mémoire Globale Admin & Correctif agy CLI VerdictMentor",
+                            "• Récupération des leçons utilisateurs (anonymisées) dans `/admin` avec validation 1-clic vers la Mémoire Globale (`/v1/playbook/global`)\n"
+                            "• Aplatissement JSON Schema (`$defs/$ref`) et lecture `structured_output` pour `agy CLI` sans crash `EOF`",
+                            "npm install -g @riotlagrinta/riot@latest && riot --update-cli",
                         ),
                     )
                 conn.commit()

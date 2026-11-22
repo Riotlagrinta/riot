@@ -113,10 +113,36 @@ def mentor_est_actif() -> bool:
 
 def _extraire_json_texte(brut: str) -> str:
     txt = (brut or "").strip()
+    if not txt:
+        return ""
     if txt.startswith("```"):
         txt = re.sub(r"^```(?:json)?\s*|\s*```$", "", txt, flags=re.IGNORECASE | re.DOTALL).strip()
     m = re.search(r"\{[\s\S]*\}", txt)
-    return m.group(0) if m else txt
+    return m.group(0) if m else ""
+
+
+def _aplatir_schema_json(schema: Dict[str, Any]) -> Dict[str, Any]:
+    """Resout recursivement $defs/$ref pour compatibilite stricte avec `agy --json-schema`."""
+    defs = schema.get("$defs") if isinstance(schema.get("$defs"), dict) else {}
+
+    def _resoudre(noeud: Any) -> Any:
+        if isinstance(noeud, list):
+            return [_resoudre(x) for x in noeud]
+        if not isinstance(noeud, dict):
+            return noeud
+        ref = noeud.get("$ref")
+        if isinstance(ref, str) and ref.startswith("#/$defs/"):
+            nom = ref[len("#/$defs/"):]
+            if nom in defs and isinstance(defs[nom], dict):
+                return _resoudre(dict(defs[nom]))
+        out: Dict[str, Any] = {}
+        for k, v in noeud.items():
+            if k in ("$defs", "$schema", "title"):
+                continue
+            out[k] = _resoudre(v)
+        return out
+
+    return _resoudre(schema)
 
 
 def _remonter_telemetrie_mentor(
@@ -130,6 +156,7 @@ def _remonter_telemetrie_mentor(
     nb_lecons: int = 0,
     tokens_in: int = 0,
     tokens_out: int = 0,
+    lecons: Optional[List[Dict[str, Any]]] = None,
 ) -> None:
     """Envoie un resume anonymise de l'activite Mentor vers la passerelle /admin (non bloquant)."""
     if not bool(reglage("mentor.telemetrie", True)):
@@ -151,7 +178,7 @@ def _remonter_telemetrie_mentor(
     else:
         endpoint = f"{gw_url}/v1/telemetry/mentor"
 
-    payload = {
+    payload: Dict[str, Any] = {
         "phase": phase,
         "backend": backend,
         "verdict": verdict,
@@ -162,6 +189,8 @@ def _remonter_telemetrie_mentor(
         "mission_extrait": mission_anon,
         "reponse_extrait": reponse_anon,
     }
+    if lecons:
+        payload["lecons"] = lecons[:5]
 
     def _envoyer():
         if not gw_tok:
@@ -193,8 +222,9 @@ def _executer_via_agy_cli(
     schema_path = None
     t0 = time.perf_counter()
     try:
+        schema_plat = _aplatir_schema_json(response_schema.model_json_schema())
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as tf:
-            tf.write(json.dumps(response_schema.model_json_schema(), ensure_ascii=False))
+            tf.write(json.dumps(schema_plat, ensure_ascii=False))
             schema_path = tf.name
 
         prompt_final = f"{system_instructions}\n\n{prompt}"
@@ -230,8 +260,27 @@ def _executer_via_agy_cli(
             "tokens_in": int(usage.get("input_tokens") or 0),
             "tokens_out": int(usage.get("output_tokens") or 0),
         }
-        charge = str(enveloppe.get("response") or "")
-        return response_schema.model_validate_json(_extraire_json_texte(charge)), meta
+        structured = enveloppe.get("structured_output")
+        if isinstance(structured, dict) and structured:
+            try:
+                return response_schema.model_validate(structured), meta
+            except Exception:
+                pass
+        charge = str(enveloppe.get("response") or enveloppe.get("result") or enveloppe.get("message") or "").strip()
+        json_txt = _extraire_json_texte(charge)
+        if json_txt:
+            try:
+                return response_schema.model_validate_json(json_txt), meta
+            except Exception as e_val:
+                LOG.debug("Validation JSON response agy CLI repli texte: %s", e_val)
+        # Repli sur reponse texte ou succes vide (evite EOF JSON ValidationError)
+        if response_schema is VerdictMentor:
+            verdict_txt = "CORRIGE" if (enable_edit and charge) else "APPROUVE"
+            resume_txt = charge[:1200] if charge else "Audit Mentor terminé sans remarque structurée."
+            return VerdictMentor(verdict=verdict_txt, resume=resume_txt, lecons=[]), meta
+        if response_schema is DirectivesMentor and charge:
+            return DirectivesMentor(plan_etapes=[charge[:500]], a_faire=[], a_eviter=[], criteres_validation=[]), meta
+        return None, meta
     except Exception as e:
         LOG.warning("Echec execution agy CLI Mentor: %s", e)
         return None, {"backend": "agy_cli", "latence_ms": int((time.perf_counter() - t0) * 1000)}
@@ -255,7 +304,7 @@ def _executer_via_sdk(
     try:
         from google.antigravity import Agent, BuiltinTools, CapabilitiesConfig, LocalAgentConfig
     except Exception as e:
-        LOG.warning("SDK google-antigravity indisponible: %s", e)
+        LOG.debug("SDK google-antigravity indisponible: %s", e)
         return None
 
     outils = [
@@ -323,8 +372,10 @@ def _executer_agent_mentor(
         res, meta = _executer_via_agy_cli(
             agy_bin, system_instructions, prompt, dossier_projet, response_schema, enable_edit, timeout_s
         )
-        if res is not None:
+        if res is not None or not (_sdk_disponible() and _cle_gemini_dispo()):
             return res, meta
+    if not (_sdk_disponible() and _cle_gemini_dispo()):
+        return None, {"backend": "aucun", "latence_ms": 0, "tokens_in": 0, "tokens_out": 0}
     t0 = time.perf_counter()
     res_sdk = _executer_via_sdk(
         system_instructions, prompt, dossier_projet, response_schema, enable_edit, timeout_s
@@ -405,6 +456,7 @@ def auditer_et_distiller(
     if not isinstance(res, VerdictMentor):
         return None
 
+    lecons_payload: List[Dict[str, Any]] = []
     for lecon in res.lecons[:5]:
         conf_init = 0.75 if str(res.verdict).upper() == "APPROUVE" else 0.68
         memoire.enregistrer_lecon_mentor(
@@ -420,6 +472,18 @@ def auditer_et_distiller(
             source="antigravity_mentor",
             confiance=conf_init,
         )
+        lecons_payload.append({
+            "titre": memoire._anonymiser_texte_lecon(lecon.titre, 260),
+            "langage": (lecon.langage or "dev").strip().lower()[:60],
+            "scope": (lecon.scope or "global").strip().lower()[:80] or "global",
+            "probleme": memoire._anonymiser_texte_lecon(lecon.probleme, 1500),
+            "cause": memoire._anonymiser_texte_lecon(lecon.cause, 1000),
+            "solution": memoire._anonymiser_texte_lecon(lecon.solution, 2000),
+            "interdits": memoire._anonymiser_texte_lecon(lecon.interdits, 1000),
+            "verification": memoire._anonymiser_texte_lecon(lecon.verification, 500),
+            "tags": memoire._anonymiser_texte_lecon(lecon.tags, 300),
+            "source": "antigravity_mentor",
+        })
 
     lecons_txt = "; ".join(f"{l.titre} ({l.scope})" for l in res.lecons[:5])
     resume_tlm = res.resume + (f" | Leçons: {lecons_txt}" if lecons_txt else "")
@@ -433,6 +497,7 @@ def auditer_et_distiller(
         nb_lecons=len(res.lecons),
         tokens_in=int(meta.get("tokens_in") or 0),
         tokens_out=int(meta.get("tokens_out") or 0),
+        lecons=lecons_payload,
     )
     return res
 

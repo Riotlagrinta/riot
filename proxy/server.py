@@ -482,7 +482,7 @@ def public_releases(limit: int = 20):
 def public_latest_release():
     rel = _STORE.derniere_release()
     if not rel:
-        return {"ok": True, "version": "0.3.11", "release": None}
+        return {"ok": True, "version": "0.3.12", "release": None}
     return {"ok": True, "version": rel["version"], "release": rel}
 
 
@@ -967,6 +967,7 @@ class MemoryCloudStore:
 
 
 _MEMORY_STORE: Optional[MemoryCloudStore] = None
+_LESSONS_STORE: Optional["GlobalLessonsStore"] = None
 
 
 def _get_memory_store() -> MemoryCloudStore:
@@ -974,6 +975,367 @@ def _get_memory_store() -> MemoryCloudStore:
     if _MEMORY_STORE is None:
         _MEMORY_STORE = MemoryCloudStore()
     return _MEMORY_STORE
+
+
+class GlobalLessonsStore:
+    """File d'apprentissage collectif : recueille les lecons anonymisees des utilisateurs pour validation Admin -> Memoire Globale."""
+
+    def __init__(self, db_path: Optional[Path] = None, pg_url: Optional[str] = None):
+        self.pg_url = (
+            pg_url
+            if pg_url is not None
+            else (
+                os.environ.get("RIOT_MEMORY_DATABASE_URL", "").strip()
+                or os.environ.get("RIOT_TELEMETRY_DATABASE_URL", "").strip()
+                or os.environ.get("RIOT_PORTAL_DATABASE_URL", "").strip()
+            )
+        ).strip()
+        env_db = os.environ.get("RIOT_PROXY_LESSONS_DB", "").strip() or os.environ.get("RIOT_PROXY_MEMORY_DB", "").strip()
+        self.db_path = Path(db_path) if db_path is not None else (
+            Path(env_db) if env_db else (Path.home() / ".riot" / "proxy_memory.db")
+        )
+        self._lock = threading.Lock()
+        self._pg_ready = False
+        self.backend_name = "neon-postgres" if self.pg_url else "sqlite"
+        self._init_db()
+
+    def _connect_sqlite(self) -> sqlite3.Connection:
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(self.db_path), timeout=8.0, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _connect_pg(self):
+        import psycopg
+        from psycopg.rows import dict_row
+        return psycopg.connect(self.pg_url, autocommit=True, row_factory=dict_row, connect_timeout=8)
+
+    def _init_db(self) -> None:
+        if self.pg_url:
+            try:
+                with self._connect_pg() as conn:
+                    conn.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS learned_lessons (
+                            id BIGSERIAL PRIMARY KEY,
+                            fingerprint TEXT NOT NULL UNIQUE,
+                            titre TEXT NOT NULL,
+                            langage TEXT NOT NULL DEFAULT 'dev',
+                            scope TEXT NOT NULL DEFAULT 'global',
+                            probleme TEXT NOT NULL DEFAULT '',
+                            cause TEXT NOT NULL DEFAULT '',
+                            solution TEXT NOT NULL DEFAULT '',
+                            interdits TEXT NOT NULL DEFAULT '',
+                            verification TEXT NOT NULL DEFAULT '',
+                            tags TEXT NOT NULL DEFAULT '',
+                            source TEXT NOT NULL DEFAULT 'antigravity_mentor',
+                            client_id TEXT NOT NULL DEFAULT '',
+                            statut TEXT NOT NULL DEFAULT 'pending',
+                            occurrences INT NOT NULL DEFAULT 1,
+                            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                            reviewed_at TIMESTAMPTZ
+                        )
+                        """
+                    )
+                    conn.execute(
+                        "CREATE INDEX IF NOT EXISTS idx_learned_lessons_statut ON learned_lessons (statut, updated_at DESC)"
+                    )
+                self._pg_ready = True
+                return
+            except Exception as e:
+                self.backend_name = f"sqlite-fallback ({type(e).__name__})"
+
+        with self._lock:
+            conn = self._connect_sqlite()
+            try:
+                conn.execute("PRAGMA journal_mode=WAL;")
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS learned_lessons (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        fingerprint TEXT NOT NULL UNIQUE,
+                        titre TEXT NOT NULL,
+                        langage TEXT NOT NULL DEFAULT 'dev',
+                        scope TEXT NOT NULL DEFAULT 'global',
+                        probleme TEXT NOT NULL DEFAULT '',
+                        cause TEXT NOT NULL DEFAULT '',
+                        solution TEXT NOT NULL DEFAULT '',
+                        interdits TEXT NOT NULL DEFAULT '',
+                        verification TEXT NOT NULL DEFAULT '',
+                        tags TEXT NOT NULL DEFAULT '',
+                        source TEXT NOT NULL DEFAULT 'antigravity_mentor',
+                        client_id TEXT NOT NULL DEFAULT '',
+                        statut TEXT NOT NULL DEFAULT 'pending',
+                        occurrences INTEGER NOT NULL DEFAULT 1,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        reviewed_at TEXT DEFAULT ''
+                    )
+                    """
+                )
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_learned_lessons_statut ON learned_lessons (statut, updated_at DESC)")
+                conn.commit()
+            finally:
+                conn.close()
+
+    @staticmethod
+    def _row_to_dict(row: Any) -> Dict[str, Any]:
+        def _iso(v: Any) -> str:
+            if not v:
+                return ""
+            return v.astimezone(timezone.utc).isoformat() if hasattr(v, "astimezone") else str(v)
+
+        return {
+            "id": int(row["id"]),
+            "titre": row["titre"] or "",
+            "langage": row["langage"] or "dev",
+            "scope": row["scope"] or "global",
+            "probleme": row["probleme"] or "",
+            "cause": row["cause"] or "",
+            "solution": row["solution"] or "",
+            "interdits": row["interdits"] or "",
+            "verification": row["verification"] or "",
+            "tags": row["tags"] or "",
+            "source": row["source"] or "antigravity_mentor",
+            "client_id": row["client_id"] or "",
+            "statut": row["statut"] or "pending",
+            "occurrences": int(row["occurrences"] or 1),
+            "created_at": _iso(row["created_at"]),
+            "updated_at": _iso(row["updated_at"]),
+            "reviewed_at": _iso(row["reviewed_at"]),
+        }
+
+    def soumettre(self, user_ref: str, items: List[Dict[str, Any]], default_source: str = "antigravity_mentor") -> int:
+        from core.memoire import _anonymiser_texte_lecon
+
+        enregistres = 0
+        now_iso = datetime.now(timezone.utc).isoformat()
+        client_short = masquer_secrets(str(user_ref or "anon")[:64], max_len=64)
+
+        for raw in (items or [])[:10]:
+            if not isinstance(raw, dict):
+                continue
+            titre = _anonymiser_texte_lecon(str(raw.get("titre") or ""), 260)
+            solution = _anonymiser_texte_lecon(str(raw.get("solution") or ""), 2000)
+            probleme = _anonymiser_texte_lecon(str(raw.get("probleme") or titre), 1500)
+            if not titre or not solution:
+                continue
+            langage = (str(raw.get("langage") or "dev").strip().lower()[:60]) or "dev"
+            scope = (str(raw.get("scope") or "global").strip().lower()[:80]) or "global"
+            if scope.startswith("project:"):
+                scope = "global"
+            cause = _anonymiser_texte_lecon(str(raw.get("cause") or ""), 1000)
+            interdits = _anonymiser_texte_lecon(str(raw.get("interdits") or ""), 1000)
+            verification = _anonymiser_texte_lecon(str(raw.get("verification") or ""), 500)
+            tags = _anonymiser_texte_lecon(str(raw.get("tags") or ""), 300)
+            source = (str(raw.get("source") or default_source).strip()[:40]) or default_source
+            fp = hashlib.sha256(f"{langage}|{titre.lower()}".encode("utf-8")).hexdigest()[:32]
+
+            if self._pg_ready:
+                with self._connect_pg() as conn:
+                    conn.execute(
+                        """
+                        INSERT INTO learned_lessons (
+                            fingerprint, titre, langage, scope, probleme, cause, solution,
+                            interdits, verification, tags, source, client_id, statut, occurrences, created_at, updated_at
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', 1, %s::timestamptz, %s::timestamptz)
+                        ON CONFLICT (fingerprint) DO UPDATE SET
+                            occurrences = learned_lessons.occurrences + 1,
+                            updated_at = EXCLUDED.updated_at,
+                            probleme = CASE WHEN learned_lessons.statut = 'pending' THEN EXCLUDED.probleme ELSE learned_lessons.probleme END,
+                            solution = CASE WHEN learned_lessons.statut = 'pending' THEN EXCLUDED.solution ELSE learned_lessons.solution END,
+                            interdits = CASE WHEN learned_lessons.statut = 'pending' AND EXCLUDED.interdits <> '' THEN EXCLUDED.interdits ELSE learned_lessons.interdits END
+                        """,
+                        (fp, titre, langage, scope, probleme, cause, solution, interdits, verification, tags, source, client_short, now_iso, now_iso),
+                    )
+            else:
+                with self._lock:
+                    conn = self._connect_sqlite()
+                    try:
+                        conn.execute(
+                            """
+                            INSERT INTO learned_lessons (
+                                fingerprint, titre, langage, scope, probleme, cause, solution,
+                                interdits, verification, tags, source, client_id, statut, occurrences, created_at, updated_at
+                            )
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1, ?, ?)
+                            ON CONFLICT (fingerprint) DO UPDATE SET
+                                occurrences = learned_lessons.occurrences + 1,
+                                updated_at = excluded.updated_at,
+                                probleme = CASE WHEN learned_lessons.statut = 'pending' THEN excluded.probleme ELSE learned_lessons.probleme END,
+                                solution = CASE WHEN learned_lessons.statut = 'pending' THEN excluded.solution ELSE learned_lessons.solution END,
+                                interdits = CASE WHEN learned_lessons.statut = 'pending' AND excluded.interdits <> '' THEN excluded.interdits ELSE learned_lessons.interdits END
+                            """,
+                            (fp, titre, langage, scope, probleme, cause, solution, interdits, verification, tags, source, client_short, now_iso, now_iso),
+                        )
+                        conn.commit()
+                    finally:
+                        conn.close()
+            enregistres += 1
+        return enregistres
+
+    def compter_par_statut(self) -> Dict[str, int]:
+        counts = {"pending": 0, "approved": 0, "rejected": 0, "total": 0}
+        if self._pg_ready:
+            with self._connect_pg() as conn:
+                rows = conn.execute("SELECT statut, COUNT(*) AS nb FROM learned_lessons GROUP BY statut").fetchall()
+        else:
+            with self._lock:
+                conn = self._connect_sqlite()
+                try:
+                    rows = conn.execute("SELECT statut, COUNT(*) AS nb FROM learned_lessons GROUP BY statut").fetchall()
+                finally:
+                    conn.close()
+        for r in rows:
+            st = str(r["statut"] or "pending")
+            nb = int(r["nb"] or 0)
+            if st in counts:
+                counts[st] = nb
+            counts["total"] += nb
+        return counts
+
+    def lister(self, statut: str = "pending", q: str = "", limit: int = 100) -> List[Dict[str, Any]]:
+        lim = max(1, min(int(limit or 100), 300))
+        st = (statut or "pending").strip().lower()
+        q_clean = (q or "").strip()
+        clauses = []
+        params: List[Any] = []
+        if st in ("pending", "approved", "rejected"):
+            clauses.append("statut = %s" if self._pg_ready else "statut = ?")
+            params.append(st)
+        if q_clean:
+            motif = f"%{q_clean}%"
+            ph = "%s" if self._pg_ready else "?"
+            clauses.append(f"(titre LIKE {ph} OR probleme LIKE {ph} OR solution LIKE {ph} OR langage LIKE {ph} OR tags LIKE {ph})")
+            params.extend([motif, motif, motif, motif, motif])
+        where_sql = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+        ph_lim = "%s" if self._pg_ready else "?"
+        params.append(lim)
+        sql = f"SELECT * FROM learned_lessons {where_sql} ORDER BY occurrences DESC, updated_at DESC LIMIT {ph_lim}"
+
+        if self._pg_ready:
+            with self._connect_pg() as conn:
+                rows = conn.execute(sql, params).fetchall()
+                return [self._row_to_dict(r) for r in rows]
+        with self._lock:
+            conn = self._connect_sqlite()
+            try:
+                rows = conn.execute(sql, params).fetchall()
+                return [self._row_to_dict(r) for r in rows]
+            finally:
+                conn.close()
+
+    def lister_globales(self, since: str = "", limit: int = 300) -> List[Dict[str, Any]]:
+        lim = max(1, min(int(limit or 300), 500))
+        since_norm = _norm_ts_iso(since) if (since or "").strip() else ""
+        if self._pg_ready:
+            with self._connect_pg() as conn:
+                if since_norm:
+                    rows = conn.execute(
+                        "SELECT * FROM learned_lessons WHERE statut = 'approved' AND updated_at >= %s::timestamptz ORDER BY updated_at ASC LIMIT %s",
+                        (since_norm, lim),
+                    ).fetchall()
+                else:
+                    rows = conn.execute(
+                        "SELECT * FROM learned_lessons WHERE statut = 'approved' ORDER BY updated_at ASC LIMIT %s",
+                        (lim,),
+                    ).fetchall()
+                return [self._row_to_dict(r) for r in rows]
+        with self._lock:
+            conn = self._connect_sqlite()
+            try:
+                if since_norm:
+                    rows = conn.execute(
+                        "SELECT * FROM learned_lessons WHERE statut = 'approved' AND updated_at >= ? ORDER BY updated_at ASC LIMIT ?",
+                        (since_norm, lim),
+                    ).fetchall()
+                else:
+                    rows = conn.execute(
+                        "SELECT * FROM learned_lessons WHERE statut = 'approved' ORDER BY updated_at ASC LIMIT ?",
+                        (lim,),
+                    ).fetchall()
+                return [self._row_to_dict(r) for r in rows]
+            finally:
+                conn.close()
+
+    def decider(self, lesson_id: int, action: str, patch: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+        from core.memoire import _anonymiser_texte_lecon
+
+        act = (action or "").strip().lower()
+        if act not in ("approve", "reject", "pending", "delete"):
+            raise ValueError("Action invalide (approve | reject | pending | delete).")
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        if act == "delete":
+            if self._pg_ready:
+                with self._connect_pg() as conn:
+                    row = conn.execute("DELETE FROM learned_lessons WHERE id = %s RETURNING id", (lesson_id,)).fetchone()
+                    return {"id": lesson_id, "deleted": True} if row else None
+            with self._lock:
+                conn = self._connect_sqlite()
+                try:
+                    cur = conn.execute("DELETE FROM learned_lessons WHERE id = ?", (lesson_id,))
+                    conn.commit()
+                    return {"id": lesson_id, "deleted": True} if cur.rowcount else None
+                finally:
+                    conn.close()
+
+        statut_cible = "approved" if act == "approve" else ("rejected" if act == "reject" else "pending")
+        p = patch if isinstance(patch, dict) else {}
+        champs_ok = {
+            "titre": lambda v: _anonymiser_texte_lecon(str(v), 260),
+            "langage": lambda v: (str(v).strip().lower()[:60] or "dev"),
+            "scope": lambda v: (str(v).strip().lower()[:80] or "global"),
+            "probleme": lambda v: _anonymiser_texte_lecon(str(v), 1500),
+            "cause": lambda v: _anonymiser_texte_lecon(str(v), 1000),
+            "solution": lambda v: _anonymiser_texte_lecon(str(v), 2000),
+            "interdits": lambda v: _anonymiser_texte_lecon(str(v), 1000),
+            "verification": lambda v: _anonymiser_texte_lecon(str(v), 500),
+            "tags": lambda v: _anonymiser_texte_lecon(str(v), 300),
+        }
+
+        if self._pg_ready:
+            sets = ["statut = %s", "updated_at = %s::timestamptz", "reviewed_at = %s::timestamptz"]
+            vals: List[Any] = [statut_cible, now_iso, now_iso]
+            for k, fn in champs_ok.items():
+                if k in p and p[k] is not None:
+                    sets.append(f"{k} = %s")
+                    vals.append(fn(p[k]))
+            vals.append(lesson_id)
+            with self._connect_pg() as conn:
+                row = conn.execute(
+                    f"UPDATE learned_lessons SET {', '.join(sets)} WHERE id = %s RETURNING *",
+                    vals,
+                ).fetchone()
+                return self._row_to_dict(row) if row else None
+
+        sets = ["statut = ?", "updated_at = ?", "reviewed_at = ?"]
+        vals = [statut_cible, now_iso, now_iso]
+        for k, fn in champs_ok.items():
+            if k in p and p[k] is not None:
+                sets.append(f"{k} = ?")
+                vals.append(fn(p[k]))
+        vals.append(lesson_id)
+        with self._lock:
+            conn = self._connect_sqlite()
+            try:
+                cur = conn.execute(f"UPDATE learned_lessons SET {', '.join(sets)} WHERE id = ?", vals)
+                conn.commit()
+                if not cur.rowcount:
+                    return None
+                row = conn.execute("SELECT * FROM learned_lessons WHERE id = ?", (lesson_id,)).fetchone()
+                return self._row_to_dict(row) if row else None
+            finally:
+                conn.close()
+
+
+def _get_lessons_store() -> GlobalLessonsStore:
+    global _LESSONS_STORE
+    if _LESSONS_STORE is None:
+        _LESSONS_STORE = GlobalLessonsStore()
+    return _LESSONS_STORE
 
 
 @app.get("/v1/memory")
@@ -1266,4 +1628,64 @@ async def ingest_mentor_telemetry(request: Request):
         reponse=f"[{verdict} · {nb_lecons} leçon(s)] {reponse}" if reponse else verdict,
         erreur="" if ok_flag else reponse[:300],
     )
-    return {"ok": True}
+    lecons_recues = body.get("lecons") if isinstance(body.get("lecons"), list) else []
+    ajoutes_candidats = 0
+    if lecons_recues:
+        ajoutes_candidats = _get_lessons_store().soumettre(user_ref, lecons_recues, default_source="antigravity_mentor")
+    return {"ok": True, "candidats": ajoutes_candidats}
+
+
+@app.post("/v1/playbook/candidates")
+async def submit_playbook_candidates(request: Request):
+    """Recoit des lecons/recettes anonymisees apprises chez les utilisateurs pour curation Admin."""
+    identite = _verifier_acces_detail(request, verifier_quota=False)
+    try:
+        body = await request.json() or {}
+    except Exception:
+        body = {}
+    items = body.get("items") if isinstance(body.get("items"), list) else []
+    source = str(body.get("source") or "auto_extract").strip()[:40]
+    nb = _get_lessons_store().soumettre(identite["user_ref"], items, default_source=source)
+    return {"ok": True, "recus": nb}
+
+
+@app.get("/v1/playbook/global")
+def get_global_playbook(since: str = "", limit: int = 300):
+    """Distribue les lecons validees globalement par l'admin vers tous les clients RIOT."""
+    items = _get_lessons_store().lister_globales(since=since, limit=limit)
+    return {
+        "ok": True,
+        "items": items,
+        "server_time": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get("/admin/lessons")
+def admin_list_lessons(request: Request, statut: str = "pending", q: str = "", limit: int = 100):
+    """Liste les lecons apprises chez les utilisateurs et leurs compteurs pour validation."""
+    _verifier_admin(request)
+    store = _get_lessons_store()
+    return {
+        "ok": True,
+        "counts": store.compter_par_statut(),
+        "items": store.lister(statut=statut, q=q, limit=limit),
+    }
+
+
+@app.post("/admin/lessons/{lesson_id}/decision")
+async def admin_decide_lesson(lesson_id: int, request: Request):
+    """Approuve (integre en Memoire Globale), rejette ou supprime une lecon apprise."""
+    _verifier_admin(request)
+    try:
+        body = await request.json() or {}
+    except Exception:
+        body = {}
+    action = str(body.get("action") or "").strip().lower()
+    patch = body.get("patch") if isinstance(body.get("patch"), dict) else body
+    try:
+        res = _get_lessons_store().decider(lesson_id, action, patch=patch)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if res is None:
+        raise HTTPException(status_code=404, detail="Lecon introuvable.")
+    return {"ok": True, "item": res, "counts": _get_lessons_store().compter_par_statut()}

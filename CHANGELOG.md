@@ -4,6 +4,14 @@ Toutes les évolutions notables de RIOT. Format inspiré de
 [Keep a Changelog](https://keepachangelog.com/fr/) ; versionnage
 [SemVer](https://semver.org/lang/fr/).
 
+## [0.3.12] — 2026-11-22
+
+### Ajouté
+- **Récupération & Validation Admin vers Mémoire Globale (`/admin/lessons` & `/v1/playbook/global`)** : les leçons apprises chez les utilisateurs (via Mentor ou auto-extraction, anonymisées et dédupliquées avec compteur d'occurrences) remontent en file `pending` sur le portail `/admin` ; l'administrateur peut les éditer, approuver (`Intégrer à la Mémoire Globale`), rejeter ou supprimer. Chaque client RIOT synchronise automatiquement les leçons approuvées (`source: "global_curated"`).
+
+### Corrigé
+- **`agy CLI --json-schema` sur `VerdictMentor`** : aplatissement récursif des références `$defs`/`$ref`, lecture prioritaire de `structured_output`, repli résilient sans erreur Pydantic `EOF` si la réponse CLI est textuelle/vide, et suppression du faux avertissement `No module named 'google'` lorsque `agy` est utilisé sans SDK optionnel.
+
 ## [0.3.11] — 2026-11-22
 
 ### Ajouté

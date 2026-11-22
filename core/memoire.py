@@ -1302,10 +1302,8 @@ def obtenir_messages_chat(session_id: str, limit: int = 60) -> List[Dict[str, An
 # SYNCHRONISATION CLOUD HYBRIDE (SQLite <-> RIOT Gateway / Neon Postgres)
 # ---------------------------------------------------------------------------
 
-def _config_cloud() -> Tuple[str, str]:
-    """Retourne (base_url, token) si la synchro cloud est configurée et active."""
-    if os.environ.get("RIOT_MEMORY_SYNC", "1").strip() == "0":
-        return "", ""
+def _base_gateway_sans_v1() -> str:
+    """Resout l'URL de base de la passerelle RIOT sans /v1 final."""
     try:
         from core.config import reglage
         url = (
@@ -1313,14 +1311,23 @@ def _config_cloud() -> Tuple[str, str]:
             or str(reglage("gateway.url", "") or "")
             or "https://riot-engine-proxy.onrender.com/v1"
         ).strip().rstrip("/")
+    except Exception:
+        url = (os.environ.get("RIOT_GATEWAY_URL", "") or "https://riot-engine-proxy.onrender.com/v1").strip().rstrip("/")
+    return (url[:-3] if url.endswith("/v1") else url).rstrip("/")
+
+
+def _config_cloud() -> Tuple[str, str]:
+    """Retourne (base_url, token) si la synchro cloud est configurée et active."""
+    if os.environ.get("RIOT_MEMORY_SYNC", "1").strip() == "0":
+        return "", ""
+    try:
+        from core.config import reglage
         tok = (os.environ.get("RIOT_GATEWAY_TOKEN", "") or str(reglage("gateway.token", "") or "")).strip()
     except Exception:
-        url = os.environ.get("RIOT_GATEWAY_URL", "").strip().rstrip("/")
         tok = os.environ.get("RIOT_GATEWAY_TOKEN", "").strip()
     if not tok:
         return "", ""
-    base = url[:-3] if url.endswith("/v1") else url
-    return base.rstrip("/"), tok
+    return _base_gateway_sans_v1(), tok
 
 
 def _get_meta(cle: str, defaut: str = "") -> str:
@@ -1526,6 +1533,7 @@ def synchroniser_cloud(timeout: float = 8.0) -> Dict[str, Any]:
             res_merge = appliquer_items_cloud(data.get("items") or [])
             server_time = str(data.get("server_time") or _maintenant_iso())
             _set_meta("cloud_last_sync", server_time)
+            synchroniser_playbook_global(base_url=base_url, timeout=min(timeout, 6.0))
             return {
                 "ok": True,
                 "envoyes": len(locaux),
@@ -1537,6 +1545,105 @@ def synchroniser_cloud(timeout: float = 8.0) -> Dict[str, Any]:
         except Exception as e:
             LOG.debug("Synchro mémoire cloud ignorée : %s", e)
             return {"ok": False, "erreur": str(e)}
+
+
+def synchroniser_playbook_global(base_url: str = "", timeout: float = 6.0) -> Dict[str, Any]:
+    """Recupere et importe localement les lecons validees globalement par l'admin (/v1/playbook/global)."""
+    if os.environ.get("RIOT_NO_GLOBAL_PLAYBOOK", "0").strip() == "1":
+        return {"ok": False, "raison": "desactive"}
+    base = (base_url or _base_gateway_sans_v1()).strip().rstrip("/")
+    if not base:
+        return {"ok": False, "raison": "aucune_url"}
+    try:
+        import requests
+        since = _get_meta("global_playbook_last_sync", "")
+        r = requests.get(
+            f"{base}/v1/playbook/global",
+            params={"since": since} if since else None,
+            timeout=timeout,
+        )
+        if r.status_code != 200:
+            return {"ok": False, "status_code": r.status_code}
+        data = r.json() or {}
+        items = data.get("items") or []
+        ajoutes = 0
+        for it in items:
+            if not isinstance(it, dict) or not it.get("titre") or not it.get("solution"):
+                continue
+            rid = enregistrer_lecon_mentor(
+                titre=str(it["titre"]),
+                probleme=str(it.get("probleme") or it["titre"]),
+                solution=str(it["solution"]),
+                cause=str(it.get("cause") or ""),
+                langage=str(it.get("langage") or "dev"),
+                tags=str(it.get("tags") or ""),
+                scope=str(it.get("scope") or "global"),
+                interdits=str(it.get("interdits") or ""),
+                verification=str(it.get("verification") or ""),
+                source="global_curated",
+                confiance=0.86,
+                sync_auto=False,
+            )
+            if rid:
+                ajoutes += 1
+        server_time = str(data.get("server_time") or _maintenant_iso())
+        _set_meta("global_playbook_last_sync", server_time)
+        return {"ok": True, "recus": len(items), "ajoutes": ajoutes, "server_time": server_time}
+    except Exception as e:
+        LOG.debug("Synchro playbook global ignoree : %s", e)
+        return {"ok": False, "erreur": str(e)}
+
+
+def soumettre_candidats_globaux_asynchrone(lecons: List[Dict[str, Any]], source: str = "auto_extract") -> None:
+    """Remonte des lecons anonymisees vers la file de validation admin (/v1/playbook/candidates)."""
+    if not lecons:
+        return
+    try:
+        from core.config import reglage
+        if not bool(reglage("mentor.telemetrie", True)) or not bool(reglage("memoire.partager_candidats", True)):
+            return
+    except Exception:
+        pass
+    base_url, tok = _config_cloud()
+    if not base_url or not tok:
+        return
+    propres: List[Dict[str, Any]] = []
+    for it in lecons[:5]:
+        if not isinstance(it, dict):
+            continue
+        t = _anonymiser_texte_lecon(str(it.get("titre") or ""), 260)
+        s = _anonymiser_texte_lecon(str(it.get("solution") or ""), 2000)
+        p = _anonymiser_texte_lecon(str(it.get("probleme") or t), 1500)
+        if not t or not s:
+            continue
+        propres.append({
+            "titre": t,
+            "langage": str(it.get("langage") or "dev").strip().lower()[:60],
+            "scope": str(it.get("scope") or "global").strip().lower()[:80] or "global",
+            "probleme": p,
+            "cause": _anonymiser_texte_lecon(str(it.get("cause") or ""), 1000),
+            "solution": s,
+            "interdits": _anonymiser_texte_lecon(str(it.get("interdits") or ""), 1000),
+            "verification": _anonymiser_texte_lecon(str(it.get("verification") or ""), 500),
+            "tags": _anonymiser_texte_lecon(str(it.get("tags") or ""), 300),
+            "source": source,
+        })
+    if not propres:
+        return
+
+    def _post():
+        try:
+            import requests
+            requests.post(
+                f"{base_url}/v1/playbook/candidates",
+                headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"},
+                json={"items": propres},
+                timeout=6,
+            )
+        except Exception:
+            pass
+
+    threading.Thread(target=_post, daemon=True, name="riot-candidates-push").start()
 
 
 def pousser_synchro_asynchrone(min_interval_sec: float = 2.0) -> None:
@@ -1554,7 +1661,11 @@ def pousser_synchro_asynchrone(min_interval_sec: float = 2.0) -> None:
 
 def lancer_synchro_arriere_plan() -> None:
     """Déclenche une synchro initiale non bloquante (au démarrage CLI/IDE/login)."""
-    pousser_synchro_asynchrone(min_interval_sec=0.0)
+    base_url, tok = _config_cloud()
+    if base_url and tok:
+        pousser_synchro_asynchrone(min_interval_sec=0.0)
+    elif os.environ.get("RIOT_NO_GLOBAL_PLAYBOOK", "0").strip() != "1":
+        threading.Thread(target=synchroniser_playbook_global, daemon=True, name="riot-global-playbook").start()
 
 
 def etat_synchro_cloud() -> Dict[str, Any]:
@@ -1728,6 +1839,7 @@ def extraire_et_memoriser_depuis_echange(
             memoriser_entite(cat, cle, contenu, sync_auto=False)
             nb_ent += 1
 
+    candidats_rec: List[Dict[str, Any]] = []
     for rec in extrait["recipes"][:2]:
         if not isinstance(rec, dict):
             continue
@@ -1745,7 +1857,18 @@ def extraire_et_memoriser_depuis_echange(
                 sync_auto=False,
             )
             nb_rec += 1
+            candidats_rec.append({
+                "titre": titre,
+                "probleme": prob,
+                "solution": sol,
+                "cause": str(rec.get("cause") or "").strip(),
+                "langage": str(rec.get("langage") or "dev").strip(),
+                "tags": str(rec.get("tags") or "").strip(),
+                "scope": "global",
+            })
 
+    if candidats_rec:
+        soumettre_candidats_globaux_asynchrone(candidats_rec, source="auto_extract")
     if nb_ent or nb_rec:
         pousser_synchro_asynchrone()
     return {"entities": nb_ent, "recipes": nb_rec}

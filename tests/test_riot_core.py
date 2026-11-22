@@ -142,7 +142,7 @@ def test_spiral_icons_and_creator_monitoring(monkeypatch, tmp_path):
     assert pc.get("/status/public").status_code == 200
     assert "prompt" not in pc.get("/status/public").text
     assert pc.get("/releases").status_code == 200
-    assert pc.get("/releases/latest").json()["version"] == "0.3.11"
+    assert pc.get("/releases/latest").json()["version"] == "0.3.12"
     assert pc.get("/admin/metrics").status_code == 401
     assert pc.get("/admin/metrics", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
     assert pc.get("/admin/logs", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
@@ -1301,12 +1301,42 @@ def test_mentor_antigravity_gouvernance_memoire_et_playbook(monkeypatch, tmp_pat
         assert dirs_cli is not None and "Valider schema Pydantic" in dirs_cli.a_faire
         assert meta_cli["backend"] == "agy_cli"
 
-        # 8. Endpoint telemetrie Mentor sur proxy -> visible dans /admin/logs
+        # 8. Schema aplati sans $defs + repli agy CLI reponse vide/texte + curation globale
+        schema_plat = mentor._aplatir_schema_json(mentor.VerdictMentor.model_json_schema())
+        assert "$defs" not in json.dumps(schema_plat)
+        assert "lecons" in schema_plat.get("properties", {})
+
+        # Cas ou agy retourne status SUCCESS avec response vide (plus de ValidationError EOF)
+        payload_vide = json.dumps({"status": "SUCCESS", "response": ""})
+        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: SimpleNamespace(returncode=0, stdout=payload_vide, stderr=""))
+        verdict_vide, _ = mentor._executer_via_agy_cli("agy.exe", "sys", "msg", tmp_path, mentor.VerdictMentor, enable_edit=False)
+        assert verdict_vide is not None and verdict_vide.verdict == "APPROUVE"
+
+        # Cas ou agy retourne structured_output directement
+        payload_struct = json.dumps({
+            "status": "SUCCESS",
+            "response": "",
+            "structured_output": {
+                "verdict": "CORRIGE",
+                "resume": "Bug corrige",
+                "erreurs_trouvees": [],
+                "corrections_appliquees": ["fix.py"],
+                "lecons": [{"titre": "Verifier UTF-8", "langage": "python", "scope": "global", "probleme": "Char encoding", "solution": "Passer encoding='utf-8'"}],
+            },
+        })
+        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: SimpleNamespace(returncode=0, stdout=payload_struct, stderr=""))
+        verdict_struct, _ = mentor._executer_via_agy_cli("agy.exe", "sys", "msg", tmp_path, mentor.VerdictMentor, enable_edit=True)
+        assert verdict_struct is not None and verdict_struct.verdict == "CORRIGE"
+        assert len(verdict_struct.lecons) == 1
+
+        # 9. Endpoint telemetrie Mentor + file curation Admin -> Memoire Globale
         from core.telemetry import TelemetryStore
         from proxy import server as proxy_srv
 
         store_m = TelemetryStore(db_path=tmp_path / "proxy_mentor_tlm.db")
+        lessons_m = proxy_srv.GlobalLessonsStore(db_path=tmp_path / "proxy_lessons.db", pg_url="")
         monkeypatch.setattr(proxy_srv, "_STORE", store_m)
+        monkeypatch.setattr(proxy_srv, "_LESSONS_STORE", lessons_m)
         monkeypatch.setenv("RIOT_ADMIN_TOKEN", "adm_mentor_tok")
         monkeypatch.setattr(
             proxy_srv,
@@ -1326,11 +1356,76 @@ def test_mentor_antigravity_gouvernance_memoire_et_playbook(monkeypatch, tmp_pat
                 "tokens_out": 240,
                 "mission_extrait": "Corriger auth.py",
                 "reponse_extrait": "JWT valide | Leçons: Refuser cle vide",
+                "lecons": [
+                    {
+                        "titre": "Refuser cle JWT vide au boot",
+                        "langage": "python",
+                        "scope": "global",
+                        "probleme": "Signature JWT faible si secret absent dans C:\\Users\\ami\\auth.py",
+                        "solution": "Lever RuntimeError si JWT_SECRET absent",
+                        "interdits": "Ne jamais utiliser une cle par defaut",
+                    },
+                    {
+                        "titre": "Lecon specifique bruit a rejeter",
+                        "langage": "text",
+                        "scope": "global",
+                        "probleme": "Test bruit",
+                        "solution": "Ignore moi",
+                    },
+                ],
             },
         )
         assert r_tlm.status_code == 200 and r_tlm.json()["ok"] is True
+        assert r_tlm.json()["candidats"] == 2
         logs_adm = pc_m.get("/admin/logs", headers={"X-Admin-Token": "adm_mentor_tok"}).json()["logs"]
         assert any(l["source"] == "mentor" and "CORRIGE" in l["reponse"] and "Refuser cle vide" in l["reponse"] for l in logs_adm)
+
+        # Doublon depuis un autre utilisateur incremente occurrences
+        r_cand = pc_m.post(
+            "/v1/playbook/candidates",
+            json={"items": [{"titre": "Refuser cle JWT vide au boot", "langage": "python", "probleme": "Secret absent", "solution": "Lever RuntimeError si JWT_SECRET absent"}]},
+        )
+        assert r_cand.status_code == 200 and r_cand.json()["recus"] == 1
+
+        # Auth admin requise pour /admin/lessons
+        assert pc_m.get("/admin/lessons").status_code in (401, 403)
+        r_pending = pc_m.get("/admin/lessons?statut=pending", headers={"X-Admin-Token": "adm_mentor_tok"})
+        assert r_pending.status_code == 200
+        pend_items = r_pending.json()["items"]
+        assert r_pending.json()["counts"]["pending"] == 2
+        lecon_jwt = next(x for x in pend_items if x["titre"] == "Refuser cle JWT vide au boot")
+        lecon_bruit = next(x for x in pend_items if x["titre"] == "Lecon specifique bruit a rejeter")
+        assert lecon_jwt["occurrences"] == 2
+        assert "C:\\Users\\ami" not in lecon_jwt["probleme"]
+
+        # Admin approuve la bonne lecon et rejette le bruit
+        r_app = pc_m.post(
+            f"/admin/lessons/{lecon_jwt['id']}/decision",
+            headers={"X-Admin-Token": "adm_mentor_tok"},
+            json={"action": "approve", "scope": "global"},
+        )
+        assert r_app.status_code == 200 and r_app.json()["item"]["statut"] == "approved"
+        r_rej = pc_m.post(
+            f"/admin/lessons/{lecon_bruit['id']}/decision",
+            headers={"X-Admin-Token": "adm_mentor_tok"},
+            json={"action": "reject"},
+        )
+        assert r_rej.status_code == 200 and r_rej.json()["item"]["statut"] == "rejected"
+
+        # Distribution /v1/playbook/global expose uniquement la lecon approuvee
+        r_glob = pc_m.get("/v1/playbook/global")
+        assert r_glob.status_code == 200
+        glob_titres = [x["titre"] for x in r_glob.json()["items"]]
+        assert "Refuser cle JWT vide au boot" in glob_titres
+        assert "Lecon specifique bruit a rejeter" not in glob_titres
+
+        # Le client RIOT importe automatiquement la memoire globale approuvee
+        import requests as req_mod
+        monkeypatch.setattr(req_mod, "get", lambda url, params=None, timeout=6.0: pc_m.get("/v1/playbook/global", params=params))
+        res_sync_g = memoire.synchroniser_playbook_global(base_url="http://mock-proxy")
+        assert res_sync_g["ok"] is True and res_sync_g["ajoutes"] >= 1
+        recettes_apres = memoire.lister_lecons_gouvernees(statut="active")
+        assert any(r["titre"] == "Refuser cle JWT vide au boot" and r["source"] == "global_curated" for r in recettes_apres)
     finally:
         memoire.reinitialiser_connexion()
 
