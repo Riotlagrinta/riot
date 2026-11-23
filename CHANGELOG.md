@@ -4,6 +4,12 @@ Toutes les évolutions notables de RIOT. Format inspiré de
 [Keep a Changelog](https://keepachangelog.com/fr/) ; versionnage
 [SemVer](https://semver.org/lang/fr/).
 
+## [0.3.15] — 2026-11-23
+
+### Modifié & Amélioré
+- **Mode par défaut de RIOT Studio : `💻 RIOT Coder (Mono)`** (`web/studio.html`, `core/studio_app.py`) au lieu de `Swarm Multi-Agents` (divise par 4 à 10 la consommation de tokens et requêtes sur la passerelle ; `Swarm` reste accessible en 1 clic ou `/swarm`).
+- **Routage Vision FreeLLMAPI (`core/llm.py`)** : détection `has_images` dans `_rotation_adaptative` vers `qwen2.5-vl-72b` / `auto` / `claude-sonnet-4-5` + bascule automatique sur HTTP `400`/`404`.
+
 ## [0.3.14] — 2026-11-23
 
 ### Corrigé

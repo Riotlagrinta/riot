@@ -1061,7 +1061,11 @@
 
     <div class="section-label">Mode d'action</div>
     <div class="mode-group">
-      <div class="mode-pill active" data-mode="swarm" onclick="changerMode('swarm', this)">
+      <div class="mode-pill active" data-mode="coder" onclick="changerMode('coder', this)">
+        <i data-lucide="code-2" style="width: 14px; height: 14px;"></i>
+        <span>💻 RIOT Coder (Mono)</span>
+      </div>
+      <div class="mode-pill" data-mode="swarm" onclick="changerMode('swarm', this)">
         <i data-lucide="users" style="width: 14px; height: 14px;"></i>
         <span>⚡ Swarm Multi-Agents</span>
       </div>
@@ -1072,10 +1076,6 @@
       <div class="mode-pill" data-mode="trader" onclick="changerMode('trader', this)">
         <i data-lucide="trending-up" style="width: 14px; height: 14px; color: var(--studio-gold);"></i>
         <span>📈 RIOT Trader (Quant)</span>
-      </div>
-      <div class="mode-pill" data-mode="coder" onclick="changerMode('coder', this)">
-        <i data-lucide="code-2" style="width: 14px; height: 14px;"></i>
-        <span>💻 RIOT Coder (Mono)</span>
       </div>
       <div class="mode-pill" data-mode="architect" onclick="changerMode('architect', this)">
         <i data-lucide="compass" style="width: 14px; height: 14px;"></i>
@@ -1327,7 +1327,7 @@
       }
     }
 
-    let _MODE_ACTIF = "swarm";
+    let _MODE_ACTIF = "coder";
     let _PROJET_ACTIF = "";
     let _CODE_ACTUEL = "";
     let _CHAT_ID_ACTIF = null;

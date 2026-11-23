@@ -142,7 +142,7 @@ def test_spiral_icons_and_creator_monitoring(monkeypatch, tmp_path):
     assert pc.get("/status/public").status_code == 200
     assert "prompt" not in pc.get("/status/public").text
     assert pc.get("/releases").status_code == 200
-    assert pc.get("/releases/latest").json()["version"] == "0.3.14"
+    assert pc.get("/releases/latest").json()["version"] == "0.3.15"
     assert pc.get("/admin/metrics").status_code == 401
     assert pc.get("/admin/metrics", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
     assert pc.get("/admin/logs", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
@@ -872,6 +872,13 @@ def test_freellmapi_port_31415_et_routage_adaptatif(monkeypatch):
 
     rot_long = prov._rotation_adaptative([{"role": "user", "content": "x" * 26000}], [])
     assert rot_long[0] == "nemotron-3.5-lightning"
+
+    rot_vision = prov._rotation_adaptative([{"role": "user", "content": [{"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}}]}], [])
+    assert rot_vision[0] == "qwen2.5-vl-72b"
+
+    from pathlib import Path
+    studio_html = Path(r"E:\PROJETS\Kéranos\keranos-assistant-vocal-main-1\web\studio.html").read_text(encoding="utf-8")
+    assert 'let _MODE_ACTIF = "coder";' in studio_html
 
 
 def test_sous_agents_modeles_et_continuite_inter_modeles(monkeypatch):

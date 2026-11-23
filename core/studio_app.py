@@ -1001,7 +1001,7 @@ def monter_routes(app):
 
 
 
-        mode = str(body.get("mode", "swarm")).strip()
+        mode = str(body.get("mode", "coder")).strip()
 
 
 
@@ -2159,7 +2159,7 @@ def monter_routes(app):
 
 
 
-        mode = str(body.get("mode", "swarm")).lower()
+        mode = str(body.get("mode", "coder")).lower()
 
 
 

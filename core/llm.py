@@ -806,6 +806,18 @@ class CustomOpenAIProvider(ProviderLLM):
         if not est_freellmapi or str(self.modele).lower() != "auto":
             return list(self.rotation)
 
+        has_images = any(
+            isinstance(m, dict)
+            and isinstance(m.get("content"), list)
+            and any(isinstance(b, dict) and b.get("type") in ("image_url", "image") for b in m["content"])
+            for m in (messages or [])
+        )
+        if has_images:
+            ordre = ["qwen2.5-vl-72b", "auto", "claude-sonnet-4-5", "free-router"]
+            for m in self.rotation:
+                if m not in ordre:
+                    ordre.append(m)
+            return ordre
         tache = tache_hint or classifier_tache_requete(messages=messages, tools=tools)
         taille_chars = sum(len(str(m.get("content", ""))) for m in (messages or []) if isinstance(m, dict))
         if taille_chars > 25000:
@@ -853,7 +865,7 @@ class CustomOpenAIProvider(ProviderLLM):
                         r = requests.post(self.api_url, headers=headers, json=payload, timeout=timeout_req)
                     if r.status_code in (401, 403):
                         raise RuntimeError(f"HTTP {r.status_code} (auth): {r.text[:240]}")
-                    if r.status_code == 429 or r.status_code == 503 or r.status_code >= 500:
+                    if r.status_code in (400, 404, 413, 429, 503) or r.status_code >= 500:
                         LOG.warning("custom (%s): modele %s statut %s, bascule...", self.api_url, modele_courant, r.status_code)
                         derniere_erreur = f"HTTP {r.status_code}: {r.text[:240]}"
                         continue
