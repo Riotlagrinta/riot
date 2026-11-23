@@ -417,7 +417,10 @@ def _routes_pour_profil(
         "SambaNova",
         "https://api.sambanova.ai/v1/chat/completions",
         "SAMBANOVA_API_KEY",
-        [os.environ.get("RIOT_UPSTREAM_SAMBANOVA_MODEL", "Meta-Llama-3.3-70B-Instruct")],
+        [
+            os.environ.get("RIOT_UPSTREAM_SAMBANOVA_MODEL", "GLM-5.3"),
+            "gpt-oss-120b",
+        ],
     )
     ovh = _expand(
         "OVH",
@@ -630,7 +633,7 @@ async def chat_completions(request: Request):
                 capturer_reponse(c["provider"], c["key"], c["model"], r.status_code, dict(r.headers))
             except Exception:
                 pass
-            if r.status_code in (400, 404, 413, 429, 503) or r.status_code >= 500:
+            if r.status_code in (400, 402, 404, 413, 429, 503) or r.status_code >= 500:
                 derniere_err = f"{c['provider']} HTTP {r.status_code}"
                 dernier_statut = r.status_code
                 envoyer_alerte_webhook(
