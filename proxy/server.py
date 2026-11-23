@@ -438,6 +438,8 @@ def _routes_pour_profil(
         "KILO_API_KEY",
         [
             os.environ.get("RIOT_UPSTREAM_KILO_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free"),
+            "kilo-auto/free",
+            "nvidia/nemotron-3.5-lightning:free",
             "openrouter/free",
         ],
     )
@@ -498,7 +500,7 @@ def _routes_pour_profil(
             "Kilo",
             "https://api.kilo.ai/api/gateway/chat/completions",
             "KILO_API_KEY",
-            ["openrouter/free"],
+            ["nvidia/nemotron-3.5-super-vl:free", "openrouter/free"],
         )
         groupes_vis = [ovh_vis, gemini_vis, groq_vis, mistral_vis, gh_vis, kilo_vis, openrouter, custom]
         return [c for grp in groupes_vis for c in grp]
