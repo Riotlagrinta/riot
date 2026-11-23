@@ -1,6 +1,6 @@
 {
   "name": "@riotlagrinta/riot",
-  "version": "0.3.15",
+  "version": "0.3.16",
   "description": "RIOT — IDE agentique, Studio Web & Copilote développeur multiplateforme en ligne de commande.",
   "bin": {
     "riot": "bin/riot.js"

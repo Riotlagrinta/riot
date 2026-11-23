@@ -292,6 +292,18 @@ class TelemetryStore:
                             ON CONFLICT (version) DO NOTHING
                             """
                         )
+                        pconn.execute(
+                            """
+                            INSERT INTO releases (version, titre, notes, commande)
+                            VALUES (
+                                '0.3.16',
+                                'RIOT v0.3.16 — Auto-détection FreeLLMAPI local -> Repli Render & Kilo Gateway',
+                                E'• Détection automatique de FreeLLMAPI local (`127.0.0.1:31415`, si clé locale configurée) avec bascule instantanée vers Render (`RIOT Engine`) en cas d’absence ou de panne\\n• Support natif sur la passerelle de `Kilo AI` (`KILO_API_KEY`), `SambaNova` (`SAMBANOVA_API_KEY`) et `GitHub Models`',
+                                'npm install -g @riotlagrinta/riot@latest && riot --update-cli'
+                            )
+                            ON CONFLICT (version) DO NOTHING
+                            """
+                        )
                 self._pg_ready = True
                 return
             except Exception as e:
@@ -342,10 +354,10 @@ class TelemetryStore:
                         "INSERT INTO releases (ts, version, titre, notes, commande) VALUES (?, ?, ?, ?, ?)",
                         (
                             time.time(),
-                            "0.3.15",
-                            "RIOT v0.3.15 — Studio économe (Coder Mono par défaut) & Vision FreeLLMAPI",
-                            "• Mode par défaut de RIOT Studio passé de `Swarm Multi-Agents` à `RIOT Coder (Mono)` pour réduire fortement la consommation de tokens/TPM\n"
-                            "• Routage Vision prioritaire sur FreeLLMAPI (`qwen2.5-vl-72b`, `auto`, `claude-sonnet-4-5`) + bascule HTTP `400`/`404`",
+                            "0.3.16",
+                            "RIOT v0.3.16 — Auto-détection FreeLLMAPI local -> Repli Render & Kilo Gateway",
+                            "• Détection automatique de FreeLLMAPI local (`127.0.0.1:31415`, si clé locale configurée) avec bascule instantanée vers Render (`RIOT Engine`) en cas d’absence ou de panne\n"
+                            "• Support natif sur la passerelle de `Kilo AI` (`KILO_API_KEY`), `SambaNova` (`SAMBANOVA_API_KEY`) et `GitHub Models`",
                             "npm install -g @riotlagrinta/riot@latest && riot --update-cli",
                         ),
                     )

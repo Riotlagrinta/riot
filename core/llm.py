@@ -15,6 +15,7 @@ OllamaProvider le traduisent vers/depuis leur format respectif de facon interne.
 """
 import json
 import logging
+from typing import Optional
 
 # Magasin de certificats Windows (Malwarebytes intercepte le TLS : sans ca, les
 # appels a l'API Anthropic echouent en "certificate verify failed").
@@ -1104,6 +1105,67 @@ def _diagnostiquer_echec_cascade(erreur_precedente: str) -> str:
     return "Tous les fournisseurs IA ont échoué ou sont temporairement indisponibles."
 
 
+def _construire_gateway_provider(gw_url: str = "", gw_tok: str = "") -> "CustomOpenAIProvider":
+    """Construit le provider passerelle RIOT Engine (Render)."""
+    import os
+    url_eff = (
+        gw_url
+        or os.environ.get("RIOT_GATEWAY_URL", "")
+        or str(reglage("gateway.url", "") or "")
+        or DEFAULT_GATEWAY_URL
+    ).strip()
+    tok_eff = (gw_tok or os.environ.get("RIOT_GATEWAY_TOKEN", "") or str(reglage("gateway.token", "") or "")).strip()
+    prov = CustomOpenAIProvider(modele=f"riot-{reglage('riot.profil', 'auto')}")
+    prov.api_url = _normaliser_url_chat(url_eff)
+    prov.cles = [tok_eff] if tok_eff else []
+    prov.cle = tok_eff
+    prov.base_url_configuree = False
+    prov.nom = "RIOT Engine"
+    prov.nom_affiche = "RIOT Engine"
+    return prov
+
+
+def _detecter_freellmapi_local(timeout_s: float = 0.35) -> Optional["CustomOpenAIProvider"]:
+    """Detecte automatiquement FreeLLMAPI local (127.0.0.1:31415) si present et pret (sinon None en <350ms)."""
+    import os
+    if os.environ.get("RIOT_DISABLE_LOCAL_FREELLMAPI", "").strip() == "1":
+        return None
+    if reglage("freellmapi.auto_detect", True) is False:
+        return None
+    base_url = (
+        os.environ.get("FREELLMAPI_BASE_URL", "")
+        or str(reglage("freellmapi.base_url", "") or "")
+        or str(reglage("freellmapi.url", "") or "")
+        or "http://127.0.0.1:31415/v1"
+    ).strip().rstrip("/")
+    cles = _recuperer_liste_cles(
+        reglage("freellmapi.cles", []) or reglage("freellmapi.cle", "") or reglage("custom.cles", []) or reglage("custom.cle", ""),
+        "FREELLMAPI_KEY",
+    ) or _recuperer_liste_cles("", "CUSTOM_API_KEY")
+    if not cles:
+        return None
+    try:
+        import requests
+        models_url = f"{base_url}/models" if base_url.endswith("/v1") else f"{base_url}/v1/models"
+        r = requests.get(
+            models_url,
+            headers={"Authorization": f"Bearer {cles[0]}"},
+            timeout=timeout_s,
+        )
+        if r.status_code != 200:
+            return None
+        prov = CustomOpenAIProvider(modele="auto")
+        prov.api_url = _normaliser_url_chat(base_url)
+        prov.cles = cles
+        prov.cle = cles[0]
+        prov.base_url_configuree = True
+        prov.nom = "FreeLLMAPI"
+        prov.nom_affiche = "FreeLLMAPI (Local)"
+        return prov
+    except Exception:
+        return None
+
+
 def cascade_failover(systeme, historique, outils, visites: set, **kwargs):
     """Bascule vers le prochain fournisseur IA disponible sans jamais entrer en boucle récursive."""
     if visites is None:
@@ -1132,6 +1194,8 @@ def cascade_failover(systeme, historique, outils, visites: set, **kwargs):
             ("Custom", CustomOpenAIProvider),
             ("Anthropic", AnthropicProvider),
         ]
+    if "RIOT Engine" not in visites:
+        candidats.append(("RIOT Engine", _construire_gateway_provider))
     for nom, cls_prov in candidats:
         if nom in visites:
             continue
@@ -1172,13 +1236,8 @@ def llm():
         fournisseur = (reglage("llm.fournisseur", "") or "").lower()
 
         if not est_createur() and m != "local" and fournisseur != "ollama":
-            _LLM = CustomOpenAIProvider(modele=f"riot-{reglage('riot.profil', 'auto')}")
-            _LLM.api_url = _normaliser_url_chat(gw_url)
-            _LLM.cles = [gw_tok] if gw_tok else []
-            _LLM.cle = gw_tok
-            _LLM.base_url_configuree = False
-            _LLM.nom = "RIOT Engine"
-            _LLM.nom_affiche = "RIOT Engine"
+            local_free = None if m == "gateway" else _detecter_freellmapi_local()
+            _LLM = local_free if local_free is not None else _construire_gateway_provider(gw_url, gw_tok)
         elif m == "groq" or fournisseur == "groq":
             _LLM = GroqProvider()
         elif m == "mistral" or fournisseur == "mistral":

@@ -142,7 +142,7 @@ def test_spiral_icons_and_creator_monitoring(monkeypatch, tmp_path):
     assert pc.get("/status/public").status_code == 200
     assert "prompt" not in pc.get("/status/public").text
     assert pc.get("/releases").status_code == 200
-    assert pc.get("/releases/latest").json()["version"] == "0.3.15"
+    assert pc.get("/releases/latest").json()["version"] == "0.3.16"
     assert pc.get("/admin/metrics").status_code == 401
     assert pc.get("/admin/metrics", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
     assert pc.get("/admin/logs", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
@@ -879,6 +879,22 @@ def test_freellmapi_port_31415_et_routage_adaptatif(monkeypatch):
     from pathlib import Path
     studio_html = Path(r"E:\PROJETS\Kéranos\keranos-assistant-vocal-main-1\web\studio.html").read_text(encoding="utf-8")
     assert 'let _MODE_ACTIF = "coder";' in studio_html
+
+    # Auto-detection FreeLLMAPI local + bascule failover vers Render (RIOT Engine)
+    from core import llm as llm_mod
+    import requests as req_mod
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(req_mod, "get", lambda url, headers=None, timeout=0.35: SimpleNamespace(status_code=200))
+    local_p = llm_mod._detecter_freellmapi_local()
+    assert local_p is not None and "FreeLLMAPI" in local_p.nom
+
+    monkeypatch.setattr(req_mod, "get", lambda url, headers=None, timeout=0.35: SimpleNamespace(status_code=401))
+    assert llm_mod._detecter_freellmapi_local() is None
+
+    monkeypatch.setenv("RIOT_GATEWAY_TOKEN", "riot_cli_test_tok")
+    gw_p = llm_mod._construire_gateway_provider()
+    assert gw_p.nom == "RIOT Engine" and gw_p.disponible() is True
 
 
 def test_sous_agents_modeles_et_continuite_inter_modeles(monkeypatch):

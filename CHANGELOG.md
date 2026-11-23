@@ -4,6 +4,12 @@ Toutes les évolutions notables de RIOT. Format inspiré de
 [Keep a Changelog](https://keepachangelog.com/fr/) ; versionnage
 [SemVer](https://semver.org/lang/fr/).
 
+## [0.3.16] — 2026-11-23
+
+### Ajouté
+- **Auto-détection FreeLLMAPI local + repli automatique Render (`core/llm.py`)** : si un utilisateur dispose de FreeLLMAPI actif sur `127.0.0.1:31415` (avec sa clé locale `FREELLMAPI_KEY` / `freellmapi.cle`), RIOT s'y connecte automatiquement en priorité ; s'il est éteint, en échec ou sans clé locale, RIOT bascule sans délai sur `RIOT Engine` (Render), y compris en `cascade_failover`.
+- **Passerelle Render (`proxy/server.py`)** : ajout de `Kilo` (`KILO_API_KEY`), `SambaNova` (`SAMBANOVA_API_KEY`), `OVH` (`OVH_API_KEY`) et `GitHub Models` (`GITHUB_MODELS_TOKEN`), avec priorité OVH/Kilo et champ `providers_actifs` sur `/health`.
+
 ## [0.3.15] — 2026-11-23
 
 ### Modifié & Amélioré
