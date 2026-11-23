@@ -268,6 +268,18 @@ class TelemetryStore:
                             ON CONFLICT (version) DO NOTHING
                             """
                         )
+                        pconn.execute(
+                            """
+                            INSERT INTO releases (version, titre, notes, commande)
+                            VALUES (
+                                '0.3.14',
+                                'RIOT v0.3.14 — Sélection auto du modèle agy CLI (`--model`) & Durcissement Mentor SDK',
+                                E'• Résout `error: plan model not specified` sur `agy --mode plan` grâce à l’autodétection via `agy models` et l’injection automatique de `--model`\\n• Unification de la tolérance JSON (`_valider_ou_replier_schema`) entre `agy CLI` et le SDK Mentor',
+                                'npm install -g @riotlagrinta/riot@latest && riot --update-cli'
+                            )
+                            ON CONFLICT (version) DO NOTHING
+                            """
+                        )
                 self._pg_ready = True
                 return
             except Exception as e:
@@ -318,11 +330,10 @@ class TelemetryStore:
                         "INSERT INTO releases (ts, version, titre, notes, commande) VALUES (?, ?, ?, ?, ?)",
                         (
                             time.time(),
-                            "0.3.13",
-                            "RIOT v0.3.13 — Vision Multimodale Studio, Protection Binaires & Diagnostic Failover",
-                            "• Support natif des images (`.jpg`, `.png`, `.webp`) et PDF dans RIOT Studio sans corruption UTF-8\n"
-                            "• Routage Vision dédié sur la passerelle (`Gemini Flash`, `Llama 4 Scout`, `Pixtral`, `OpenRouter`)\n"
-                            "• Timeout passerelle étendu (65s) et diagnostic précis si failover (`401 riot login`, `429/TPM`, `timeout`, `502`)",
+                            "0.3.14",
+                            "RIOT v0.3.14 — Sélection auto du modèle agy CLI (`--model`) & Durcissement Mentor SDK",
+                            "• Résout `error: plan model not specified` sur `agy --mode plan` grâce à l’autodétection via `agy models` et l’injection automatique de `--model`\n"
+                            "• Unification de la tolérance JSON (`_valider_ou_replier_schema`) entre `agy CLI` et le SDK Mentor",
                             "npm install -g @riotlagrinta/riot@latest && riot --update-cli",
                         ),
                     )

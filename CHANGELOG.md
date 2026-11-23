@@ -4,6 +4,12 @@ Toutes les évolutions notables de RIOT. Format inspiré de
 [Keep a Changelog](https://keepachangelog.com/fr/) ; versionnage
 [SemVer](https://semver.org/lang/fr/).
 
+## [0.3.14] — 2026-11-23
+
+### Corrigé
+- **`agy CLI` Mode Mentor (`error: plan model not specified`)** : détection automatique et mise en cache du modèle `agy` disponible (via `agy models`, avec priorité sur `gemini-3.8-flash-medium` / `flash-low` / `argon-medium` / `neon-medium`) et passage systématique de `--model` + repli 1-essai si le modèle n'est pas configuré.
+- **Repli SDK Mentor (`Invalid JSON: EOF`)** : unification du parseur tolérant `_valider_ou_replier_schema(...)` sur `agy CLI` et le SDK `google-antigravity`.
+
 ## [0.3.13] — 2026-11-22
 
 ### Corrigé

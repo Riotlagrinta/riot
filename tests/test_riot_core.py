@@ -142,7 +142,7 @@ def test_spiral_icons_and_creator_monitoring(monkeypatch, tmp_path):
     assert pc.get("/status/public").status_code == 200
     assert "prompt" not in pc.get("/status/public").text
     assert pc.get("/releases").status_code == 200
-    assert pc.get("/releases/latest").json()["version"] == "0.3.13"
+    assert pc.get("/releases/latest").json()["version"] == "0.3.14"
     assert pc.get("/admin/metrics").status_code == 401
     assert pc.get("/admin/metrics", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
     assert pc.get("/admin/logs", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
@@ -1306,11 +1306,22 @@ def test_mentor_antigravity_gouvernance_memoire_et_playbook(monkeypatch, tmp_pat
         assert "$defs" not in json.dumps(schema_plat)
         assert "lecons" in schema_plat.get("properties", {})
 
-        # Cas ou agy retourne status SUCCESS avec response vide (plus de ValidationError EOF)
+        # Cas ou agy retourne plan model not specified puis reussit apres agy models + response vide sans EOF
         payload_vide = json.dumps({"status": "SUCCESS", "response": ""})
-        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: SimpleNamespace(returncode=0, stdout=payload_vide, stderr=""))
+        monkeypatch.setattr(mentor, "_AGY_MODEL_CACHE", None)
+        appels_cmd = []
+        def _fake_run(cmd, *a, **kw):
+            appels_cmd.append(list(cmd))
+            if cmd[1:2] == ["models"]:
+                return SimpleNamespace(returncode=0, stdout="Fetching available models...\ngemini-3.8-flash-medium\tGemini 3.8 Flash\n", stderr="")
+            if "--model" not in cmd:
+                return SimpleNamespace(returncode=3, stdout="", stderr="error: failed to construct executor: plan model not specified; you must specify a valid model")
+            return SimpleNamespace(returncode=0, stdout=payload_vide, stderr="")
+        monkeypatch.setattr(subprocess, "run", _fake_run)
         verdict_vide, _ = mentor._executer_via_agy_cli("agy.exe", "sys", "msg", tmp_path, mentor.VerdictMentor, enable_edit=False)
         assert verdict_vide is not None and verdict_vide.verdict == "APPROUVE"
+        assert any("--model" in c and "gemini-3.8-flash-medium" in c for c in appels_cmd)
+        assert mentor._valider_ou_replier_schema("pas du json", mentor.VerdictMentor, texte_vide_ok=False) is not None
 
         # Cas ou agy retourne structured_output directement
         payload_struct = json.dumps({

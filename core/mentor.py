@@ -121,6 +121,77 @@ def _extraire_json_texte(brut: str) -> str:
     return m.group(0) if m else ""
 
 
+def _valider_ou_replier_schema(
+    charge: str,
+    response_schema: type[BaseModel],
+    enable_edit: bool = False,
+    texte_vide_ok: bool = True,
+) -> Optional[BaseModel]:
+    """Parse le JSON du schema Pydantic avec repli textuel propre (evite Invalid JSON: EOF)."""
+    brut = (charge or "").strip()
+    json_txt = _extraire_json_texte(brut)
+    if json_txt:
+        try:
+            return response_schema.model_validate_json(json_txt)
+        except Exception as e_val:
+            LOG.debug("Validation JSON Mentor repli texte: %s", e_val)
+    if response_schema is VerdictMentor and (brut or texte_vide_ok):
+        verdict_txt = "CORRIGE" if (enable_edit and brut) else "APPROUVE"
+        resume_txt = brut[:1200] if brut else "Audit Mentor terminé sans remarque structurée."
+        return VerdictMentor(verdict=verdict_txt, resume=resume_txt, lecons=[])
+    if response_schema is DirectivesMentor and brut:
+        return DirectivesMentor(plan_etapes=[brut[:500]], a_faire=[], a_eviter=[], criteres_validation=[])
+    return None
+
+
+_AGY_MODEL_CACHE: Optional[str] = None
+_AGY_PREFERENCES_MODELES = (
+    "gemini-3.8-flash-medium",
+    "gemini-4-argon-medium",
+    "gemini-4-neon-medium",
+    "gemini-4-hydrogen-medium",
+    "claude-sonnet-5-5-low",
+)
+
+
+def _detecter_modele_agy(agy_bin: str, forcer: bool = False) -> str:
+    """Resout le modele `agy` a utiliser (config -> cache -> `agy models`)."""
+    global _AGY_MODEL_CACHE
+    cfg = str(reglage("mentor.modele", "") or "").strip()
+    if cfg:
+        return cfg
+    if _AGY_MODEL_CACHE and not forcer:
+        return _AGY_MODEL_CACHE
+    try:
+        proc = subprocess.run(
+            [agy_bin, "models"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
+        )
+        if proc.returncode == 0 and proc.stdout:
+            dispos: List[str] = []
+            for ligne in proc.stdout.splitlines():
+                s = ligne.strip()
+                if not s or s.lower().startswith("fetching"):
+                    continue
+                ident = s.split()[0].strip()
+                if ident and re.match(r"^[a-z0-9._-]+$", ident, re.IGNORECASE):
+                    dispos.append(ident)
+            for pref in _AGY_PREFERENCES_MODELES:
+                if pref in dispos:
+                    _AGY_MODEL_CACHE = pref
+                    return pref
+            if dispos:
+                _AGY_MODEL_CACHE = dispos[0]
+                return dispos[0]
+    except Exception as e:
+        LOG.debug("Detection modeles agy ignoree: %s", e)
+    return _AGY_MODEL_CACHE or "gemini-3.8-flash-medium"
+
+
 def _aplatir_schema_json(schema: Dict[str, Any]) -> Dict[str, Any]:
     """Resout recursivement $defs/$ref pour compatibilite stricte avec `agy --json-schema`."""
     defs = schema.get("$defs") if isinstance(schema.get("$defs"), dict) else {}
@@ -229,16 +300,23 @@ def _executer_via_agy_cli(
 
         prompt_final = f"{system_instructions}\n\n{prompt}"
         mode_agy = "accept-edits" if enable_edit else "plan"
-        cmd = [
-            agy_bin,
-            "--mode", mode_agy,
-            "--output-format", "json",
-            "--json-schema", schema_path,
-            "--add-dir", str(dossier_projet.resolve()),
-            f"-p={prompt_final}",
-        ]
+        modele_cfg = str(reglage("mentor.modele", "") or "").strip() or (_AGY_MODEL_CACHE or "")
+
+        def _construire_cmd(mod: str) -> List[str]:
+            c = [
+                agy_bin,
+                "--mode", mode_agy,
+                "--output-format", "json",
+                "--json-schema", schema_path,
+                "--add-dir", str(dossier_projet.resolve()),
+            ]
+            if mod:
+                c.extend(["--model", mod])
+            c.append(f"-p={prompt_final}")
+            return c
+
         proc = subprocess.run(
-            cmd,
+            _construire_cmd(modele_cfg),
             cwd=str(dossier_projet.resolve()),
             capture_output=True,
             text=True,
@@ -246,6 +324,19 @@ def _executer_via_agy_cli(
             errors="replace",
             timeout=timeout_s,
         )
+        err_low = (proc.stderr or "").lower()
+        if proc.returncode != 0 and ("plan model not specified" in err_low or "specify a valid model" in err_low or "invalid model selection" in err_low):
+            modele_repli = _detecter_modele_agy(agy_bin, forcer=True)
+            if modele_repli and modele_repli != modele_cfg:
+                proc = subprocess.run(
+                    _construire_cmd(modele_repli),
+                    cwd=str(dossier_projet.resolve()),
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=timeout_s,
+                )
         lat_ms = int((time.perf_counter() - t0) * 1000)
         if proc.returncode != 0:
             LOG.warning("agy CLI code=%s err=%s", proc.returncode, (proc.stderr or "")[:200])
@@ -267,20 +358,7 @@ def _executer_via_agy_cli(
             except Exception:
                 pass
         charge = str(enveloppe.get("response") or enveloppe.get("result") or enveloppe.get("message") or "").strip()
-        json_txt = _extraire_json_texte(charge)
-        if json_txt:
-            try:
-                return response_schema.model_validate_json(json_txt), meta
-            except Exception as e_val:
-                LOG.debug("Validation JSON response agy CLI repli texte: %s", e_val)
-        # Repli sur reponse texte ou succes vide (evite EOF JSON ValidationError)
-        if response_schema is VerdictMentor:
-            verdict_txt = "CORRIGE" if (enable_edit and charge) else "APPROUVE"
-            resume_txt = charge[:1200] if charge else "Audit Mentor terminé sans remarque structurée."
-            return VerdictMentor(verdict=verdict_txt, resume=resume_txt, lecons=[]), meta
-        if response_schema is DirectivesMentor and charge:
-            return DirectivesMentor(plan_etapes=[charge[:500]], a_faire=[], a_eviter=[], criteres_validation=[]), meta
-        return None, meta
+        return _valider_ou_replier_schema(charge, response_schema, enable_edit=enable_edit, texte_vide_ok=True), meta
     except Exception as e:
         LOG.warning("Echec execution agy CLI Mentor: %s", e)
         return None, {"backend": "agy_cli", "latence_ms": int((time.perf_counter() - t0) * 1000)}
@@ -343,7 +421,7 @@ def _executer_via_sdk(
             brut = "".join(chunks).strip()
             if not brut:
                 return None
-            return response_schema.model_validate_json(_extraire_json_texte(brut))
+            return _valider_ou_replier_schema(brut, response_schema, enable_edit=enable_edit, texte_vide_ok=False)
 
     try:
         return asyncio.run(_run())
