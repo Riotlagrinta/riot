@@ -1493,6 +1493,8 @@ def test_vision_studio_multimodal_et_diagnostic_failover(monkeypatch):
     routes_txt = proxy_srv._routes_pour_profil("riot-auto")
     provs_txt = {r["provider"] for r in routes_txt}
     assert {"SambaNova", "OVH", "Kilo", "GitHubModels"}.issubset(provs_txt)
+    assert routes_txt[0]["provider"] == "OVH"
+    assert routes_vis[0]["provider"] == "OVH"
 
     # 4. Diagnostic explicite quand failover echoue apres erreur HTTP 401/429
     diag_401 = llm._diagnostiquer_echec_cascade("HTTP 401 (auth): unauthorized")

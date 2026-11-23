@@ -427,8 +427,9 @@ def _routes_pour_profil(
         "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions",
         "OVH_API_KEY",
         [
-            os.environ.get("RIOT_UPSTREAM_OVH_MODEL", "gpt-oss-120b"),
-            os.environ.get("RIOT_UPSTREAM_OVH_ALT_MODEL", "Qwen3.6-27B"),
+            os.environ.get("RIOT_UPSTREAM_OVH_MODEL", "Qwen3.6-27B"),
+            os.environ.get("RIOT_UPSTREAM_OVH_ALT_MODEL", "gpt-oss-120b"),
+            "Qwen3.5-397B-A17B",
         ],
     )
     kilo = _expand(
@@ -499,32 +500,33 @@ def _routes_pour_profil(
             "KILO_API_KEY",
             ["openrouter/free"],
         )
-        groupes_vis = [gemini_vis, groq_vis, mistral_vis, ovh_vis, gh_vis, kilo_vis, openrouter, custom]
+        groupes_vis = [ovh_vis, gemini_vis, groq_vis, mistral_vis, gh_vis, kilo_vis, openrouter, custom]
         return [c for grp in groupes_vis for c in grp]
 
     if long_context and m != "fast":
-        # Contexte volumineux (> ~6.5k tokens) : privilegier Gemini (1M ctx) / DeepSeek / Cerebras / Mistral (40k TPM)
+        # Contexte volumineux (> ~6.5k tokens) : privilegier OVH / Kilo / Gemini (1M ctx) / GitHub / Cerebras / Mistral
         # avant Groq (8k-12k TPM par modele) et garder OpenRouter en dernier secours
-        groupes = [gemini, github_models, deepseek, cerebras, sambanova, nvidia, ovh, together, fireworks, mistral, groq, kilo, openrouter, custom]
+        groupes = [ovh, kilo, gemini, github_models, cerebras, deepseek, nvidia, sambanova, together, fireworks, mistral, groq, openrouter, custom]
     elif m == "fast":
-        groupes = [groq, cerebras, sambanova, gemini, mistral, github_models, ovh, fireworks, together, deepseek, nvidia, kilo, openrouter, custom]
+        groupes = [cerebras, groq, ovh, kilo, gemini, mistral, github_models, nvidia, sambanova, fireworks, together, deepseek, openrouter, custom]
     elif m == "code":
-        groupes = [mistral, deepseek, github_models, cerebras, sambanova, groq, ovh, fireworks, together, nvidia, gemini, kilo, openrouter, custom]
+        groupes = [ovh, mistral, kilo, github_models, cerebras, deepseek, groq, nvidia, sambanova, gemini, fireworks, together, openrouter, custom]
     elif m == "deep":
-        groupes = [deepseek, github_models, groq, gemini, cerebras, sambanova, nvidia, ovh, together, mistral, fireworks, kilo, openrouter, custom]
+        groupes = [ovh, kilo, deepseek, github_models, cerebras, gemini, groq, nvidia, sambanova, mistral, fireworks, together, openrouter, custom]
     else:  # agent / general avec tool-calling fiable
-        groupes = [groq, cerebras, sambanova, gemini, github_models, deepseek, nvidia, mistral, ovh, together, fireworks, kilo, openrouter, custom]
+        groupes = [ovh, kilo, cerebras, groq, github_models, gemini, mistral, nvidia, deepseek, sambanova, together, fireworks, openrouter, custom]
     return [c for grp in groupes for c in grp]
 
 
 @app.get("/health")
 def health():
     toutes = _routes_pour_profil("riot-auto")
-    actifs = len({c["provider"] for c in toutes})
+    actifs_set = sorted({c["provider"] for c in toutes})
     return {
         "ok": True,
         "service": "RIOT Engine Gateway",
-        "routes_actives": actifs,
+        "routes_actives": len(actifs_set),
+        "providers_actifs": actifs_set,
         "candidats_failover": len(toutes),
         "telemetry_backend": _STORE.backend_name,
         "memory_backend": _get_memory_store().backend_name,
