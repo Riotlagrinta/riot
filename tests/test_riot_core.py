@@ -1490,7 +1490,7 @@ def test_vision_studio_multimodal_et_diagnostic_failover(monkeypatch):
     assert "Qwen2.5-VL-72B-Instruct" in modeles_vis
     assert "openai/gpt-4.1-mini" in modeles_vis
     assert "deepseek-chat" not in modeles_vis
-    routes_txt = proxy_srv._routes_pour_profil("riot-auto")
+    routes_txt = proxy_srv._routes_pour_profil("riot-auto", tache="agent")
     provs_txt = {r["provider"] for r in routes_txt}
     assert {"SambaNova", "OVH", "Kilo", "GitHubModels"}.issubset(provs_txt)
     assert routes_txt[0]["provider"] == "OVH"
