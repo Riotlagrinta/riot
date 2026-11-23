@@ -1478,12 +1478,21 @@ def test_vision_studio_multimodal_et_diagnostic_failover(monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "fake_groq")
     monkeypatch.setenv("MISTRAL_API_KEY", "fake_mis")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "fake_ds")
+    monkeypatch.setenv("OVH_API_KEY", "fake_ovh")
+    monkeypatch.setenv("KILO_API_KEY", "fake_kilo")
+    monkeypatch.setenv("SAMBANOVA_API_KEY", "fake_sn")
+    monkeypatch.setenv("GITHUB_MODELS_TOKEN", "fake_gh")
     assert proxy_srv._contient_images(msgs) is True
     routes_vis = proxy_srv._routes_pour_profil("riot-auto", has_images=True)
     modeles_vis = [r["model"] for r in routes_vis]
     assert "gemini-flash-lite-latest" in modeles_vis
     assert "meta-llama/llama-4-scout-17b-16e-instruct" in modeles_vis
+    assert "Qwen2.5-VL-72B-Instruct" in modeles_vis
+    assert "openai/gpt-4.1-mini" in modeles_vis
     assert "deepseek-chat" not in modeles_vis
+    routes_txt = proxy_srv._routes_pour_profil("riot-auto")
+    provs_txt = {r["provider"] for r in routes_txt}
+    assert {"SambaNova", "OVH", "Kilo", "GitHubModels"}.issubset(provs_txt)
 
     # 4. Diagnostic explicite quand failover echoue apres erreur HTTP 401/429
     diag_401 = llm._diagnostiquer_echec_cascade("HTTP 401 (auth): unauthorized")

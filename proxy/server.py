@@ -413,6 +413,39 @@ def _routes_pour_profil(
         "FIREWORKS_API_KEY",
         [os.environ.get("RIOT_UPSTREAM_FIREWORKS_MODEL", "accounts/fireworks/models/llama-v3p3-70b-instruct")],
     )
+    sambanova = _expand(
+        "SambaNova",
+        "https://api.sambanova.ai/v1/chat/completions",
+        "SAMBANOVA_API_KEY",
+        [os.environ.get("RIOT_UPSTREAM_SAMBANOVA_MODEL", "Meta-Llama-3.3-70B-Instruct")],
+    )
+    ovh = _expand(
+        "OVH",
+        "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions",
+        "OVH_API_KEY",
+        [
+            os.environ.get("RIOT_UPSTREAM_OVH_MODEL", "gpt-oss-120b"),
+            os.environ.get("RIOT_UPSTREAM_OVH_ALT_MODEL", "Qwen3.6-27B"),
+        ],
+    )
+    kilo = _expand(
+        "Kilo",
+        "https://api.kilo.ai/api/gateway/chat/completions",
+        "KILO_API_KEY",
+        [
+            os.environ.get("RIOT_UPSTREAM_KILO_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free"),
+            "openrouter/free",
+        ],
+    )
+    github_models = _expand(
+        "GitHubModels",
+        "https://models.github.ai/inference/chat/completions",
+        "GITHUB_MODELS_TOKEN",
+        [
+            os.environ.get("RIOT_UPSTREAM_GITHUB_MODEL", "openai/gpt-4.1-mini"),
+            "meta/llama-3.3-70b-instruct",
+        ],
+    )
     custom_base = (os.environ.get("CUSTOM_BASE_URL", "") or os.environ.get("FREELLMAPI_BASE_URL", "")).strip().rstrip("/")
     custom_url = ""
     if custom_base:
@@ -445,21 +478,39 @@ def _routes_pour_profil(
             "MISTRAL_API_KEY",
             [os.environ.get("RIOT_UPSTREAM_VISION_MISTRAL_MODEL", "pixtral-12b-2409")],
         )
-        groupes_vis = [gemini_vis, groq_vis, mistral_vis, openrouter, custom]
+        ovh_vis = _expand(
+            "OVH",
+            "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions",
+            "OVH_API_KEY",
+            [os.environ.get("RIOT_UPSTREAM_VISION_OVH_MODEL", "Qwen2.5-VL-72B-Instruct")],
+        )
+        gh_vis = _expand(
+            "GitHubModels",
+            "https://models.github.ai/inference/chat/completions",
+            "GITHUB_MODELS_TOKEN",
+            [os.environ.get("RIOT_UPSTREAM_VISION_GITHUB_MODEL", "openai/gpt-4.1-mini")],
+        )
+        kilo_vis = _expand(
+            "Kilo",
+            "https://api.kilo.ai/api/gateway/chat/completions",
+            "KILO_API_KEY",
+            ["openrouter/free"],
+        )
+        groupes_vis = [gemini_vis, groq_vis, mistral_vis, ovh_vis, gh_vis, kilo_vis, openrouter, custom]
         return [c for grp in groupes_vis for c in grp]
 
     if long_context and m != "fast":
         # Contexte volumineux (> ~6.5k tokens) : privilegier Gemini (1M ctx) / DeepSeek / Cerebras / Mistral (40k TPM)
         # avant Groq (8k-12k TPM par modele) et garder OpenRouter en dernier secours
-        groupes = [gemini, deepseek, cerebras, nvidia, together, fireworks, mistral, groq, openrouter, custom]
+        groupes = [gemini, github_models, deepseek, cerebras, sambanova, nvidia, ovh, together, fireworks, mistral, groq, kilo, openrouter, custom]
     elif m == "fast":
-        groupes = [groq, cerebras, gemini, mistral, fireworks, together, deepseek, nvidia, openrouter, custom]
+        groupes = [groq, cerebras, sambanova, gemini, mistral, github_models, ovh, fireworks, together, deepseek, nvidia, kilo, openrouter, custom]
     elif m == "code":
-        groupes = [mistral, deepseek, cerebras, groq, fireworks, together, nvidia, gemini, openrouter, custom]
+        groupes = [mistral, deepseek, github_models, cerebras, sambanova, groq, ovh, fireworks, together, nvidia, gemini, kilo, openrouter, custom]
     elif m == "deep":
-        groupes = [deepseek, groq, gemini, cerebras, nvidia, together, mistral, fireworks, openrouter, custom]
+        groupes = [deepseek, github_models, groq, gemini, cerebras, sambanova, nvidia, ovh, together, mistral, fireworks, kilo, openrouter, custom]
     else:  # agent / general avec tool-calling fiable
-        groupes = [groq, cerebras, gemini, deepseek, nvidia, mistral, together, fireworks, openrouter, custom]
+        groupes = [groq, cerebras, sambanova, gemini, github_models, deepseek, nvidia, mistral, ovh, together, fireworks, kilo, openrouter, custom]
     return [c for grp in groupes for c in grp]
 
 
