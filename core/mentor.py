@@ -88,16 +88,35 @@ def _sdk_disponible() -> bool:
         return False
 
 
+def _fallback_llm_disponible() -> bool:
+    if not bool(reglage("mentor.fallback_llm", True)):
+        return False
+    try:
+        from core.llm import llm
+        return bool(llm().disponible())
+    except Exception:
+        return False
+
+
 def statut_mentor() -> Dict[str, Any]:
     agy_bin = _trouver_binaire_agy()
     sdk_ok = _sdk_disponible()
     cle_ok = bool(_cle_gemini_dispo())
-    backend = "agy_cli" if agy_bin else ("sdk" if (sdk_ok and cle_ok) else "aucun")
+    llm_ok = _fallback_llm_disponible()
+    maintenant = time.time()
+    backend = (
+        "agy_cli"
+        if (agy_bin and maintenant >= _AGY_CLI_COOLDOWN_UNTIL)
+        else ("sdk" if (sdk_ok and cle_ok and maintenant >= _SDK_COOLDOWN_UNTIL) else ("riot_llm" if llm_ok else ("agy_cli" if agy_bin else "aucun")))
+    )
     return {
         "agy_disponible": bool(agy_bin),
         "agy_chemin": agy_bin,
         "sdk_disponible": sdk_ok,
-        "auth_disponible": bool(agy_bin) or cle_ok,
+        "auth_disponible": bool(agy_bin) or cle_ok or llm_ok,
+        "fallback_llm_disponible": llm_ok,
+        "cooldown_agy_s": max(0, int(_AGY_CLI_COOLDOWN_UNTIL - maintenant)),
+        "cooldown_sdk_s": max(0, int(_SDK_COOLDOWN_UNTIL - maintenant)),
         "backend": backend,
         "actif": bool(reglage("mentor.actif", False)),
         "auto_corriger": bool(reglage("mentor.auto_corriger", True)),
@@ -108,7 +127,14 @@ def statut_mentor() -> Dict[str, Any]:
 
 def mentor_est_actif() -> bool:
     st = statut_mentor()
-    return bool(st["actif"] and (st["agy_disponible"] or (st["sdk_disponible"] and st["auth_disponible"])))
+    return bool(
+        st["actif"]
+        and (
+            st["agy_disponible"]
+            or (st["sdk_disponible"] and bool(_cle_gemini_dispo()))
+            or st["fallback_llm_disponible"]
+        )
+    )
 
 
 def _extraire_json_texte(brut: str) -> str:
@@ -147,6 +173,8 @@ def _valider_ou_replier_schema(
 
 
 _AGY_MODEL_CACHE: Optional[str] = None
+_AGY_CLI_COOLDOWN_UNTIL: float = 0.0
+_SDK_COOLDOWN_UNTIL: float = 0.0
 _AGY_PREFERENCES_MODELES = (
     "gemini-3.8-flash-medium",
     "gemini-4-argon-medium",
@@ -154,6 +182,52 @@ _AGY_PREFERENCES_MODELES = (
     "gemini-4-hydrogen-medium",
     "claude-sonnet-5-5-low",
 )
+
+
+def _extraire_retry_delay_s(texte_erreur: str, defaut_s: int = 900) -> int:
+    """Extrait retryDelay (ex: retryDelay:27556s) et borne entre 120s et 28800s (8h)."""
+    txt = str(texte_erreur or "")
+    m = re.search(r"retryDelay\s*:\s*(\d+)s", txt, re.IGNORECASE)
+    if m:
+        return max(120, min(28800, int(m.group(1))))
+    m2 = re.search(r"retry in\s+(?:(\d+)h)?\s*(?:(\d+)m)?\s*(?:(\d+(?:\.\d+)?)s)?", txt, re.IGNORECASE)
+    if m2 and any(m2.groups()):
+        total = int(m2.group(1) or 0) * 3600 + int(m2.group(2) or 0) * 60 + int(float(m2.group(3) or 0))
+        if total > 0:
+            return max(120, min(28800, total))
+    return max(120, min(28800, int(defaut_s)))
+
+
+def _est_erreur_quota_ou_session_agy(texte: str) -> bool:
+    low = str(texte or "").lower()
+    marqueurs = (
+        "empty conversation id",
+        "failed to start conversation",
+        "resource_exhausted",
+        "quota exceeded",
+        "rate limit",
+        "error 429",
+        "http 429",
+    )
+    return any(m in low for m in marqueurs)
+
+
+def _collecter_contexte_workspace_compact(dossier_projet: Path, max_entries: int = 35) -> str:
+    """Liste compacte des fichiers/dossiers principaux pour le Mentor de repli LLM."""
+    exclus = {".git", "node_modules", ".venv", "venv", "__pycache__", ".next", "dist", "build"}
+    lignes: List[str] = []
+    try:
+        racine = dossier_projet.resolve()
+        for entree in sorted(racine.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
+            if entree.name in exclus:
+                continue
+            suffixe = "/" if entree.is_dir() else ""
+            lignes.append(f"- {entree.name}{suffixe}")
+            if len(lignes) >= max_entries:
+                break
+    except Exception:
+        pass
+    return "\n".join(lignes) if lignes else "(arborescence indisponible)"
 
 
 def _detecter_modele_agy(agy_bin: str, forcer: bool = False) -> str:
@@ -292,6 +366,10 @@ def _executer_via_agy_cli(
     timeout_s: float = 90.0,
 ) -> tuple[Optional[BaseModel], Dict[str, Any]]:
     """Execute un agent Antigravity via la CLI officielle `agy` (session Google AI Pro / IDE)."""
+    global _AGY_CLI_COOLDOWN_UNTIL
+    if time.time() < _AGY_CLI_COOLDOWN_UNTIL:
+        return None, {"backend": "agy_cli", "latence_ms": 0, "skipped": "cooldown"}
+
     schema_path = None
     t0 = time.perf_counter()
     try:
@@ -341,10 +419,21 @@ def _executer_via_agy_cli(
                 )
         lat_ms = int((time.perf_counter() - t0) * 1000)
         if proc.returncode != 0:
-            LOG.warning("agy CLI code=%s err=%s", proc.returncode, (proc.stderr or "")[:200])
+            err_brut = (proc.stderr or "").strip()
+            if _est_erreur_quota_ou_session_agy(err_brut):
+                pause_s = _extraire_retry_delay_s(err_brut, 600)
+                _AGY_CLI_COOLDOWN_UNTIL = time.time() + pause_s
+                LOG.warning("agy CLI indisponible (%s) -> pause %ds, bascule repli Mentor.", err_brut[:140], pause_s)
+            else:
+                LOG.warning("agy CLI code=%s err=%s", proc.returncode, err_brut[:200])
             return None, {"backend": "agy_cli", "latence_ms": lat_ms}
         enveloppe = json.loads((proc.stdout or "").strip())
         if not isinstance(enveloppe, dict) or enveloppe.get("status") != "SUCCESS":
+            msg_env = str(enveloppe.get("error") or enveloppe.get("message") or "") if isinstance(enveloppe, dict) else ""
+            if _est_erreur_quota_ou_session_agy(msg_env):
+                pause_s = _extraire_retry_delay_s(msg_env, 600)
+                _AGY_CLI_COOLDOWN_UNTIL = time.time() + pause_s
+                LOG.warning("agy CLI erreur session/quota -> pause %ds (%s)", pause_s, msg_env[:140])
             return None, {"backend": "agy_cli", "latence_ms": lat_ms}
         if enveloppe.get("denied_actions") and not enveloppe.get("response") and not enveloppe.get("structured_output"):
             prompt_sans_shell = (
@@ -386,8 +475,15 @@ def _executer_via_agy_cli(
         if not charge and enveloppe.get("denied_actions"):
             return None, meta
         return _valider_ou_replier_schema(charge, response_schema, enable_edit=enable_edit, texte_vide_ok=(not enveloppe.get("denied_actions"))), meta
+    except subprocess.TimeoutExpired:
+        _AGY_CLI_COOLDOWN_UNTIL = time.time() + 600
+        LOG.warning("agy CLI timeout (%ss) -> pause 600s, bascule repli Mentor.", int(timeout_s))
+        return None, {"backend": "agy_cli", "latence_ms": int((time.perf_counter() - t0) * 1000)}
     except Exception as e:
-        LOG.warning("Echec execution agy CLI Mentor: %s", e)
+        if _est_erreur_quota_ou_session_agy(str(e)):
+            pause_s = _extraire_retry_delay_s(str(e), 600)
+            _AGY_CLI_COOLDOWN_UNTIL = time.time() + pause_s
+        LOG.warning("Echec execution agy CLI Mentor: %s", str(e)[:180])
         return None, {"backend": "agy_cli", "latence_ms": int((time.perf_counter() - t0) * 1000)}
     finally:
         if schema_path:
@@ -406,6 +502,10 @@ def _executer_via_sdk(
     timeout_s: float = 45.0,
 ) -> Optional[BaseModel]:
     """Repli via SDK Python `google-antigravity` + GEMINI_API_KEY."""
+    global _SDK_COOLDOWN_UNTIL
+    if time.time() < _SDK_COOLDOWN_UNTIL:
+        return None
+
     try:
         from google.antigravity import Agent, BuiltinTools, CapabilitiesConfig, LocalAgentConfig
     except Exception as e:
@@ -459,8 +559,50 @@ def _executer_via_sdk(
         finally:
             loop.close()
     except Exception as e:
-        LOG.warning("Echec execution SDK Mentor Antigravity: %s", e)
+        err_txt = str(e)
+        if _est_erreur_quota_ou_session_agy(err_txt):
+            pause_s = _extraire_retry_delay_s(err_txt, 1800)
+            _SDK_COOLDOWN_UNTIL = time.time() + pause_s
+            LOG.warning("Quota SDK Mentor Gemini atteint -> pause auto %ds, bascule sur LLM RIOT.", pause_s)
+        else:
+            LOG.warning("Echec execution SDK Mentor Antigravity: %s", err_txt[:220])
         return None
+
+
+def _executer_via_llm_riot(
+    system_instructions: str,
+    prompt: str,
+    dossier_projet: Path,
+    response_schema: type[BaseModel],
+) -> tuple[Optional[BaseModel], Dict[str, Any]]:
+    """Repli Mentor via le provider LLM actif de RIOT (FreeLLMAPI local ou passerelle RIOT Engine)."""
+    if not bool(reglage("mentor.fallback_llm", True)):
+        return None, {"backend": "riot_llm", "latence_ms": 0}
+    t0 = time.perf_counter()
+    try:
+        from core.llm import llm
+        prov = llm()
+        if not prov or not prov.disponible():
+            return None, {"backend": "riot_llm", "latence_ms": 0}
+        schema_plat = _aplatir_schema_json(response_schema.model_json_schema())
+        contexte_fs = _collecter_contexte_workspace_compact(dossier_projet)
+        sys_llm = (
+            f"{system_instructions}\n\n"
+            "Tu agis en mode Mentor de repli (lecture seule, sans outils). "
+            "Reponds UNIQUEMENT par un objet JSON valide (sans texte ni markdown autour) conforme a ce schema :\n"
+            f"{json.dumps(schema_plat, ensure_ascii=False)}"
+        )
+        prompt_llm = f"Arborescence racine du projet :\n{contexte_fs}\n\n{prompt}"
+        rep = prov.repondre(sys_llm, [{"role": "user", "content": prompt_llm}], [])
+        blocs = getattr(rep, "content", None) or []
+        texte = "\n".join(str(getattr(b, "text", "") or "") for b in blocs if getattr(b, "type", "text") == "text").strip()
+        lat_ms = int((time.perf_counter() - t0) * 1000)
+        res = _valider_ou_replier_schema(texte, response_schema, enable_edit=False, texte_vide_ok=False)
+        nom_prov = str(getattr(prov, "nom", "llm") or "llm").lower().replace(" ", "_")
+        return res, {"backend": f"riot_llm:{nom_prov}", "latence_ms": lat_ms, "tokens_in": 0, "tokens_out": 0}
+    except Exception as e:
+        LOG.warning("Echec repli LLM Mentor RIOT: %s", str(e)[:180])
+        return None, {"backend": "riot_llm", "latence_ms": int((time.perf_counter() - t0) * 1000)}
 
 
 def _executer_agent_mentor(
@@ -471,21 +613,24 @@ def _executer_agent_mentor(
     enable_edit: bool = False,
     timeout_s: float = 90.0,
 ) -> tuple[Optional[BaseModel], Dict[str, Any]]:
-    """Orchestre le Mentor Antigravity (CLI `agy` en priorite, sinon SDK + cle Gemini)."""
+    """Orchestre le Mentor (1. CLI `agy`, 2. SDK Gemini, 3. Repli LLM RIOT / FreeLLMAPI)."""
     agy_bin = _trouver_binaire_agy()
     if agy_bin:
         res, meta = _executer_via_agy_cli(
             agy_bin, system_instructions, prompt, dossier_projet, response_schema, enable_edit, timeout_s
         )
-        if res is not None or not (_sdk_disponible() and _cle_gemini_dispo()):
+        if res is not None:
             return res, meta
-    if not (_sdk_disponible() and _cle_gemini_dispo()):
-        return None, {"backend": "aucun", "latence_ms": 0, "tokens_in": 0, "tokens_out": 0}
-    t0 = time.perf_counter()
-    res_sdk = _executer_via_sdk(
-        system_instructions, prompt, dossier_projet, response_schema, enable_edit, timeout_s
-    )
-    return res_sdk, {"backend": "sdk", "latence_ms": int((time.perf_counter() - t0) * 1000), "tokens_in": 0, "tokens_out": 0}
+
+    if _sdk_disponible() and _cle_gemini_dispo():
+        t0 = time.perf_counter()
+        res_sdk = _executer_via_sdk(
+            system_instructions, prompt, dossier_projet, response_schema, enable_edit, timeout_s
+        )
+        if res_sdk is not None:
+            return res_sdk, {"backend": "sdk", "latence_ms": int((time.perf_counter() - t0) * 1000), "tokens_in": 0, "tokens_out": 0}
+
+    return _executer_via_llm_riot(system_instructions, prompt, dossier_projet, response_schema)
 
 
 def preparer_directives_mentor(mission: str, dossier_projet: Path, timeout_s: float = 120.0) -> Optional[DirectivesMentor]:

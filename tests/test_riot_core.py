@@ -1465,6 +1465,52 @@ def test_mentor_antigravity_gouvernance_memoire_et_playbook(monkeypatch, tmp_pat
         memoire.reinitialiser_connexion()
 
 
+def test_mentor_cooldown_429_et_repli_llm(monkeypatch, tmp_path):
+    """Verifie la mise en pause auto sur empty conversation id / 429 et le repli vers le LLM actif de RIOT."""
+    import json
+    import subprocess
+    from types import SimpleNamespace
+    from core import llm as llm_mod
+    from core import mentor
+
+    monkeypatch.setattr(mentor, "_AGY_CLI_COOLDOWN_UNTIL", 0.0)
+    monkeypatch.setattr(mentor, "_SDK_COOLDOWN_UNTIL", 0.0)
+    monkeypatch.setattr(mentor, "_trouver_binaire_agy", lambda: "agy.exe")
+    monkeypatch.setattr(mentor, "_sdk_disponible", lambda: False)
+    appels_agy_429 = []
+
+    def _fake_agy_empty_conv(*a, **kw):
+        appels_agy_429.append(1)
+        return SimpleNamespace(
+            returncode=1,
+            stdout="",
+            stderr="error: failed to start conversation: backend returned an empty conversation id",
+        )
+
+    monkeypatch.setattr(subprocess, "run", _fake_agy_empty_conv)
+
+    class _FakeProvMentor:
+        nom = "FreeLLMAPI"
+        def disponible(self): return True
+        def repondre(self, systeme, historique, outils, **kw):
+            return llm_mod.Reponse("end", [llm_mod.Bloc("text", text=json.dumps({
+                "plan_etapes": ["Lire app.py", "Ajouter validation"],
+                "a_faire": ["Tester endpoint"],
+                "a_eviter": ["Hardcoder un secret"],
+                "criteres_validation": ["pytest OK"],
+            }))])
+
+    monkeypatch.setattr(llm_mod, "llm", lambda: _FakeProvMentor())
+    dirs_repli, meta_repli = mentor._executer_agent_mentor("sys", "msg", tmp_path, mentor.DirectivesMentor)
+    assert dirs_repli is not None and "Tester endpoint" in dirs_repli.a_faire
+    assert meta_repli["backend"] == "riot_llm:freellmapi"
+    assert mentor._AGY_CLI_COOLDOWN_UNTIL > 0
+    # Appel suivant : agy CLI en cooldown -> bascule immediate sans relancer subprocess
+    dirs_repli2, _ = mentor._executer_agent_mentor("sys", "msg", tmp_path, mentor.DirectivesMentor)
+    assert dirs_repli2 is not None and len(appels_agy_429) == 1
+    assert mentor._extraire_retry_delay_s("Please retry in 7h39m16.01s, retryDelay:27556s") == 27556
+
+
 def test_vision_studio_multimodal_et_diagnostic_failover(monkeypatch):
     from core import llm, studio_app
     from proxy import server as proxy_srv
