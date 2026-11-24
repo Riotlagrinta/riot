@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "riot"
-version = "0.3.16"
+version = "0.3.17"
 description = "RIOT — Copilote personnel d'élite, contrôle PC, dev & automatisation multiplateforme."
 readme = "README.md"
 authors = [

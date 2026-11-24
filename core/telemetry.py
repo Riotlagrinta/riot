@@ -304,6 +304,18 @@ class TelemetryStore:
                             ON CONFLICT (version) DO NOTHING
                             """
                         )
+                        pconn.execute(
+                            """
+                            INSERT INTO releases (version, titre, notes, commande)
+                            VALUES (
+                                '0.3.17',
+                                'RIOT v0.3.17 — Mode Mentor Antigravity fiable (zéro blocage Bash headless)',
+                                E'• Empêche `agy CLI` de déclencher `denied_actions` (`Bash` refusé en mode `-p`) et relance proprement si besoin\\n• Rejette les faux retours texte `Finished` et délivre de vraies directives structurées + leçons distillées',
+                                'npm install -g @riotlagrinta/riot@latest && riot --update-cli'
+                            )
+                            ON CONFLICT (version) DO NOTHING
+                            """
+                        )
                 self._pg_ready = True
                 return
             except Exception as e:
@@ -354,10 +366,10 @@ class TelemetryStore:
                         "INSERT INTO releases (ts, version, titre, notes, commande) VALUES (?, ?, ?, ?, ?)",
                         (
                             time.time(),
-                            "0.3.16",
-                            "RIOT v0.3.16 — Auto-détection FreeLLMAPI local -> Repli Render & Kilo Gateway",
-                            "• Détection automatique de FreeLLMAPI local (`127.0.0.1:31415`, si clé locale configurée) avec bascule instantanée vers Render (`RIOT Engine`) en cas d’absence ou de panne\n"
-                            "• Support natif sur la passerelle de `Kilo AI` (`KILO_API_KEY`), `SambaNova` (`SAMBANOVA_API_KEY`) et `GitHub Models`",
+                            "0.3.17",
+                            "RIOT v0.3.17 — Mode Mentor Antigravity fiable (zéro blocage Bash headless)",
+                            "• Empêche `agy CLI` de déclencher `denied_actions` (`Bash` refusé en mode `-p`) et relance proprement si besoin\n"
+                            "• Rejette les faux retours texte `Finished` et délivre de vraies directives structurées + leçons distillées",
                             "npm install -g @riotlagrinta/riot@latest && riot --update-cli",
                         ),
                     )

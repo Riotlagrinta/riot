@@ -127,19 +127,21 @@ def _valider_ou_replier_schema(
     enable_edit: bool = False,
     texte_vide_ok: bool = True,
 ) -> Optional[BaseModel]:
-    """Parse le JSON du schema Pydantic avec repli textuel propre (evite Invalid JSON: EOF)."""
+    """Parse le JSON du schema Pydantic avec repli textuel propre (evite Invalid JSON: EOF et 'Finished')."""
     brut = (charge or "").strip()
+    if brut.lower() in ("finished", "done", "ok", "success", "completed"):
+        brut = ""
     json_txt = _extraire_json_texte(brut)
     if json_txt:
         try:
             return response_schema.model_validate_json(json_txt)
         except Exception as e_val:
             LOG.debug("Validation JSON Mentor repli texte: %s", e_val)
-    if response_schema is VerdictMentor and (brut or texte_vide_ok):
+    if response_schema is VerdictMentor and (len(brut) >= 15 or texte_vide_ok):
         verdict_txt = "CORRIGE" if (enable_edit and brut) else "APPROUVE"
         resume_txt = brut[:1200] if brut else "Audit Mentor terminé sans remarque structurée."
         return VerdictMentor(verdict=verdict_txt, resume=resume_txt, lecons=[])
-    if response_schema is DirectivesMentor and brut:
+    if response_schema is DirectivesMentor and len(brut) >= 15:
         return DirectivesMentor(plan_etapes=[brut[:500]], a_faire=[], a_eviter=[], criteres_validation=[])
     return None
 
@@ -302,7 +304,7 @@ def _executer_via_agy_cli(
         mode_agy = "accept-edits" if enable_edit else "plan"
         modele_cfg = str(reglage("mentor.modele", "") or "").strip() or (_AGY_MODEL_CACHE or "")
 
-        def _construire_cmd(mod: str) -> List[str]:
+        def _construire_cmd(mod: str, txt_prompt: str) -> List[str]:
             c = [
                 agy_bin,
                 "--mode", mode_agy,
@@ -312,11 +314,11 @@ def _executer_via_agy_cli(
             ]
             if mod:
                 c.extend(["--model", mod])
-            c.append(f"-p={prompt_final}")
+            c.append(f"-p={txt_prompt}")
             return c
 
         proc = subprocess.run(
-            _construire_cmd(modele_cfg),
+            _construire_cmd(modele_cfg, prompt_final),
             cwd=str(dossier_projet.resolve()),
             capture_output=True,
             text=True,
@@ -329,7 +331,7 @@ def _executer_via_agy_cli(
             modele_repli = _detecter_modele_agy(agy_bin, forcer=True)
             if modele_repli and modele_repli != modele_cfg:
                 proc = subprocess.run(
-                    _construire_cmd(modele_repli),
+                    _construire_cmd(modele_repli, prompt_final),
                     cwd=str(dossier_projet.resolve()),
                     capture_output=True,
                     text=True,
@@ -344,6 +346,29 @@ def _executer_via_agy_cli(
         enveloppe = json.loads((proc.stdout or "").strip())
         if not isinstance(enveloppe, dict) or enveloppe.get("status") != "SUCCESS":
             return None, {"backend": "agy_cli", "latence_ms": lat_ms}
+        if enveloppe.get("denied_actions") and not enveloppe.get("response") and not enveloppe.get("structured_output"):
+            prompt_sans_shell = (
+                f"{prompt_final}\n\n"
+                "[CONTRAINTE STRICTE] N'execute aucune commande terminal/bash : "
+                "reponds uniquement en JSON valide conforme au schema."
+            )
+            proc2 = subprocess.run(
+                _construire_cmd(modele_cfg, prompt_sans_shell),
+                cwd=str(dossier_projet.resolve()),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=timeout_s,
+            )
+            if proc2.returncode == 0 and (proc2.stdout or "").strip():
+                try:
+                    env2 = json.loads((proc2.stdout or "").strip())
+                    if isinstance(env2, dict) and env2.get("status") == "SUCCESS":
+                        enveloppe = env2
+                except Exception:
+                    pass
+            lat_ms = int((time.perf_counter() - t0) * 1000)
         usage = enveloppe.get("usage") if isinstance(enveloppe.get("usage"), dict) else {}
         meta = {
             "backend": "agy_cli",
@@ -358,7 +383,9 @@ def _executer_via_agy_cli(
             except Exception:
                 pass
         charge = str(enveloppe.get("response") or enveloppe.get("result") or enveloppe.get("message") or "").strip()
-        return _valider_ou_replier_schema(charge, response_schema, enable_edit=enable_edit, texte_vide_ok=True), meta
+        if not charge and enveloppe.get("denied_actions"):
+            return None, meta
+        return _valider_ou_replier_schema(charge, response_schema, enable_edit=enable_edit, texte_vide_ok=(not enveloppe.get("denied_actions"))), meta
     except Exception as e:
         LOG.warning("Echec execution agy CLI Mentor: %s", e)
         return None, {"backend": "agy_cli", "latence_ms": int((time.perf_counter() - t0) * 1000)}
@@ -461,11 +488,12 @@ def _executer_agent_mentor(
     return res_sdk, {"backend": "sdk", "latence_ms": int((time.perf_counter() - t0) * 1000), "tokens_in": 0, "tokens_out": 0}
 
 
-def preparer_directives_mentor(mission: str, dossier_projet: Path, timeout_s: float = 90.0) -> Optional[DirectivesMentor]:
+def preparer_directives_mentor(mission: str, dossier_projet: Path, timeout_s: float = 120.0) -> Optional[DirectivesMentor]:
     """Phase 1 (Avant RIOT) : Produit un plan strict + ce qu'il faut faire et ne PAS faire."""
     sys_inst = (
         "Tu es le Mentor Antigravity qui forme l'agent RIOT. "
-        "Inspecte brievement les fichiers pertinents du projet puis renvoie UNIQUEMENT du JSON valide "
+        "N'execute JAMAIS de commande terminal, shell ou bash. "
+        "Inspecte uniquement si besoin les fichiers pertinents en lecture seule puis renvoie UNIQUEMENT du JSON valide "
         "conforme au schema (plan_etapes, a_faire, a_eviter, criteres_validation)."
     )
     prompt = (
@@ -512,13 +540,14 @@ def auditer_et_distiller(
     directives: Optional[DirectivesMentor] = None,
     *,
     auto_corriger: Optional[bool] = None,
-    timeout_s: float = 110.0,
+    timeout_s: float = 150.0,
 ) -> Optional[VerdictMentor]:
     """Phase 2 (Apres RIOT) : Verifie le travail reel, corrige si besoin et extrait les lecons vers memoire."""
     corriger = bool(reglage("mentor.auto_corriger", True)) if auto_corriger is None else bool(auto_corriger)
     sys_inst = (
         "Tu es l'Auditeur Mentor Antigravity charge d'evaluer le travail de RIOT. "
-        "Verifie les fichiers reellement modifies et la coherence avec la demande. "
+        "N'execute JAMAIS de commande terminal, shell ou bash. "
+        "Verifie en lecture les fichiers reellement modifies et la coherence avec la demande. "
         + ("Si tu trouves une erreur reelle, corrige-la proprement et documente-la. " if corriger else "Ne modifie pas les fichiers, signale les erreurs. ")
         + "Extrais ensuite 1 a 3 lecons atomiques et generiques (sans secrets ni chemins absolus locaux) et reponds en JSON strict conforme au schema."
     )

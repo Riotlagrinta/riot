@@ -4,6 +4,11 @@ Toutes les évolutions notables de RIOT. Format inspiré de
 [Keep a Changelog](https://keepachangelog.com/fr/) ; versionnage
 [SemVer](https://semver.org/lang/fr/).
 
+## [0.3.17] — 2026-11-23
+
+### Corrigé
+- **Mode Mentor `agy CLI` sans `denied_actions` (`Bash` auto-refusé en headless)** : interdiction explicite des appels shell/terminal dans les prompts Mentor + détection de `denied_actions` avec repli automatique sans shell, et filtrage de `'Finished'` dans `_valider_ou_replier_schema(...)` pour garantir de vraies directives structurées et de vraies leçons distillées.
+
 ## [0.3.16] — 2026-11-23
 
 ### Ajouté

@@ -142,7 +142,7 @@ def test_spiral_icons_and_creator_monitoring(monkeypatch, tmp_path):
     assert pc.get("/status/public").status_code == 200
     assert "prompt" not in pc.get("/status/public").text
     assert pc.get("/releases").status_code == 200
-    assert pc.get("/releases/latest").json()["version"] == "0.3.16"
+    assert pc.get("/releases/latest").json()["version"] == "0.3.17"
     assert pc.get("/admin/metrics").status_code == 401
     assert pc.get("/admin/metrics", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
     assert pc.get("/admin/logs", headers={"X-Admin-Token": "secret_creator_tok"}).status_code == 200
@@ -1344,7 +1344,8 @@ def test_mentor_antigravity_gouvernance_memoire_et_playbook(monkeypatch, tmp_pat
         verdict_vide, _ = mentor._executer_via_agy_cli("agy.exe", "sys", "msg", tmp_path, mentor.VerdictMentor, enable_edit=False)
         assert verdict_vide is not None and verdict_vide.verdict == "APPROUVE"
         assert any("--model" in c and "gemini-3.8-flash-medium" in c for c in appels_cmd)
-        assert mentor._valider_ou_replier_schema("pas du json", mentor.VerdictMentor, texte_vide_ok=False) is not None
+        assert mentor._valider_ou_replier_schema("Audit effectue sans erreur detectee dans auth.py", mentor.VerdictMentor, texte_vide_ok=False) is not None
+        assert mentor._valider_ou_replier_schema("Finished", mentor.DirectivesMentor) is None
 
         # Cas ou agy retourne structured_output directement
         payload_struct = json.dumps({
