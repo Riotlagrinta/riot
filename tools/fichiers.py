@@ -155,11 +155,12 @@ def lister_dossier(dossier: str) -> str:
     if not chemin.is_dir():
         return f"[ERREUR] '{chemin}' est un fichier, pas un dossier."
 
-    # Ancre automatiquement le dossier s'il s'agit d'un vrai repertoire projet (hors racine utilisateur)
+    # Ancre automatiquement le dossier uniquement si aucun projet n'est encore ancre (evite qu'un sous-dossier comme scripts/ n'ecrase la racine)
     try:
         if chemin.resolve() != Path.home().resolve() and len(chemin.resolve().parts) > 2:
-            from tools.code import definir_projet_actif
-            definir_projet_actif(chemin)
+            from tools.code import _projet_actif_courant, definir_projet_actif
+            if _projet_actif_courant() is None:
+                definir_projet_actif(chemin)
     except Exception:
         pass
 

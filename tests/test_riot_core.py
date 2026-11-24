@@ -1566,6 +1566,46 @@ def test_vision_studio_multimodal_et_diagnostic_failover(monkeypatch):
     assert "429" in diag_429 and "Swarm" in diag_429
 
 
+def test_tool_call_xml_parser_et_ancrage_sous_dossier(monkeypatch, tmp_path):
+    """Verifie le parsing/nettoyage des <tool_call> XML et la conservation de l'ancre projet dans lister_dossier."""
+    from core import cli, llm
+    from tools import code as code_tools
+    from tools import fichiers
+
+    prov = llm.CustomOpenAIProvider(modele="auto")
+    rep_xml = prov._parser({
+        "choices": [{
+            "message": {
+                "content": (
+                    "Je lance la lecture.\n"
+                    "<tool_call><function=lire_code><parameter=fichier>E:\\PROJETS\\app.py</parameter></function></tool_call>"
+                ),
+                "tool_calls": [],
+            }
+        }]
+    })
+    assert rep_xml.stop_reason == "tool_use"
+    appels = [b for b in rep_xml.content if b.type == "tool_use"]
+    assert len(appels) == 1 and appels[0].name == "lire_code" and appels[0].input["fichier"] == "E:\\PROJETS\\app.py"
+    assert "<tool_call" not in " ".join(b.text or "" for b in rep_xml.content if b.type == "text")
+
+    assert llm.nettoyer_balises_tool_call("Synthese OK.\n<tool_call> <function=patcher_code> <parameter=f") == "Synthese OK."
+
+    # Ancrage : lister un sous-dossier ne doit pas ecraser le projet parent actif
+    racine = tmp_path / "home" / "Kedem"
+    sous = racine / "data" / "scripts"
+    sous.mkdir(parents=True)
+    ancien = cli._SESSION_CTX.get("projet_actif")
+    try:
+        code_tools.definir_projet_actif(racine)
+        assert cli._SESSION_CTX["projet_actif"] == racine.resolve()
+        res_ls = fichiers.lister_dossier(str(sous))
+        assert "scripts" in res_ls
+        assert cli._SESSION_CTX["projet_actif"] == racine.resolve()
+    finally:
+        cli._SESSION_CTX["projet_actif"] = ancien
+
+
 
 
 

@@ -803,12 +803,14 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
     else:
         schemas = tous_schemas
 
+    from core.llm import nettoyer_balises_tool_call
     from core.model_router import JournalContinuite
     p = _pal()
     acc = p["cli_accent"]
     compteur_appels = {}
     journal = JournalContinuite(phrase, dossier=str(projet_actuel or ""))
-    for tour in range(10):
+    max_tours = max(10, int(reglage("cli.max_tool_tours", 25) or 25))
+    for tour in range(max_tours):
         t0 = time.time()
         bloc_cont = journal.rendre_bloc()
         systeme_tour = f"{systeme}{bloc_cont}" if bloc_cont else systeme
@@ -901,13 +903,23 @@ def executer_ordre(phrase: str, historique_conversation: List[dict]):
                 "content": resultats_du_tour,
             })
 
-    # Synthese finale garantie si les 10 tours d'outils ont ete consommes
+    # Synthese finale garantie si le plafond de tours d'outils a ete consomme
     try:
         t_fin = time.time()
+        historique_conversation.append({
+            "role": "user",
+            "content": (
+                "[FIN D'EXECUTION] Le plafond d'outils de ce tour est atteint. "
+                "N'emets AUCUNE balise <tool_call> et ne tente aucun nouvel appel d'outil. "
+                "Fais uniquement la synthese factuelle des actions reellement executees et de ce qui reste a faire."
+            ),
+        })
         with console.status(f"[bold {acc}]⠋ Synthèse finale...[/bold {acc}]", spinner="dots"):
-            rep_fin = provider.repondre(systeme, historique_conversation, [])
-        texte_fin = " ".join(b.text for b in rep_fin.content if getattr(b, "type", None) == "text").strip()
-        reponse_finale = texte_fin or "Actions exécutées. Vérifiez les résultats ci-dessus."
+            rep_fin = provider.repondre(systeme + journal.rendre_bloc(), historique_conversation, [])
+        texte_fin = nettoyer_balises_tool_call(
+            " ".join(b.text for b in rep_fin.content if getattr(b, "type", None) == "text")
+        )
+        reponse_finale = texte_fin or journal.resume_court() or "Actions exécutées. Vérifiez les résultats ci-dessus."
         historique_conversation.append({"role": "assistant", "content": reponse_finale})
         console.print()
         console.print(Markdown(reponse_finale))

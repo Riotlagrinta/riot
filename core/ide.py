@@ -865,7 +865,8 @@ def monter_routes(app) -> None:
                 patches_crees = 0
                 appels_vus: Dict[str, int] = {}
                 boucle_epuisee = False
-                for tour in range(8):
+                max_tours_ide = 20
+                for tour in range(max_tours_ide):
                     _emit({"type": "step", "label": f"Reflexion agent (etape {tour + 1})..."})
                     systeme_tour = systeme + journal.rendre_bloc()
                     rep = llm().repondre(systeme_tour, hist, outils_schemas, tache_hint=tache_hint)
@@ -933,21 +934,25 @@ def monter_routes(app) -> None:
                             _emit({"type": "artifact", "kind": "image", "detail": out_str})
                         res_blocs.append({"type": "tool_result", "tool_use_id": appel.id, "content": out_str[:6000]})
                     hist.append({"role": "user", "content": res_blocs})
-                    if boucle_repetee or tour == 7:
+                    if boucle_repetee or tour == max_tours_ide - 1:
                         boucle_epuisee = True
                         if boucle_repetee:
                             break
 
                 if boucle_epuisee and not texte_final.strip():
+                    from core.llm import nettoyer_balises_tool_call
                     _emit({"type": "step", "label": "Synthese finale de l'agent..."})
                     hist.append({
                         "role": "user",
-                        "content": "Fais maintenant une synthese claire et concise de ce qui a ete accompli, des fichiers touches et des eventuelles etapes restantes.",
+                        "content": (
+                            "[FIN D'EXECUTION] N'emets AUCUNE balise <tool_call>. "
+                            "Fais maintenant une synthese claire et concise de ce qui a ete accompli, des fichiers touches et des eventuelles etapes restantes."
+                        ),
                     })
                     rep_fin = llm().repondre(systeme + journal.rendre_bloc(), hist, [], tache_hint=tache_hint)
                     textes_fin = [b.text for b in rep_fin.content if getattr(b, "type", None) == "text" and b.text]
                     if textes_fin:
-                        texte_final = "\n".join(textes_fin)
+                        texte_final = nettoyer_balises_tool_call("\n".join(textes_fin))
 
                 if utiliser_mentor:
                     try:

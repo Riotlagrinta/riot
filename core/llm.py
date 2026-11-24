@@ -48,6 +48,58 @@ class Reponse:
         self.content = content
 
 
+def nettoyer_balises_tool_call(texte: str) -> str:
+    """Supprime les balises XML <tool_call> completes ou tronquees du texte final affiche."""
+    import re
+    if not texte:
+        return ""
+    propre = re.sub(r"<tool_call>[\s\S]*?(?:</tool_call>|$)", "", str(texte), flags=re.IGNORECASE)
+    return propre.strip()
+
+
+def extraire_appels_outils_texte(texte: str) -> tuple[str, list]:
+    """Extrait d'eventuels <tool_call> XML/JSON emis dans content et retourne (texte_propre, blocs_tool_use)."""
+    import re
+    if not texte or "<tool_call" not in texte.lower():
+        return (texte or "").strip(), []
+
+    blocs_outils = []
+    pat_bloc = re.compile(r"<tool_call>([\s\S]*?)</tool_call>", re.IGNORECASE)
+    for idx, match in enumerate(pat_bloc.finditer(texte)):
+        corps = (match.group(1) or "").strip()
+        nom = ""
+        args = {}
+        m_fn = re.search(r"<function\s*=\s*([a-zA-Z0-9_.-]+)\s*>", corps)
+        if m_fn:
+            nom = m_fn.group(1).strip()
+            for m_param in re.finditer(r"<parameter\s*=\s*([a-zA-Z0-9_.-]+)\s*>([\s\S]*?)</parameter>", corps):
+                k = m_param.group(1).strip()
+                v_raw = (m_param.group(2) or "").strip()
+                if v_raw.startswith("{") or v_raw.startswith("[") or v_raw in ("true", "false"):
+                    try:
+                        args[k] = json.loads(v_raw)
+                        continue
+                    except Exception:
+                        pass
+                args[k] = v_raw
+        else:
+            m_json = re.search(r"\{[\s\S]*\}", corps)
+            if m_json:
+                try:
+                    data = json.loads(m_json.group(0))
+                    if isinstance(data, dict) and data.get("name"):
+                        nom = str(data["name"]).strip()
+                        raw_args = data.get("arguments") or data.get("parameters") or {}
+                        args = json.loads(raw_args) if isinstance(raw_args, str) else (raw_args if isinstance(raw_args, dict) else {})
+                except Exception:
+                    pass
+        if nom:
+            blocs_outils.append(Bloc("tool_use", id=f"call_txt_{idx}", name=nom, input=args))
+
+    texte_propre = nettoyer_balises_tool_call(texte)
+    return texte_propre, blocs_outils
+
+
 # --------------------------------------------------------------- interface
 
 class ProviderLLM:
@@ -401,10 +453,16 @@ class GroqProvider(ProviderLLM):
             return Reponse("end", [Bloc("text", text="")])
         msg = choices[0].get("message", {}) or {}
         blocs = []
+        raw_tcs = msg.get("tool_calls") or []
         texte = (msg.get("content") or "").strip()
+        if not raw_tcs and texte:
+            texte, blocs_xml = extraire_appels_outils_texte(texte)
+            blocs.extend(blocs_xml)
+        else:
+            texte = nettoyer_balises_tool_call(texte)
         if texte:
-            blocs.append(Bloc("text", text=texte))
-        for i, tc in enumerate(msg.get("tool_calls") or []):
+            blocs.insert(0, Bloc("text", text=texte))
+        for i, tc in enumerate(raw_tcs):
             call_id = tc.get("id") or f"call_{i}"
             fn = tc.get("function", {}) or {}
             nom = fn.get("name")
@@ -1039,10 +1097,16 @@ class OllamaProvider(ProviderLLM):
     def _parser(self, rep):
         msg = rep.get("message", {}) or {}
         blocs = []
+        raw_tcs = msg.get("tool_calls") or []
         texte = (msg.get("content") or "").strip()
+        if not raw_tcs and texte:
+            texte, blocs_xml = extraire_appels_outils_texte(texte)
+            blocs.extend(blocs_xml)
+        else:
+            texte = nettoyer_balises_tool_call(texte)
         if texte:
-            blocs.append(Bloc("text", text=texte))
-        for i, tc in enumerate(msg.get("tool_calls") or []):
+            blocs.insert(0, Bloc("text", text=texte))
+        for i, tc in enumerate(raw_tcs):
             fn = tc.get("function", {}) or {}
             args = fn.get("arguments", {})
             if isinstance(args, str):
